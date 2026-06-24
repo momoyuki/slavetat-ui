@@ -1,0 +1,24 @@
+# Build output
+build/
+
+# vcpkg installed packages (restored by cmake)
+vcpkg_installed/
+
+# Generated archives
+*.zip
+
+# MSVC
+*.user
+*.suo
+*.vc.db
+*.vc.opendb
+.vs/
+
+# CMake
+CMakeSettings.json
+
+# Compiled artifacts if accidentally placed in root
+*.dll
+*.lib
+*.exp
+*.pdb

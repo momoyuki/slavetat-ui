@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SlaveTats UI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    width: 100vw; height: 100vh;
+    background: transparent;
+    overflow: hidden;
+    font-family: 'Segoe UI', sans-serif;
+    color: #e8e8e8;
+  }
+
+  /* ── Right panel ── */
+  .app {
+    position: fixed;
+    right: 0; top: 0;
+    width: 540px;
+    height: 100vh;
+    background: rgba(10,10,10,0.93);
+    border-left: 1px solid #2a2a2a;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: -4px 0 28px rgba(0,0,0,0.7);
+  }
+
+  /* ── Header ── */
+  header {
+    background: rgba(18,18,18,0.99);
+    padding: 8px 12px;
+    border-bottom: 1px solid #252525;
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  header h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; flex: 1; }
+  .actor-bar { display: flex; gap: 6px; align-items: center; }
+  .actor-bar label { font-size: 10px; color: #666; white-space: nowrap; }
+  .actor-bar select {
+    width: 100px; background: #161616; border: 1px solid #2e2e2e;
+    border-radius: 3px; color: #e8e8e8; font-size: 11px; padding: 3px 5px;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex; gap: 3px; padding: 6px 10px;
+    background: rgba(14,14,14,0.95); border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
+  }
+  .tab {
+    padding: 4px 14px; font-size: 11px; border: 1px solid #2a2a2a;
+    border-radius: 3px; background: transparent; color: #777; cursor: pointer;
+  }
+  .tab.active { background: #8a3010; border-color: #a04020; color: #fff; }
+  .tab:hover:not(.active) { background: rgba(255,255,255,0.04); }
+
+  /* ── Panels ── */
+  .panel { display: none; flex: 1; overflow-y: auto; padding: 8px 10px 10px; flex-direction: column; gap: 0; }
+  .panel.active { display: flex; }
+
+  /* ── Sticky search ── */
+  .search-bar {
+    display: flex; gap: 5px;
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(10,10,10,0.97);
+    padding-bottom: 8px;
+  }
+  .search-bar input {
+    flex: 1; background: #141414; border: 1px solid #2a2a2a;
+    border-radius: 3px; color: #e8e8e8; font-size: 11px; padding: 5px 8px;
+  }
+  .search-bar input::placeholder { color: #3a3a3a; }
+
+  /* ── Tree ── */
+  .tree { display: flex; flex-direction: column; gap: 2px; }
+  .tree-node { display: flex; flex-direction: column; }
+  .tree-hdr {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 6px; cursor: pointer; border-radius: 4px; user-select: none;
+  }
+  .tree-hdr:hover { background: rgba(255,255,255,0.04); }
+  .tree-arrow { font-size: 8px; color: #444; width: 9px; flex-shrink: 0; transition: transform 0.1s; }
+  .tree-label     { font-size: 12px; font-weight: 600; color: #bbb; flex: 1; }
+  .tree-sub-label { font-size: 11px; color: #888; flex: 1; padding-left: 2px; }
+  .badge {
+    font-size: 9px; background: #181818; border: 1px solid #252525;
+    border-radius: 8px; padding: 1px 6px; color: #555;
+  }
+  .tree-children { padding-left: 12px; display: flex; flex-direction: column; gap: 2px; }
+
+  /* ── 2-column thumbnail grid ── */
+  .tat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 4px 2px 6px;
+  }
+  .grid-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid #1c1c1c;
+    border-radius: 6px;
+    padding: 8px 6px;
+    min-width: 0;
+    transition: background 0.1s;
+  }
+  .grid-item:hover { background: rgba(255,255,255,0.05); }
+
+  /* ── Thumbnail 128×128 ── */
+  .tat-thumb-wrap {
+    flex-shrink: 0;
+    width: 128px; height: 128px;
+    border-radius: 4px; overflow: hidden;
+    background: #090909; border: 1px solid #202020;
+    position: relative;
+  }
+  .tat-thumb { width: 128px; height: 128px; display: block; image-rendering: pixelated; }
+  .tat-thumb-ph {
+    position: absolute; inset: 0; display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  }
+  .tat-thumb-ph .ph-icon { font-size: 26px; opacity: 0.15; }
+  .tat-thumb-ph .ph-err  { font-size: 8px; color: #5a2a2a; text-align: center; padding: 0 4px; word-break: break-all; }
+
+  /* ── Card text + button ── */
+  .grid-name {
+    font-size: 11px; font-weight: 500; color: #bbb;
+    text-align: center; width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .grid-path {
+    font-size: 9px; color: #444;
+    text-align: center; width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 5px 12px; font-size: 11px; border-radius: 3px; border: 1px solid #333;
+    cursor: pointer; background: #202020; color: #ccc; white-space: nowrap;
+    width: 100%;
+  }
+  .btn:hover { background: #2c2c2c; }
+  .btn.primary { background: #8a3010; border-color: #a04020; color: #fff; }
+  .btn.primary:hover { background: #a04020; }
+  .btn.sm { padding: 4px 8px; font-size: 10px; }
+  .btn.danger { border-color: #4a0e0e; color: #c55; }
+  .btn.danger:hover { background: #5a1010; border-color: #8b2020; color: #f77; }
+  .btn:disabled { opacity: 0.3; cursor: default; }
+  .btn-hdr { padding: 3px 8px; font-size: 10px; border-radius: 3px; border: 1px solid #333; cursor: pointer; background: #1a1a1a; color: #888; }
+  .btn-hdr:hover { background: #252525; }
+
+  /* ── Status bar ── */
+  .statusbar {
+    padding: 4px 10px; font-size: 10px; color: #3a3a3a;
+    background: rgba(6,6,6,0.98); border-top: 1px solid #181818; flex-shrink: 0;
+  }
+  .statusbar.ok   { color: #2a8; }
+  .statusbar.err  { color: #a44; }
+  .statusbar.busy { color: #779; }
+
+  .empty { text-align: center; padding: 24px; color: #2e2e2e; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <h1>SlaveTats UI</h1>
+  <div class="actor-bar">
+    <label>Actor</label>
+    <select id="actorSelect"><option value="0x14">Player</option></select>
+  </div>
+  <button class="btn-hdr" onclick="syncTattoos()">Sync</button>
+  <button class="btn-hdr" onclick="sendCmd({action:'toggleUI'})">✕</button>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('available',this)">Available</button>
+  <button class="tab" onclick="switchTab('applied',this)">Applied</button>
+</div>
+
+<div id="panel-available" class="panel active">
+  <div class="search-bar">
+    <input id="searchAvail" type="text" placeholder="Search tattoos…" oninput="renderAvailable()">
+    <button class="btn primary sm" onclick="fetchAvailable()">Refresh</button>
+  </div>
+  <div id="listAvailable" class="tree">
+    <div class="empty">Press Refresh to load tattoos</div>
+  </div>
+</div>
+
+<div id="panel-applied" class="panel">
+  <div class="search-bar">
+    <input id="searchApplied" type="text" placeholder="Filter…" oninput="renderApplied()">
+    <button class="btn primary sm" onclick="fetchApplied()">Refresh</button>
+  </div>
+  <div id="listApplied">
+    <div class="empty">Press Refresh to load applied tattoos</div>
+  </div>
+</div>
+
+<div id="statusbar" class="statusbar">Ready</div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let availableTattoos = [];
+let appliedTattoos   = [];
+const expanded = {};
+
+// ── PrismaUI interop ─────────────────────────────────────────────────────────
+function slavetatsOnData(jsonStr) {
+  let d;
+  try { d = JSON.parse(jsonStr); } catch(e) { setStatus('JSON error: '+e, 'err'); return; }
+  switch (d.type) {
+    case 'ready':
+      setStatus('Connected','ok');
+      fetchAvailable(); fetchApplied();
+      break;
+    case 'available':
+      availableTattoos = d.tattoos || [];
+      renderAvailable();
+      setStatus(availableTattoos.length+' available','ok');
+      break;
+    case 'applied':
+      appliedTattoos = d.tattoos || [];
+      renderApplied();
+      setStatus(appliedTattoos.length+' applied','ok');
+      break;
+    case 'success':
+      setStatus('OK: '+d.action,'ok');
+      if (['addTattoo','removeTattoo','syncTattoos'].includes(d.action)) fetchApplied();
+      break;
+    case 'error':
+      setStatus('Error: '+d.message,'err');
+      break;
+    case 'texture':
+      onTextureData(d.path, d.w||128, d.h||128, d.data);
+      break;
+    case 'textureError':
+      onTextureError(d.path);
+      break;
+  }
+}
+
+function sendCmd(obj) {
+  try { slavetatsCmd(JSON.stringify(obj)); }
+  catch(e) { setStatus('Bridge not ready: '+e,'err'); }
+}
+
+// ── Commands ──────────────────────────────────────────────────────────────────
+function fetchAvailable() {
+  setStatus('Loading…','busy');
+  sendCmd({action:'queryAvailable',domain:'default'});
+}
+function fetchApplied() {
+  const actorId = parseInt(document.getElementById('actorSelect').value,16);
+  setStatus('Loading applied…','busy');
+  sendCmd({action:'queryApplied',actorId});
+}
+function addTattoo(sec,name) {
+  const actorId = parseInt(document.getElementById('actorSelect').value,16);
+  setStatus('Applying '+name+'…','busy');
+  sendCmd({action:'addTattoo',actorId,section:sec,name,color:0,alpha:1.0});
+}
+function removeTattoo(sec,name) {
+  const actorId = parseInt(document.getElementById('actorSelect').value,16);
+  setStatus('Removing '+name+'…','busy');
+  sendCmd({action:'removeTattoo',actorId,section:sec,name});
+}
+function syncTattoos() {
+  const actorId = parseInt(document.getElementById('actorSelect').value,16);
+  sendCmd({action:'syncTattoos',actorId});
+}
+
+// ── Tree toggle ───────────────────────────────────────────────────────────────
+function toggleNode(key) {
+  expanded[key] = !(expanded[key] !== false);
+  const node = document.getElementById('tn-'+key);
+  if (!node) return;
+  const ch    = node.querySelector(':scope > .tree-children');
+  const arrow = node.querySelector(':scope > .tree-hdr > .tree-arrow');
+  const open  = expanded[key] !== false;
+  if (ch)    ch.style.display  = open ? '' : 'none';
+  if (arrow) arrow.textContent = open ? '▼' : '▶';
+  if (open) node.querySelectorAll('.tat-thumb[data-tex]').forEach(c => thumbObserver.observe(c));
+}
+
+// ── Thumbnails (C++ → raw RGBA) ───────────────────────────────────────────────
+const thumbCache    = new Map();
+const thumbInFlight = new Set();
+
+function loadThumb(canvas) {
+  const tex = canvas.dataset.tex;
+  if (!tex) return;
+  if (thumbCache.has(tex)) {
+    const v = thumbCache.get(tex);
+    if (v && v !== 'err') drawThumb(canvas, v);
+    return;
+  }
+  if (thumbInFlight.has(tex)) return;
+  thumbInFlight.add(tex);
+  sendCmd({action:'getTexture', path:tex});
+}
+
+async function onTextureData(path, w, h, b64) {
+  try {
+    const bin = atob(b64);
+    const u8  = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const imgData = new ImageData(new Uint8ClampedArray(u8.buffer), w, h);
+    const bmp = await createImageBitmap(imgData);
+    thumbCache.set(path, bmp);
+    document.querySelectorAll('.tat-thumb').forEach(c => {
+      if (c.dataset.tex === path) drawThumb(c, bmp);
+    });
+  } catch(e) {
+    thumbCache.set(path, 'err');
+    markThumbErr(path, String(e).slice(0,50));
+  } finally {
+    thumbInFlight.delete(path);
+  }
+}
+
+function onTextureError(path) {
+  thumbInFlight.delete(path);
+  thumbCache.set(path, 'err');
+  markThumbErr(path, 'not found');
+}
+
+function markThumbErr(path, msg) {
+  document.querySelectorAll('.tat-thumb').forEach(c => {
+    if (c.dataset.tex !== path) return;
+    const ph = c.closest('.tat-thumb-wrap')?.querySelector('.tat-thumb-ph');
+    if (!ph) return;
+    ph.querySelector('.ph-icon').textContent = '⚠';
+    const e = ph.querySelector('.ph-err'); if (e) e.textContent = msg;
+  });
+}
+
+function drawThumb(canvas, bmp) {
+  canvas.getContext('2d').drawImage(bmp, 0, 0, 128, 128);
+  canvas.style.opacity = '1';
+  const ph = canvas.closest('.tat-thumb-wrap')?.querySelector('.tat-thumb-ph');
+  if (ph) ph.style.display = 'none';
+}
+
+const thumbObserver = new IntersectionObserver(entries => {
+  for (const e of entries)
+    if (e.isIntersecting) { thumbObserver.unobserve(e.target); loadThumb(e.target); }
+}, {rootMargin:'300px'});
+
+// ── Grid card HTML ─────────────────────────────────────────────────────────────
+function tatGridItem(t, showRemove) {
+  const texAttr = t.texture ? ` data-tex="${esc(t.texture)}"` : '';
+  const path    = [t.section, t.area].filter(Boolean).join(' › ');
+  return `<div class="grid-item">
+    <div class="tat-thumb-wrap">
+      <canvas class="tat-thumb" width="128" height="128"${texAttr} style="opacity:0"></canvas>
+      <div class="tat-thumb-ph"><div class="ph-icon">🖼</div><div class="ph-err"></div></div>
+    </div>
+    <div class="grid-name" title="${esc(t.name)}">${esc(t.name)}</div>
+    <div class="grid-path">${esc(path)}</div>
+    ${showRemove
+      ? `<button class="btn danger" onclick="removeTattoo(${js(t.section)},${js(t.name)})"${t.locked?' disabled':''}>Remove</button>`
+      : `<button class="btn primary" onclick="addTattoo(${js(t.section)},${js(t.name)})">Apply</button>`
+    }
+  </div>`;
+}
+
+// ── Build tree structure ───────────────────────────────────────────────────────
+function buildTree(items) {
+  const tree = {};
+  for (const t of items) {
+    const sec  = t.section || 'Unknown';
+    const area = t.area    || 'Unknown';
+    if (!tree[sec]) tree[sec] = {};
+    (tree[sec][area] = tree[sec][area] || []).push(t);
+  }
+  return tree;
+}
+
+function renderTree(container, tree, showRemove) {
+  let html = '';
+  for (const [sec, areas] of Object.entries(tree)) {
+    const sk   = 'sec:'+sec;
+    const open = expanded[sk] !== false;
+    const tot  = Object.values(areas).reduce((s,a)=>s+a.length,0);
+    html += `<div class="tree-node" id="tn-${esc(sk)}">
+      <div class="tree-hdr" onclick="toggleNode(${js(sk)})">
+        <span class="tree-arrow">${open?'▼':'▶'}</span>
+        <span class="tree-label">${esc(sec)}</span>
+        <span class="badge">${tot}</span>
+      </div>
+      <div class="tree-children" style="${open?'':'display:none'}">`;
+
+    for (const [area, tats] of Object.entries(areas)) {
+      const ak    = 'area:'+sec+':'+area;
+      const aopen = expanded[ak] !== false;
+      html += `<div class="tree-node" id="tn-${esc(ak)}">
+        <div class="tree-hdr" onclick="toggleNode(${js(ak)})">
+          <span class="tree-arrow">${aopen?'▼':'▶'}</span>
+          <span class="tree-sub-label">${esc(area)}</span>
+          <span class="badge">${tats.length}</span>
+        </div>
+        <div class="tree-children" style="${aopen?'':'display:none'}">
+          <div class="tat-grid">${tats.map(t=>tatGridItem(t,showRemove)).join('')}</div>
+        </div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  container.innerHTML = html || '<div class="empty">No matches</div>';
+  container.querySelectorAll('.tat-thumb[data-tex]').forEach(c=>thumbObserver.observe(c));
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderAvailable() {
+  const q    = document.getElementById('searchAvail').value.toLowerCase();
+  const list = document.getElementById('listAvailable');
+  const items = availableTattoos.filter(t =>
+    !q || t.name.toLowerCase().includes(q) ||
+    (t.section||'').toLowerCase().includes(q) ||
+    (t.area||'').toLowerCase().includes(q));
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">${availableTattoos.length?'No matches':'No tattoos loaded'}</div>`;
+    return;
+  }
+  renderTree(list, buildTree(items), false);
+}
+
+function renderApplied() {
+  const q    = document.getElementById('searchApplied').value.toLowerCase();
+  const list = document.getElementById('listApplied');
+  const items = appliedTattoos.filter(t =>
+    !q || t.name.toLowerCase().includes(q) ||
+    (t.section||'').toLowerCase().includes(q));
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">${appliedTattoos.length?'No matches':'None applied'}</div>`;
+    return;
+  }
+  list.innerHTML = `<div class="tat-grid">${items.map(t=>tatGridItem(t,true)).join('')}</div>`;
+  list.querySelectorAll('.tat-thumb[data-tex]').forEach(c=>thumbObserver.observe(c));
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+}
+function setStatus(msg, type) {
+  const el = document.getElementById('statusbar');
+  el.textContent = msg; el.className = 'statusbar '+(type||'');
+}
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function js(s) { return esc(JSON.stringify(String(s))); }
+</script>
+</body>
+</html>

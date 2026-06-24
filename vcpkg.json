@@ -1,0 +1,9 @@
+{
+    "name": "slavetats-ui",
+    "version": "0.1.0",
+    "dependencies": [
+        "commonlibsse-ng",
+        "nlohmann-json",
+        "directxtex"
+    ]
+}
