@@ -13,6 +13,8 @@
 #include <fstream>
 #include <vector>
 #include <thread>
+#include <unordered_set>
+#include <unordered_map>
 
 #include <DirectXTex.h>
 // COM headers (pulled in by DirectXTex) define `interface` as `__interface`,

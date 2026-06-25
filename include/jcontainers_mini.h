@@ -15,14 +15,24 @@ inline void* g_domain = nullptr;
 inline int32_t (*fn_jarr_object)(void*) = nullptr;
 inline int32_t (*fn_jarr_count)(void*, int32_t) = nullptr;
 inline int32_t (*fn_jarr_getObj)(void*, int32_t, int32_t, int32_t) = nullptr;
+inline int32_t (*fn_jarr_getInt)(void*, int32_t, int32_t, int32_t) = nullptr;
 inline void    (*fn_jarr_addObj)(void*, int32_t, int32_t, int32_t) = nullptr;
 inline void    (*fn_jarr_addInt)(void*, int32_t, int32_t, int32_t) = nullptr;
 inline void    (*fn_jarr_clear)(void*, int32_t) = nullptr;
 
-// JMap
+// JMap read
 inline RE::BSFixedString (*fn_jmap_getStr)(void*, int32_t, RE::BSFixedString, RE::BSFixedString) = nullptr;
 inline int32_t           (*fn_jmap_getInt)(void*, int32_t, RE::BSFixedString, int32_t) = nullptr;
 inline float             (*fn_jmap_getFlt)(void*, int32_t, RE::BSFixedString, float) = nullptr;
+
+// JMap write
+inline void (*fn_jmap_setStr)(void*, int32_t, RE::BSFixedString, RE::BSFixedString) = nullptr;
+inline void (*fn_jmap_setInt)(void*, int32_t, RE::BSFixedString, int32_t) = nullptr;
+inline void (*fn_jmap_setFlt)(void*, int32_t, RE::BSFixedString, float)   = nullptr;
+
+// JFormDB (form-keyed storage — used by SlaveTats for per-actor data)
+inline RE::BSFixedString (*fn_jfdb_getStr)(void*, RE::TESForm*, RE::BSFixedString, RE::BSFixedString) = nullptr;
+inline void              (*fn_jfdb_setInt)(void*, RE::TESForm*, RE::BSFixedString, int32_t)           = nullptr;
 
 // JValue
 inline int32_t (*fn_jval_addToPool)(void*, int32_t, RE::BSFixedString) = nullptr;
@@ -43,6 +53,7 @@ inline bool Init(const jc::root_interface* root) {
     bindFunc(refl, "object",     "JArray", fn_jarr_object);
     bindFunc(refl, "count",      "JArray", fn_jarr_count);
     bindFunc(refl, "getObj",     "JArray", fn_jarr_getObj);
+    bindFunc(refl, "getInt",     "JArray", fn_jarr_getInt);
     bindFunc(refl, "addObj",     "JArray", fn_jarr_addObj);
     bindFunc(refl, "addInt",     "JArray", fn_jarr_addInt);
     bindFunc(refl, "clear",      "JArray", fn_jarr_clear);
@@ -50,6 +61,12 @@ inline bool Init(const jc::root_interface* root) {
     bindFunc(refl, "getStr",     "JMap",   fn_jmap_getStr);
     bindFunc(refl, "getInt",     "JMap",   fn_jmap_getInt);
     bindFunc(refl, "getFlt",     "JMap",   fn_jmap_getFlt);
+    bindFunc(refl, "setStr",     "JMap",   fn_jmap_setStr);
+    bindFunc(refl, "setInt",     "JMap",   fn_jmap_setInt);
+    bindFunc(refl, "setFlt",     "JMap",   fn_jmap_setFlt);
+
+    bindFunc(refl, "getStr",     "JFormDB", fn_jfdb_getStr);
+    bindFunc(refl, "setInt",     "JFormDB", fn_jfdb_setInt);
 
     bindFunc(refl, "addToPool",  "JValue", fn_jval_addToPool);
     bindFunc(refl, "cleanPool",  "JValue", fn_jval_cleanPool);
@@ -66,6 +83,9 @@ struct JArray {
     }
     static int getObj(int arr, int idx, int def = 0) {
         return fn_jarr_getObj ? fn_jarr_getObj(g_domain, arr, idx, def) : def;
+    }
+    static int getInt(int arr, int idx, int def = 0) {
+        return fn_jarr_getInt ? fn_jarr_getInt(g_domain, arr, idx, def) : def;
     }
     static void addObj(int arr, int obj, int idx = -1) {
         if (fn_jarr_addObj) fn_jarr_addObj(g_domain, arr, obj, idx);
@@ -88,6 +108,25 @@ struct JMap {
     }
     static float getFlt(int obj, const char* key, float def = 0.f) {
         return fn_jmap_getFlt ? fn_jmap_getFlt(g_domain, obj, RE::BSFixedString(key), def) : def;
+    }
+    static void setStr(int obj, const char* key, const char* val) {
+        if (fn_jmap_setStr) fn_jmap_setStr(g_domain, obj, RE::BSFixedString(key), RE::BSFixedString(val));
+    }
+    static void setInt(int obj, const char* key, int val) {
+        if (fn_jmap_setInt) fn_jmap_setInt(g_domain, obj, RE::BSFixedString(key), val);
+    }
+    static void setFlt(int obj, const char* key, float val) {
+        if (fn_jmap_setFlt) fn_jmap_setFlt(g_domain, obj, RE::BSFixedString(key), val);
+    }
+};
+
+struct JFormDB {
+    static std::string getStr(RE::TESForm* form, const char* path, const char* def = "") {
+        if (!fn_jfdb_getStr || !form) return def;
+        return fn_jfdb_getStr(g_domain, form, RE::BSFixedString(path), RE::BSFixedString(def)).c_str();
+    }
+    static void setInt(RE::TESForm* form, const char* path, int val) {
+        if (fn_jfdb_setInt && form) fn_jfdb_setInt(g_domain, form, RE::BSFixedString(path), val);
     }
 };
 

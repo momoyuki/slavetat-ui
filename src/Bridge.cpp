@@ -86,7 +86,7 @@ void Bridge::onJSCommand(const char* jsonStr) {
         uint32_t actorId = j.value("actorId", 0x14u);
         std::string section = j.value("section", "");
         std::string name    = j.value("name", "");
-        int   color = j.value("color", 0);
+        int   color = j.value("color", 0xFFFFFF);
         float alpha = j.value("alpha", 1.0f);
         SKSE::GetTaskInterface()->AddTask([this, actorId,
                                           section = std::move(section),
@@ -107,6 +107,37 @@ void Bridge::onJSCommand(const char* jsonStr) {
         uint32_t actorId = j.value("actorId", 0x14u);
         SKSE::GetTaskInterface()->AddTask([this, actorId]() {
             handleSyncTattoos(actorId);
+        });
+    } else if (action == "queryActors") {
+        SKSE::GetTaskInterface()->AddTask([this]() { handleQueryActors(); });
+    } else if (action == "querySlots") {
+        uint32_t actorId = j.value("actorId", 0x14u);
+        std::string area = j.value("area", "BODY");
+        SKSE::GetTaskInterface()->AddTask([this, actorId, area = std::move(area)]() {
+            handleQuerySlots(actorId, area);
+        });
+    } else if (action == "applyToSlot") {
+        uint32_t actorId    = j.value("actorId", 0x14u);
+        std::string section = j.value("section", "");
+        std::string name    = j.value("name", "");
+        std::string domain  = j.value("domain", "default");
+        int  slot           = j.value("slot", -1);
+        int  color          = j.value("color", 0xFFFFFF);
+        float alpha         = j.value("alpha", 1.0f);
+        SKSE::GetTaskInterface()->AddTask([this, actorId,
+                                          section = std::move(section),
+                                          name    = std::move(name),
+                                          domain  = std::move(domain),
+                                          slot, color, alpha]() {
+            handleApplyToSlot(actorId, section, name, domain, slot, color, alpha);
+        });
+    } else if (action == "updateTattoo") {
+        uint32_t actorId    = j.value("actorId", 0x14u);
+        int  tattooHandle   = j.value("tattooHandle", 0);
+        int  color          = j.value("color", 0xFFFFFF);
+        float alpha         = j.value("alpha", 1.0f);
+        SKSE::GetTaskInterface()->AddTask([this, actorId, tattooHandle, color, alpha]() {
+            handleUpdateTattoo(actorId, tattooHandle, color, alpha);
         });
     } else if (action == "getTexture") {
         std::string path = j.value("path", "");
@@ -183,9 +214,10 @@ void Bridge::handleQueryApplied(uint32_t actorFormId) {
         return;
     }
 
+    std::string version = jcmini::JFormDB::getStr(actor, ".SlaveTats.version", "");
     std::string result = std::format(
-        R"({{"type":"applied","actorId":"0x{:X}","tattoos":{}}})",
-        actorFormId, jArrayToJSON(matches));
+        R"({{"type":"applied","actorId":"0x{:X}","version":"{}","tattoos":{}}})",
+        actorFormId, escapeJSON(version), jArrayToJSON(matches));
 
     jcmini::JValue::cleanPool(k_pool);
     sendToUI(result);
@@ -268,6 +300,209 @@ void Bridge::handleSyncTattoos(uint32_t actorId) {
         sendToUI(R"({"type":"error","message":"synchronize_tattoos failed"})");
     else
         sendToUI(R"({"type":"success","action":"syncTattoos"})");
+}
+
+void Bridge::handleQueryActors() {
+    std::string result = R"({"type":"actors","actors":[)";
+    bool first = true;
+
+    auto addActor = [&](RE::Actor* actor, bool isPlayer) {
+        if (!actor) return;
+        const char* name = actor->GetDisplayFullName();
+        if (!name || !name[0]) name = isPlayer ? "Player" : "NPC";
+        if (!first) result += ',';
+        first = false;
+        result += std::format(R"({{"id":"0x{:X}","name":"{}","isPlayer":{}}})",
+            actor->GetFormID(), escapeJSON(name), isPlayer ? "true" : "false");
+    };
+
+    addActor(RE::PlayerCharacter::GetSingleton(), true);
+
+    auto* pl = RE::ProcessLists::GetSingleton();
+    if (pl) {
+        for (auto& handle : pl->highActorHandles) {
+            auto ptr = handle.get();
+            if (!ptr || ptr->IsPlayerRef() || !ptr->GetActorBase()) continue;
+            addActor(ptr.get(), false);
+        }
+    }
+
+    result += "]}";
+    sendToUI(result);
+}
+
+void Bridge::handleQuerySlots(uint32_t actorId, std::string area) {
+    if (!m_tattooAPI) {
+        sendToUI(R"({"type":"error","message":"SlaveTatsNG not available"})");
+        return;
+    }
+    auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
+    if (!actor) {
+        sendToUI(std::format(R"({{"type":"error","message":"Actor 0x{:X} not found"}})", actorId));
+        return;
+    }
+
+    std::string areaUp = area;
+    for (char& c : areaUp) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+
+    // Read overlay count from skee64.ini; cache per area after first read
+    static std::unordered_map<std::string, int> s_slotCache;
+    if (!s_slotCache.count(areaUp)) {
+        static std::filesystem::path s_iniPath;
+        if (s_iniPath.empty()) {
+            wchar_t exeBuf[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
+            s_iniPath = std::filesystem::path(exeBuf).parent_path()
+                        / L"Data" / L"SKSE" / L"Plugins" / L"skee64.ini";
+        }
+        static const std::unordered_map<std::string, std::pair<std::wstring, int>> kAreaIni = {
+            {"BODY",  {L"Overlays/Body",  12}},
+            {"FACE",  {L"Overlays/Face",   3}},
+            {"HANDS", {L"Overlays/Hands",  3}},
+            {"FEET",  {L"Overlays/Feet",   3}},
+        };
+        int def = (areaUp == "BODY") ? 12 : 3;
+        auto it = kAreaIni.find(areaUp);
+        if (it != kAreaIni.end())
+            s_slotCache[areaUp] = static_cast<int>(GetPrivateProfileIntW(
+                it->second.first.c_str(), L"iNumOverlays", it->second.second, s_iniPath.c_str()));
+        else
+            s_slotCache[areaUp] = def;
+        logger::info("SlaveTatsUI: {} maxSlots={} (from skee64.ini)", areaUp, s_slotCache[areaUp]);
+    }
+    int maxSlots = s_slotCache.at(areaUp);
+
+    // Query slots occupied by non-SlaveTats overlays (other mods using NiOverride directly)
+    static constexpr const char* k_pool = "SlaveTatsUI-extSlots";
+    int extArr = jcmini::JValue::addToPool(jcmini::JArray::object(), k_pool);
+    m_tattooAPI->external_slots(actor, RE::BSFixedString(areaUp.c_str()), extArr);
+
+    std::unordered_set<int> externalSet;
+    int extCount = jcmini::JArray::count(extArr);
+    for (int i = 0; i < extCount; ++i)
+        externalSet.insert(jcmini::JArray::getInt(extArr, i));
+    jcmini::JValue::cleanPool(k_pool);
+
+    std::string result = std::format(
+        R"({{"type":"slots","area":"{}","maxSlots":{},"slots":[)", escapeJSON(area), maxSlots);
+    bool first = true;
+    for (int slot = 0; slot < maxSlots; slot++) {
+        int tattoo = m_tattooAPI->get_applied_tattoo_in_slot(
+            actor, RE::BSFixedString(areaUp.c_str()), slot);
+        if (!first) result += ',';
+        first = false;
+        if (tattoo) {
+            result += std::format(R"({{"slot":{},"occupied":true,"name":"{}","handle":{}}})",
+                slot, escapeJSON(jcmini::JMap::getStr(tattoo, "name")), tattoo);
+        } else if (externalSet.count(slot)) {
+            result += std::format(R"({{"slot":{},"occupied":true,"external":true,"name":"[External]"}})", slot);
+        } else {
+            result += std::format(R"({{"slot":{},"occupied":false}})", slot);
+        }
+    }
+    result += "]}";
+    sendToUI(result);
+}
+
+void Bridge::handleApplyToSlot(uint32_t actorId, std::string section, std::string name, std::string domain, int slot, int color, float alpha) {
+    if (!m_tattooAPI) {
+        sendToUI(R"({"type":"error","message":"SlaveTatsNG not available"})");
+        return;
+    }
+    if (!m_jcReady) {
+        sendToUI(R"({"type":"error","message":"JContainers not ready"})");
+        return;
+    }
+    auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
+    if (!actor) {
+        sendToUI(std::format(R"({{"type":"error","message":"Actor 0x{:X} not found"}})", actorId));
+        return;
+    }
+    if (slot < 0) {
+        sendToUI(std::format(R"({{"type":"error","message":"Invalid slot {}"}})", slot));
+        return;
+    }
+
+    logger::info("SlaveTatsUI: applyToSlot actor=0x{:X} domain='{}' section='{}' name='{}' slot={} color=0x{:X} alpha={:.2f}",
+        actorId, domain, section, name, slot, color, alpha);
+
+    // Re-query with the same domain the UI used — handles from a prior queryAvailable
+    // were freed after that pool was cleaned, so we need a fresh reference here.
+    static constexpr const char* k_pool = "SlaveTatsUI-applyToSlot";
+    int arr = jcmini::JValue::addToPool(jcmini::JArray::object(), k_pool);
+    m_tattooAPI->query_available_tattoos(0, arr, 0, RE::BSFixedString(domain.c_str()));
+
+    int count = jcmini::JArray::count(arr);
+    int tattooHandle = 0;
+    for (int i = 0; i < count && !tattooHandle; ++i) {
+        int t = jcmini::JArray::getObj(arr, i);
+        if (jcmini::JMap::getStr(t, "section") == section &&
+            jcmini::JMap::getStr(t, "name")    == name) {
+            tattooHandle = t;
+        }
+    }
+
+    if (!tattooHandle) {
+        jcmini::JValue::cleanPool(k_pool);
+        logger::error("SlaveTatsUI: applyToSlot — '{}/{}' not found in domain '{}'", section, name, domain);
+        sendToUI(R"({"type":"error","message":"Tattoo not found in available list"})");
+        return;
+    }
+
+    // Temporarily set color/alpha on the template so add_and_get_tattoo copies them
+    // into JFormDB. Restore original values after the call to avoid corrupting the
+    // shared template for subsequent queries.
+    int   origColor = jcmini::JMap::getInt(tattooHandle, "color", 0);
+    float origAlpha = jcmini::JMap::getFlt(tattooHandle, "alpha", 1.0f);
+    jcmini::JMap::setInt(tattooHandle, "color", color);
+    jcmini::JMap::setFlt(tattooHandle, "alpha", alpha);
+
+    int applied = m_tattooAPI->add_and_get_tattoo(actor, tattooHandle, slot, false, false, false);
+
+    // Restore template before pool cleanup so other concurrent readers see original values
+    jcmini::JMap::setInt(tattooHandle, "color", origColor);
+    jcmini::JMap::setFlt(tattooHandle, "alpha", origAlpha);
+    jcmini::JValue::cleanPool(k_pool);
+
+    if (!applied) {
+        logger::error("SlaveTatsUI: add_and_get_tattoo returned 0 — slot locked or invalid");
+        sendToUI(R"({"type":"error","message":"Failed to apply tattoo to slot"})");
+        return;
+    }
+
+    jcmini::JFormDB::setInt(actor, ".SlaveTats.updated", 1);
+    m_tattooAPI->synchronize_tattoos(actor, false);
+
+    sendToUI(std::format(
+        R"({{"type":"success","action":"applyToSlot","slot":{},"section":"{}","name":"{}"}})",
+        slot, escapeJSON(section), escapeJSON(name)));
+}
+
+void Bridge::handleUpdateTattoo(uint32_t actorId, int tattooHandle, int color, float alpha) {
+    if (!m_tattooAPI || !m_jcReady) {
+        sendToUI(R"({"type":"error","message":"SlaveTatsNG or JContainers not ready"})");
+        return;
+    }
+    auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
+    if (!actor) {
+        sendToUI(std::format(R"({{"type":"error","message":"Actor 0x{:X} not found"}})", actorId));
+        return;
+    }
+
+    if (!tattooHandle) {
+        sendToUI(R"({"type":"error","message":"Invalid tattoo handle — try Refresh"})");
+        return;
+    }
+
+    logger::info("SlaveTatsUI: updateTattoo handle={} color=0x{:X} alpha={:.2f}", tattooHandle, color, alpha);
+
+    jcmini::JMap::setInt(tattooHandle, "color", color);
+    jcmini::JMap::setFlt(tattooHandle, "alpha", alpha);
+
+    // Mark the actor's SlaveTats data as changed so synchronize_tattoos doesn't abort
+    jcmini::JFormDB::setInt(actor, ".SlaveTats.updated", 1);
+    m_tattooAPI->synchronize_tattoos(actor, false);
+    sendToUI(R"({"type":"success","action":"updateTattoo"})");
 }
 
 // Runs on a detached background thread — tries disk cache, then loose file, then BSA
@@ -464,14 +699,16 @@ void Bridge::sendRGBAToUI(const std::string& texPath,
 // ── Serialization ─────────────────────────────────────────────────────────────
 
 std::string Bridge::tattooToJSON(int tattoo) {
+    int rawColor = jcmini::JMap::getInt(tattoo, "color", 0);
     return std::format(
-        R"({{"name":"{}","section":"{}","area":"{}","texture":"{}","slot":{},"color":{},"locked":{},"alpha":{:.2f}}})",
+        R"({{"handle":{},"name":"{}","section":"{}","area":"{}","texture":"{}","slot":{},"color":{},"locked":{},"alpha":{:.2f}}})",
+        tattoo,
         escapeJSON(jcmini::JMap::getStr(tattoo, "name")),
         escapeJSON(jcmini::JMap::getStr(tattoo, "section")),
         escapeJSON(jcmini::JMap::getStr(tattoo, "area")),
         escapeJSON(jcmini::JMap::getStr(tattoo, "texture")),
         jcmini::JMap::getInt(tattoo, "slot"),
-        jcmini::JMap::getInt(tattoo, "color"),
+        (rawColor == 0) ? 0xFFFFFF : rawColor,
         jcmini::JMap::getInt(tattoo, "locked"),
         jcmini::JMap::getFlt(tattoo, "alpha", 1.0f));
 }

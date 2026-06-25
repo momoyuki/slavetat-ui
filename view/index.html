@@ -8,162 +8,262 @@
 
   body {
     width: 100vw; height: 100vh;
-    background: transparent;
-    overflow: hidden;
-    font-family: 'Segoe UI', sans-serif;
-    color: #e8e8e8;
+    background: transparent; overflow: hidden;
+    font-family: 'Segoe UI', sans-serif; color: #e8e8e8;
+    font-size: 12px;
   }
 
   /* ── Right panel ── */
   .app {
-    position: fixed;
-    right: 0; top: 0;
-    width: 540px;
-    height: 100vh;
+    position: fixed; left: calc(100vw - 540px); top: 0;
+    width: 540px; height: 100vh;
     background: rgba(10,10,10,0.93);
-    border-left: 1px solid #2a2a2a;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: -4px 0 28px rgba(0,0,0,0.7);
+    border: 1px solid #2a2a2a;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.8);
+    border-radius: 4px;
+    user-select: none;
   }
+  .app.dragging { opacity: 0.92; }
 
   /* ── Header ── */
   header {
     background: rgba(18,18,18,0.99);
-    padding: 8px 12px;
+    padding: 7px 10px;
     border-bottom: 1px solid #252525;
-    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 7px; flex-shrink: 0;
+    cursor: move;
   }
-  header h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; flex: 1; }
-  .actor-bar { display: flex; gap: 6px; align-items: center; }
-  .actor-bar label { font-size: 10px; color: #666; white-space: nowrap; }
+  header h1 { font-size: 13px; font-weight: 600; flex: 1; }
+  .actor-bar { display: flex; gap: 5px; align-items: center; }
+  .actor-bar label { font-size: 10px; color: #555; white-space: nowrap; }
   .actor-bar select {
-    width: 100px; background: #161616; border: 1px solid #2e2e2e;
-    border-radius: 3px; color: #e8e8e8; font-size: 11px; padding: 3px 5px;
+    width: 90px; background: #141414; border: 1px solid #2e2e2e;
+    border-radius: 3px; color: #ccc; font-size: 11px; padding: 2px 4px;
   }
+  .btn-hdr {
+    padding: 3px 8px; font-size: 10px; border-radius: 3px;
+    border: 1px solid #2a2a2a; cursor: pointer; background: #161616; color: #777;
+  }
+  .btn-hdr:hover { background: #202020; color: #aaa; }
 
   /* ── Tabs ── */
   .tabs {
-    display: flex; gap: 3px; padding: 6px 10px;
-    background: rgba(14,14,14,0.95); border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
+    display: flex; gap: 3px; padding: 5px 8px;
+    background: rgba(14,14,14,0.98); border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
   }
   .tab {
     padding: 4px 14px; font-size: 11px; border: 1px solid #2a2a2a;
-    border-radius: 3px; background: transparent; color: #777; cursor: pointer;
+    border-radius: 3px; background: transparent; color: #666; cursor: pointer;
   }
-  .tab.active { background: #8a3010; border-color: #a04020; color: #fff; }
+  .tab.active { background: #7a2a0e; border-color: #9a3a1e; color: #fff; }
   .tab:hover:not(.active) { background: rgba(255,255,255,0.04); }
 
   /* ── Panels ── */
-  .panel { display: none; flex: 1; overflow-y: auto; padding: 8px 10px 10px; flex-direction: column; gap: 0; }
+  .panel { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
   .panel.active { display: flex; }
+  .panel-inner { padding: 8px 10px 10px; display: flex; flex-direction: column; }
 
   /* ── Sticky search ── */
   .search-bar {
     display: flex; gap: 5px;
     position: sticky; top: 0; z-index: 10;
     background: rgba(10,10,10,0.97);
-    padding-bottom: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #181818;
   }
   .search-bar input {
     flex: 1; background: #141414; border: 1px solid #2a2a2a;
-    border-radius: 3px; color: #e8e8e8; font-size: 11px; padding: 5px 8px;
+    border-radius: 3px; color: #e8e8e8; font-size: 11px; padding: 4px 8px;
   }
-  .search-bar input::placeholder { color: #3a3a3a; }
+  .search-bar input::placeholder { color: #333; }
 
   /* ── Tree ── */
-  .tree { display: flex; flex-direction: column; gap: 2px; }
   .tree-node { display: flex; flex-direction: column; }
   .tree-hdr {
-    display: flex; align-items: center; gap: 6px;
-    padding: 5px 6px; cursor: pointer; border-radius: 4px; user-select: none;
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 6px; cursor: pointer; border-radius: 3px; user-select: none;
   }
   .tree-hdr:hover { background: rgba(255,255,255,0.04); }
-  .tree-arrow { font-size: 8px; color: #444; width: 9px; flex-shrink: 0; transition: transform 0.1s; }
-  .tree-label     { font-size: 12px; font-weight: 600; color: #bbb; flex: 1; }
-  .tree-sub-label { font-size: 11px; color: #888; flex: 1; padding-left: 2px; }
+  .tree-arrow { font-size: 8px; color: #3a3a3a; width: 9px; flex-shrink: 0; }
+  .tree-label     { font-size: 12px; font-weight: 600; color: #aaa; flex: 1; }
+  .tree-sub-label { font-size: 11px; color: #777; flex: 1; padding-left: 2px; }
   .badge {
-    font-size: 9px; background: #181818; border: 1px solid #252525;
-    border-radius: 8px; padding: 1px 6px; color: #555;
+    font-size: 9px; background: #141414; border: 1px solid #222;
+    border-radius: 8px; padding: 1px 5px; color: #444;
   }
-  .tree-children { padding-left: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .tree-children { padding-left: 10px; display: flex; flex-direction: column; gap: 2px; }
 
-  /* ── 2-column thumbnail grid ── */
+  /* ── Grid ── */
   .tat-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    padding: 4px 2px 6px;
+    gap: 5px; padding: 4px 2px 6px;
   }
   .grid-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-    background: rgba(255,255,255,0.02);
-    border: 1px solid #1c1c1c;
-    border-radius: 6px;
-    padding: 8px 6px;
-    min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    background: rgba(255,255,255,0.018); border: 1px solid #191919;
+    border-radius: 5px; padding: 7px 6px; min-width: 0;
     transition: background 0.1s;
   }
-  .grid-item:hover { background: rgba(255,255,255,0.05); }
+  .grid-item:hover { background: rgba(255,255,255,0.04); }
 
   /* ── Thumbnail 128×128 ── */
   .tat-thumb-wrap {
-    flex-shrink: 0;
-    width: 128px; height: 128px;
+    flex-shrink: 0; width: 128px; height: 128px;
     border-radius: 4px; overflow: hidden;
-    background: #090909; border: 1px solid #202020;
-    position: relative;
+    background: #080808; border: 1px solid #1c1c1c; position: relative;
   }
   .tat-thumb { width: 128px; height: 128px; display: block; image-rendering: pixelated; }
   .tat-thumb-ph {
     position: absolute; inset: 0; display: flex;
-    flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   }
-  .tat-thumb-ph .ph-icon { font-size: 26px; opacity: 0.15; }
+  .tat-thumb-ph .ph-icon { font-size: 24px; opacity: 0.12; }
   .tat-thumb-ph .ph-err  { font-size: 8px; color: #5a2a2a; text-align: center; padding: 0 4px; word-break: break-all; }
 
-  /* ── Card text + button ── */
+  /* ── Color swatch on thumb ── */
+  .thumb-color-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 6px; border-radius: 0 0 3px 3px; opacity: 0.85;
+  }
+
+  /* ── Card labels ── */
   .grid-name {
-    font-size: 11px; font-weight: 500; color: #bbb;
+    font-size: 11px; font-weight: 500; color: #b0b0b0;
     text-align: center; width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .grid-path {
-    font-size: 9px; color: #444;
+    font-size: 9px; color: #3a3a3a;
     text-align: center; width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .slot-badge {
+    font-size: 9px; color: #68a; background: #111;
+    border: 1px solid #1e2a3a; border-radius: 3px; padding: 1px 5px;
+    margin-left: 4px; vertical-align: middle;
+  }
+  .alpha-badge {
+    font-size: 9px; color: #555; background: #111;
+    border: 1px solid #1e1e1e; border-radius: 3px; padding: 1px 5px;
   }
 
   /* ── Buttons ── */
   .btn {
-    padding: 5px 12px; font-size: 11px; border-radius: 3px; border: 1px solid #333;
-    cursor: pointer; background: #202020; color: #ccc; white-space: nowrap;
-    width: 100%;
+    padding: 5px 10px; font-size: 11px; border-radius: 3px; border: 1px solid #2e2e2e;
+    cursor: pointer; background: #1c1c1c; color: #bbb; white-space: nowrap; width: 100%;
   }
-  .btn:hover { background: #2c2c2c; }
-  .btn.primary { background: #8a3010; border-color: #a04020; color: #fff; }
-  .btn.primary:hover { background: #a04020; }
-  .btn.sm { padding: 4px 8px; font-size: 10px; }
-  .btn.danger { border-color: #4a0e0e; color: #c55; }
-  .btn.danger:hover { background: #5a1010; border-color: #8b2020; color: #f77; }
+  .btn:hover { background: #262626; }
+  .btn.primary { background: #7a2a0e; border-color: #9a3a1e; color: #fff; }
+  .btn.primary:hover { background: #9a3a1e; }
+  .btn.sm { padding: 3px 7px; font-size: 10px; }
+  .btn.danger { border-color: #3a0a0a; color: #b44; }
+  .btn.danger:hover { background: #4a1010; border-color: #7b1818; color: #f77; }
+  .btn.edit  { border-color: #1a2a3a; color: #68a; }
+  .btn.edit:hover { background: #1a2a3a; color: #9be; }
   .btn:disabled { opacity: 0.3; cursor: default; }
-  .btn-hdr { padding: 3px 8px; font-size: 10px; border-radius: 3px; border: 1px solid #333; cursor: pointer; background: #1a1a1a; color: #888; }
-  .btn-hdr:hover { background: #252525; }
+
+  /* Card button row */
+  .card-btns { display: flex; gap: 4px; width: 100%; }
+  .card-btns .btn { flex: 1; }
 
   /* ── Status bar ── */
   .statusbar {
-    padding: 4px 10px; font-size: 10px; color: #3a3a3a;
-    background: rgba(6,6,6,0.98); border-top: 1px solid #181818; flex-shrink: 0;
+    padding: 3px 10px; font-size: 10px; color: #2e2e2e;
+    background: rgba(6,6,6,0.98); border-top: 1px solid #141414; flex-shrink: 0;
   }
   .statusbar.ok   { color: #2a8; }
   .statusbar.err  { color: #a44; }
-  .statusbar.busy { color: #779; }
+  .statusbar.busy { color: #668; }
 
-  .empty { text-align: center; padding: 24px; color: #2e2e2e; font-size: 11px; }
+  .empty { text-align: center; padding: 28px; color: #262626; font-size: 11px; }
+
+  /* ─────────────────────────────────────── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; display: none;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #111; border: 1px solid #2a2a2a; border-radius: 6px;
+    width: 420px; max-width: 90vw; max-height: 85vh;
+    overflow-y: auto; display: flex; flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+  }
+  .modal-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
+  }
+  .modal-title { font-size: 13px; font-weight: 600; flex: 1; }
+  .modal-close {
+    background: none; border: none; color: #555; cursor: pointer; font-size: 16px; padding: 0 4px;
+  }
+  .modal-close:hover { color: #ddd; }
+  .modal-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .modal-footer { padding: 8px 14px; border-top: 1px solid #1a1a1a; display: flex; gap: 8px; flex-shrink: 0; }
+
+  /* Field label */
+  .field-label { font-size: 10px; color: #555; margin-bottom: 5px; }
+
+  /* ── SkyUI Color Palette ── */
+  .palette-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  }
+  .pal-swatch {
+    width: 100%; aspect-ratio: 1; border-radius: 3px; cursor: pointer;
+    border: 2px solid transparent; transition: transform 0.1s, border-color 0.1s;
+  }
+  .pal-swatch:hover { transform: scale(1.12); }
+  .pal-swatch.selected { border-color: #fff; }
+
+  /* Color preview + hex input row */
+  .color-row {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .color-preview {
+    width: 36px; height: 36px; border-radius: 4px;
+    border: 1px solid #333; flex-shrink: 0;
+  }
+  .hex-input {
+    flex: 1; background: #141414; border: 1px solid #2a2a2a;
+    border-radius: 3px; color: #e8e8e8; font-size: 12px;
+    font-family: monospace; padding: 6px 8px;
+  }
+
+  /* Alpha slider */
+  .alpha-row { display: flex; align-items: center; gap: 8px; }
+  .alpha-row input[type=range] {
+    flex: 1; accent-color: #9a3a1e; height: 4px;
+  }
+  .alpha-val { font-size: 11px; color: #888; min-width: 32px; text-align: right; font-family: monospace; }
+
+  /* Slot picker */
+  .slot-area-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+  .area-btn {
+    padding: 3px 10px; font-size: 10px; border-radius: 3px;
+    border: 1px solid #2a2a2a; cursor: pointer; background: #161616; color: #666;
+  }
+  .area-btn.active { background: #1a3a5a; border-color: #2a5a8a; color: #9be; }
+
+  .slot-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+  }
+  .slot-btn {
+    padding: 5px 4px; font-size: 10px; border-radius: 3px; cursor: pointer;
+    border: 1px solid #1e1e1e; background: #141414; color: #888;
+    text-align: center; transition: background 0.1s;
+  }
+  .slot-btn:hover:not(.occupied) { background: #1c2c1c; border-color: #3a6a3a; color: #9c9; }
+  .slot-btn.occupied     { background: #1e1010; border-color: #3a1a1a; color: #966; cursor: default; }
+  .slot-btn.ext-occupied { background: #1a1600; border-color: #3a3000; color: #aa8; cursor: default; }
+  .slot-btn.selected     { background: #0e3a1e; border-color: #2a6a3a; color: #8da; }
+  .slot-btn .slot-num    { font-size: 9px; color: inherit; opacity: 0.6; }
+  .slot-btn .slot-name   { font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot-info { font-size: 9px; color: #444; padding: 4px 0; grid-column: 1/-1; line-height: 1.5; }
+  .slot-info code { color: #666; background: #111; padding: 1px 4px; border-radius: 2px; }
+  .slot-loading { font-size: 10px; color: #444; padding: 8px; text-align: center; }
 </style>
 </head>
 <body>
@@ -173,24 +273,30 @@
   <h1>SlaveTats UI</h1>
   <div class="actor-bar">
     <label>Actor</label>
-    <select id="actorSelect"><option value="0x14">Player</option></select>
+    <select id="actorSelect" onchange="onActorChange()">
+      <option value="0x14">Player</option>
+    </select>
+    <button class="btn-hdr" onclick="refreshActors()" title="Scan nearby NPCs">⟳</button>
   </div>
+  <span id="slavetatsVersion" style="font-size:9px;color:#333;white-space:nowrap"></span>
   <button class="btn-hdr" onclick="syncTattoos()">Sync</button>
   <button class="btn-hdr" onclick="sendCmd({action:'toggleUI'})">✕</button>
 </header>
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('available',this)">Available</button>
-  <button class="tab" onclick="switchTab('applied',this)">Applied</button>
+  <button class="tab"        onclick="switchTab('applied',this)">Applied</button>
 </div>
 
 <div id="panel-available" class="panel active">
   <div class="search-bar">
-    <input id="searchAvail" type="text" placeholder="Search tattoos…" oninput="renderAvailable()">
+    <input id="searchAvail" type="text" placeholder="Search…" oninput="renderAvailable()">
     <button class="btn primary sm" onclick="fetchAvailable()">Refresh</button>
   </div>
-  <div id="listAvailable" class="tree">
-    <div class="empty">Press Refresh to load tattoos</div>
+  <div class="panel-inner">
+    <div id="listAvailable">
+      <div class="empty">Press Refresh to load tattoos</div>
+    </div>
   </div>
 </div>
 
@@ -199,42 +305,188 @@
     <input id="searchApplied" type="text" placeholder="Filter…" oninput="renderApplied()">
     <button class="btn primary sm" onclick="fetchApplied()">Refresh</button>
   </div>
-  <div id="listApplied">
-    <div class="empty">Press Refresh to load applied tattoos</div>
+  <div class="panel-inner">
+    <div id="listApplied">
+      <div class="empty">Press Refresh</div>
+    </div>
   </div>
 </div>
 
 <div id="statusbar" class="statusbar">Ready</div>
 </div>
 
+<!-- ── Apply Modal ──────────────────────────────────────── -->
+<div id="applyModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="applyTitle">Apply Tattoo</span>
+      <button class="modal-close" onclick="closeModal('applyModal')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div>
+        <div class="field-label">COLOR — SkyUI Palette</div>
+        <div class="palette-grid" id="applyPalette"></div>
+      </div>
+
+      <div>
+        <div class="field-label">CUSTOM COLOR</div>
+        <div class="color-row">
+          <div class="color-preview" id="applyColorPreview"></div>
+          <input class="hex-input" id="applyHex" type="text" maxlength="7" placeholder="#FFFFFF"
+            oninput="onHexInput('apply')">
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">ALPHA / OPACITY</div>
+        <div class="alpha-row">
+          <input type="range" min="0" max="100" value="100" id="applyAlpha"
+            oninput="document.getElementById('applyAlphaVal').textContent=(this.value/100).toFixed(2)">
+          <span class="alpha-val" id="applyAlphaVal">1.00</span>
+        </div>
+      </div>
+
+      <div id="slotSection">
+        <div class="field-label">SLOT — <span id="slotAreaName" style="color:#68a"></span> <span style="color:#333;font-size:9px">(occupied = cannot select)</span></div>
+        <div id="slotGrid" class="slot-loading">Loading slots…</div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn primary" onclick="confirmApply()">Apply</button>
+      <button class="btn" onclick="setModalColor('apply',0xFFFFFF);setModalAlpha('apply',1.0)" title="Reset to white (no tint)">↺ Default</button>
+      <button class="btn" onclick="closeModal('applyModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Modal ───────────────────────────────────────── -->
+<div id="editModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="editTitle">Edit Tattoo</span>
+      <button class="modal-close" onclick="closeModal('editModal')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div>
+        <div class="field-label">COLOR — SkyUI Palette</div>
+        <div class="palette-grid" id="editPalette"></div>
+      </div>
+
+      <div>
+        <div class="field-label">CUSTOM COLOR</div>
+        <div class="color-row">
+          <div class="color-preview" id="editColorPreview"></div>
+          <input class="hex-input" id="editHex" type="text" maxlength="7" placeholder="#FFFFFF"
+            oninput="onHexInput('edit')">
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">ALPHA / OPACITY</div>
+        <div class="alpha-row">
+          <input type="range" min="0" max="100" value="100" id="editAlpha"
+            oninput="document.getElementById('editAlphaVal').textContent=(this.value/100).toFixed(2)">
+          <span class="alpha-val" id="editAlphaVal">1.00</span>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn primary" onclick="confirmEdit()">Save</button>
+      <button class="btn" onclick="resetEditToOriginal()" title="Revert to color before editing">↺ Original</button>
+      <button class="btn" onclick="closeModal('editModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ── State ────────────────────────────────────────────────────────────────────
+// ─── SkyUI 28-color palette (RGB values, matching RaceMenu overlay palette) ────
+const SKYUI_PALETTE = [
+  { name:'White',      hex:'#FFFFFF' }, { name:'Silver',     hex:'#C8C8C8' },
+  { name:'Gray',       hex:'#969696' }, { name:'Black',      hex:'#282828' },
+  { name:'Red',        hex:'#FF0000' }, { name:'Dark Red',   hex:'#960000' },
+  { name:'Orange',     hex:'#FF6400' }, { name:'Brown',      hex:'#964600' },
+  { name:'Yellow',     hex:'#FFFF00' }, { name:'Olive',      hex:'#969600' },
+  { name:'Lime',       hex:'#64FF00' }, { name:'Green',      hex:'#008200' },
+  { name:'Aqua',       hex:'#00FFFF' }, { name:'Teal',       hex:'#008282' },
+  { name:'Sky',        hex:'#64C8FF' }, { name:'Blue',       hex:'#0000FF' },
+  { name:'Navy',       hex:'#000096' }, { name:'Violet',     hex:'#9600FF' },
+  { name:'Purple',     hex:'#460096' }, { name:'Magenta',    hex:'#FF00FF' },
+  { name:'Pink',       hex:'#FF82C8' }, { name:'Rose',       hex:'#FF1482' },
+  { name:'Pale',       hex:'#FFDCC8' }, { name:'Peach',      hex:'#F0B496' },
+  { name:'Tan',        hex:'#C87832' }, { name:'Chocolate',  hex:'#784614' },
+  { name:'Gold',       hex:'#FFD200' }, { name:'Steel',      hex:'#8296AA' },
+];
+
+// ─── State ──────────────────────────────────────────────────────────────────
 let availableTattoos = [];
 let appliedTattoos   = [];
-const expanded = {};
+const expanded       = {};
 
-// ── PrismaUI interop ─────────────────────────────────────────────────────────
+// Lookup maps — avoid serialising full objects into onclick attributes
+let tattooByHandle  = {};   // handle → available tattoo
+let appliedByHandle = {};   // handle → applied tattoo
+
+// Available tattoo domain (tracks which domain the current list came from)
+let availableDomain = 'default';
+
+// Apply modal state
+let applyTattoo     = null;
+let applyColor      = 0xFFFFFF;
+let applyAlphaVal   = 1.0;
+let applySlot       = -1;
+let applyArea       = '';
+let slotsData       = {};
+
+// Edit modal state
+let editHandle      = 0;
+let editColor       = 0xFFFFFF;
+let editOrigColor   = 0xFFFFFF;   // original color before edits
+let editAlphaV      = 1.0;
+let editOrigAlpha   = 1.0;
+
+// ─── PrismaUI interop ────────────────────────────────────────────────────────
 function slavetatsOnData(jsonStr) {
   let d;
-  try { d = JSON.parse(jsonStr); } catch(e) { setStatus('JSON error: '+e, 'err'); return; }
+  try { d = JSON.parse(jsonStr); } catch(e) { setStatus('JSON error','err'); return; }
   switch (d.type) {
     case 'ready':
       setStatus('Connected','ok');
-      fetchAvailable(); fetchApplied();
+      fetchAvailable(); fetchApplied(); refreshActors();
       break;
     case 'available':
+      availableDomain  = d.domain || 'default';
       availableTattoos = d.tattoos || [];
+      tattooByHandle = {};
+      for (const t of availableTattoos) if (t.handle) tattooByHandle[t.handle] = t;
       renderAvailable();
       setStatus(availableTattoos.length+' available','ok');
       break;
+    case 'actors':
+      onActorsData(d.actors || []);
+      break;
     case 'applied':
       appliedTattoos = d.tattoos || [];
+      appliedByHandle = {};
+      for (const t of appliedTattoos) if (t.handle) appliedByHandle[t.handle] = t;
       renderApplied();
+      if (d.version) document.getElementById('slavetatsVersion').textContent = 'ST '+d.version;
       setStatus(appliedTattoos.length+' applied','ok');
+      break;
+    case 'slots':
+      onSlotsData(d);
       break;
     case 'success':
       setStatus('OK: '+d.action,'ok');
-      if (['addTattoo','removeTattoo','syncTattoos'].includes(d.action)) fetchApplied();
+      if (['addTattoo','removeTattoo','syncTattoos','applyToSlot','updateTattoo'].includes(d.action))
+        fetchApplied();
+      if (d.action === 'applyToSlot' || d.action === 'addTattoo')
+        closeModal('applyModal');
+      if (d.action === 'updateTattoo')
+        closeModal('editModal');
       break;
     case 'error':
       setStatus('Error: '+d.message,'err');
@@ -253,35 +505,261 @@ function sendCmd(obj) {
   catch(e) { setStatus('Bridge not ready: '+e,'err'); }
 }
 
-// ── Commands ──────────────────────────────────────────────────────────────────
-function fetchAvailable() {
-  setStatus('Loading…','busy');
-  sendCmd({action:'queryAvailable',domain:'default'});
+// ─── Commands ────────────────────────────────────────────────────────────────
+function refreshActors() { sendCmd({action:'queryActors'}); }
+function onActorsData(actors) {
+  const sel    = document.getElementById('actorSelect');
+  const curVal = sel.value;
+  sel.innerHTML = '';
+  for (const a of actors) {
+    const opt = document.createElement('option');
+    opt.value       = a.id;
+    opt.textContent = a.isPlayer ? `Player (${a.id})` : `${a.name} (${a.id})`;
+    sel.appendChild(opt);
+  }
+  // Restore previous selection if still present
+  if ([...sel.options].some(o => o.value === curVal)) sel.value = curVal;
 }
-function fetchApplied() {
+function onActorChange() { fetchApplied(); }
+
+function fetchAvailable() { setStatus('Loading…','busy'); sendCmd({action:'queryAvailable',domain:'default'}); }
+function fetchApplied()   {
   const actorId = parseInt(document.getElementById('actorSelect').value,16);
   setStatus('Loading applied…','busy');
   sendCmd({action:'queryApplied',actorId});
 }
-function addTattoo(sec,name) {
+function syncTattoos() {
   const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  setStatus('Applying '+name+'…','busy');
-  sendCmd({action:'addTattoo',actorId,section:sec,name,color:0,alpha:1.0});
+  sendCmd({action:'syncTattoos',actorId});
 }
 function removeTattoo(sec,name) {
   const actorId = parseInt(document.getElementById('actorSelect').value,16);
   setStatus('Removing '+name+'…','busy');
   sendCmd({action:'removeTattoo',actorId,section:sec,name});
 }
-function syncTattoos() {
-  const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  sendCmd({action:'syncTattoos',actorId});
+
+// ─── Apply modal ─────────────────────────────────────────────────────────────
+function openApplyModal(handle) {
+  const t = tattooByHandle[handle];
+  if (!t) { setStatus('Tattoo not in cache — press Refresh','err'); return; }
+
+  applyTattoo   = t;
+  applyColor    = (t.color && t.color !== 0) ? t.color : 0xFFFFFF;
+  applyAlphaVal = t.alpha ?? 1.0;
+  applySlot     = -1;
+
+  // Area locked to tattoo's own area — empty area means unknown, hide slot picker
+  applyArea = (t.area || '').toUpperCase();
+
+  document.getElementById('applyTitle').textContent = 'Apply — '+t.name;
+  setModalColor('apply', applyColor);
+  setModalAlpha('apply', applyAlphaVal);
+
+  const slotSec = document.getElementById('slotSection');
+  if (applyArea) {
+    slotSec.style.display = '';
+    document.getElementById('slotAreaName').textContent = applyArea;
+    // Show cached data immediately if available; always fire a fresh query
+    if (slotsData[applyArea]) {
+      renderSlotGrid(slotsData[applyArea].slots, slotsData[applyArea].maxSlots);
+    } else {
+      document.getElementById('slotGrid').className = 'slot-loading';
+      document.getElementById('slotGrid').textContent = 'Loading…';
+    }
+    loadSlotsForArea(applyArea);
+  } else {
+    slotSec.style.display = 'none';
+  }
+
+  document.getElementById('applyModal').classList.add('open');
 }
 
-// ── Tree toggle ───────────────────────────────────────────────────────────────
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function loadSlotsForArea(area) {
+  document.getElementById('slotGrid').className = 'slot-loading';
+  document.getElementById('slotGrid').textContent = 'Loading…';
+  const actorId = parseInt(document.getElementById('actorSelect').value,16);
+  sendCmd({action:'querySlots', actorId, area});
+}
+
+function onSlotsData(d) {
+  slotsData[d.area] = { slots: d.slots || [], maxSlots: d.maxSlots };
+  if (d.area === applyArea) renderSlotGrid(slotsData[d.area].slots, slotsData[d.area].maxSlots);
+}
+
+function renderSlotGrid(slots, maxSlots) {
+  const grid = document.getElementById('slotGrid');
+  grid.className = 'slot-grid';
+  grid.innerHTML = slots.map(s => {
+    if (s.occupied && s.external) {
+      return `<div class="slot-btn ext-occupied" title="Used by another mod (NiOverride)">
+        <div class="slot-num">${s.slot}</div>
+        <div class="slot-name">Ext.</div>
+      </div>`;
+    } else if (s.occupied) {
+      return `<div class="slot-btn occupied" title="${esc(s.name||'')}">
+        <div class="slot-num">${s.slot}</div>
+        <div class="slot-name">${esc(s.name||'–')}</div>
+      </div>`;
+    } else {
+      const sel = applySlot === s.slot;
+      return `<div class="slot-btn${sel?' selected':''}" onclick="selectSlot(${s.slot})">
+        <div class="slot-num">${s.slot}</div>
+        <div class="slot-name">free</div>
+      </div>`;
+    }
+  }).join('') +
+  (maxSlots != null ? `<div class="slot-info">Max ${maxSlots} slots — increase in <code>Data/SKSE/Plugins/skee64.ini</code> → <code>iNumOverlays</code></div>` : '');
+}
+
+function selectSlot(slot) {
+  applySlot = slot;
+  if (slotsData[applyArea]) renderSlotGrid(slotsData[applyArea].slots, slotsData[applyArea].maxSlots);
+}
+
+function confirmApply() {
+  if (!applyTattoo) return;
+  const actorId = parseInt(document.getElementById('actorSelect').value,16);
+  setStatus('Applying…','busy');
+
+  if (applySlot >= 0) {
+    // Use add_and_get_tattoo for specific slot — C++ re-queries for a live handle
+    sendCmd({action:'applyToSlot', actorId,
+      section: applyTattoo.section, name: applyTattoo.name,
+      domain: availableDomain,
+      slot: applySlot,
+      color: applyColor, alpha: applyAlphaVal});
+  } else {
+    // Fallback: simple_add_tattoo (auto slot)
+    sendCmd({action:'addTattoo', actorId,
+      section: applyTattoo.section, name: applyTattoo.name,
+      color: applyColor, alpha: applyAlphaVal});
+    closeModal('applyModal');
+  }
+}
+
+// ─── Edit modal ──────────────────────────────────────────────────────────────
+function openEditModal(handle) {
+  const t = appliedByHandle[handle];
+  if (!t) { setStatus('Tattoo not in cache — press Refresh','err'); return; }
+
+  editHandle    = t.handle || 0;
+  editColor     = (t.color && t.color !== 0) ? t.color : 0xFFFFFF;
+  editOrigColor = editColor;
+  editAlphaV    = t.alpha ?? 1.0;
+  editOrigAlpha = editAlphaV;
+
+  document.getElementById('editTitle').textContent = 'Edit — '+t.name;
+  setModalColor('edit', editColor);
+  setModalAlpha('edit', editAlphaV);
+
+  document.getElementById('editModal').classList.add('open');
+}
+
+function resetEditToOriginal() {
+  setModalColor('edit', editOrigColor);
+  setModalAlpha('edit', editOrigAlpha);
+}
+
+function confirmEdit() {
+  if (!editHandle) {
+    setStatus('Cannot save: invalid handle — press Refresh then reopen', 'err');
+    return;
+  }
+  const actorId = parseInt(document.getElementById('actorSelect').value,16);
+  setStatus('Updating…','busy');
+  sendCmd({action:'updateTattoo', actorId, tattooHandle: editHandle, color: editColor, alpha: editAlphaV});
+}
+
+// ─── Color picker shared ─────────────────────────────────────────────────────
+function buildPalette(prefix) {
+  const el = document.getElementById(prefix+'Palette');
+  el.innerHTML = SKYUI_PALETTE.map((c,i) =>
+    `<div class="pal-swatch" title="${c.name}" style="background:${c.hex}"
+      onclick="${prefix==='apply'?'pickApplyColor':'pickEditColor'}(${i})"></div>`
+  ).join('');
+}
+
+function pickApplyColor(idx) {
+  const hex = SKYUI_PALETTE[idx].hex;
+  applyColor = hexToInt(hex);
+  setModalColor('apply', applyColor);
+  highlightPalette('apply', idx);
+}
+function pickEditColor(idx) {
+  const hex = SKYUI_PALETTE[idx].hex;
+  editColor = hexToInt(hex);
+  setModalColor('edit', editColor);
+  highlightPalette('edit', idx);
+}
+
+function highlightPalette(prefix, idx) {
+  document.querySelectorAll('#'+prefix+'Palette .pal-swatch').forEach((s,i) => {
+    s.classList.toggle('selected', i === idx);
+  });
+}
+
+function setModalColor(prefix, colorInt) {
+  const hex = intToHex(colorInt);
+  document.getElementById(prefix+'ColorPreview').style.background = hex;
+  document.getElementById(prefix+'Hex').value = hex;
+  if (prefix === 'apply') applyColor = colorInt;
+  else                    editColor  = colorInt;
+}
+
+function setModalAlpha(prefix, val) {
+  const v = Math.round(val * 100);
+  document.getElementById(prefix+'Alpha').value = v;
+  document.getElementById(prefix+'AlphaVal').textContent = val.toFixed(2);
+  if (prefix === 'apply') applyAlphaVal = val;
+  else                    editAlphaV    = val;
+}
+
+function onHexInput(prefix) {
+  const hex = document.getElementById(prefix+'Hex').value;
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+  const ci = hexToInt(hex);
+  document.getElementById(prefix+'ColorPreview').style.background = hex;
+  if (prefix === 'apply') applyColor = ci;
+  else                    editColor  = ci;
+  // Deselect palette swatches
+  document.querySelectorAll('#'+prefix+'Palette .pal-swatch').forEach(s=>s.classList.remove('selected'));
+}
+
+// Alpha slider live update
+document.addEventListener('DOMContentLoaded', () => {
+  buildPalette('apply');
+  buildPalette('edit');
+
+  document.getElementById('applyAlpha').addEventListener('input', function() {
+    applyAlphaVal = this.value / 100;
+    document.getElementById('applyAlphaVal').textContent = applyAlphaVal.toFixed(2);
+  });
+  document.getElementById('editAlpha').addEventListener('input', function() {
+    editAlphaV = this.value / 100;
+    document.getElementById('editAlphaVal').textContent = editAlphaV.toFixed(2);
+  });
+});
+
+// ─── Color conversion ────────────────────────────────────────────────────────
+function intToHex(n) {
+  const r = (n >> 16) & 0xFF, g = (n >> 8) & 0xFF, b = n & 0xFF;
+  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function hexToInt(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return (r<<16)|(g<<8)|b;
+}
+
+// ─── Tree toggle ─────────────────────────────────────────────────────────────
 function toggleNode(key) {
   expanded[key] = !(expanded[key] !== false);
-  const node = document.getElementById('tn-'+key);
+  const node  = document.getElementById('tn-'+key);
   if (!node) return;
   const ch    = node.querySelector(':scope > .tree-children');
   const arrow = node.querySelector(':scope > .tree-hdr > .tree-arrow');
@@ -291,7 +769,7 @@ function toggleNode(key) {
   if (open) node.querySelectorAll('.tat-thumb[data-tex]').forEach(c => thumbObserver.observe(c));
 }
 
-// ── Thumbnails (C++ → raw RGBA) ───────────────────────────────────────────────
+// ─── Thumbnails ──────────────────────────────────────────────────────────────
 const thumbCache    = new Map();
 const thumbInFlight = new Set();
 
@@ -313,8 +791,7 @@ async function onTextureData(path, w, h, b64) {
     const bin = atob(b64);
     const u8  = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    const imgData = new ImageData(new Uint8ClampedArray(u8.buffer), w, h);
-    const bmp = await createImageBitmap(imgData);
+    const bmp = await createImageBitmap(new ImageData(new Uint8ClampedArray(u8.buffer), w, h));
     thumbCache.set(path, bmp);
     document.querySelectorAll('.tat-thumb').forEach(c => {
       if (c.dataset.tex === path) drawThumb(c, bmp);
@@ -355,25 +832,34 @@ const thumbObserver = new IntersectionObserver(entries => {
     if (e.isIntersecting) { thumbObserver.unobserve(e.target); loadThumb(e.target); }
 }, {rootMargin:'300px'});
 
-// ── Grid card HTML ─────────────────────────────────────────────────────────────
+// ─── Grid card ───────────────────────────────────────────────────────────────
 function tatGridItem(t, showRemove) {
   const texAttr = t.texture ? ` data-tex="${esc(t.texture)}"` : '';
   const path    = [t.section, t.area].filter(Boolean).join(' › ');
+  const colorHex  = intToHex((t.color && t.color !== 0) ? t.color : 0xFFFFFF);
+  const alphaLabel = (t.alpha != null && t.alpha < 0.99) ? `<span class="alpha-badge">α${(t.alpha).toFixed(2)}</span>` : '';
+  const slotLabel  = showRemove && t.slot != null ? `<span class="slot-badge">Slot ${t.slot}</span>` : '';
+
+  const buttons = showRemove
+    ? `<div class="card-btns">
+        <button class="btn edit sm" onclick="openEditModal(${t.handle|0})">Edit</button>
+        <button class="btn danger sm" onclick="removeTattoo(${js(t.section)},${js(t.name)})"${t.locked?' disabled':''}>Remove</button>
+       </div>`
+    : `<button class="btn primary" onclick="openApplyModal(${t.handle|0})">Apply…</button>`;
+
   return `<div class="grid-item">
     <div class="tat-thumb-wrap">
       <canvas class="tat-thumb" width="128" height="128"${texAttr} style="opacity:0"></canvas>
       <div class="tat-thumb-ph"><div class="ph-icon">🖼</div><div class="ph-err"></div></div>
+      <div class="thumb-color-bar" style="background:${colorHex}"></div>
     </div>
     <div class="grid-name" title="${esc(t.name)}">${esc(t.name)}</div>
-    <div class="grid-path">${esc(path)}</div>
-    ${showRemove
-      ? `<button class="btn danger" onclick="removeTattoo(${js(t.section)},${js(t.name)})"${t.locked?' disabled':''}>Remove</button>`
-      : `<button class="btn primary" onclick="addTattoo(${js(t.section)},${js(t.name)})">Apply</button>`
-    }
+    <div class="grid-path">${esc(path)}${slotLabel}${alphaLabel}</div>
+    ${buttons}
   </div>`;
 }
 
-// ── Build tree structure ───────────────────────────────────────────────────────
+// ─── Build tree ───────────────────────────────────────────────────────────────
 function buildTree(items) {
   const tree = {};
   for (const t of items) {
@@ -390,7 +876,7 @@ function renderTree(container, tree, showRemove) {
   for (const [sec, areas] of Object.entries(tree)) {
     const sk   = 'sec:'+sec;
     const open = expanded[sk] !== false;
-    const tot  = Object.values(areas).reduce((s,a)=>s+a.length,0);
+    const tot  = Object.values(areas).reduce((s,a)=>s+a.length, 0);
     html += `<div class="tree-node" id="tn-${esc(sk)}">
       <div class="tree-hdr" onclick="toggleNode(${js(sk)})">
         <span class="tree-arrow">${open?'▼':'▶'}</span>
@@ -398,7 +884,6 @@ function renderTree(container, tree, showRemove) {
         <span class="badge">${tot}</span>
       </div>
       <div class="tree-children" style="${open?'':'display:none'}">`;
-
     for (const [area, tats] of Object.entries(areas)) {
       const ak    = 'area:'+sec+':'+area;
       const aopen = expanded[ak] !== false;
@@ -419,7 +904,7 @@ function renderTree(container, tree, showRemove) {
   container.querySelectorAll('.tat-thumb[data-tex]').forEach(c=>thumbObserver.observe(c));
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// ─── Render ───────────────────────────────────────────────────────────────────
 function renderAvailable() {
   const q    = document.getElementById('searchAvail').value.toLowerCase();
   const list = document.getElementById('listAvailable');
@@ -448,7 +933,7 @@ function renderApplied() {
   list.querySelectorAll('.tat-thumb[data-tex]').forEach(c=>thumbObserver.observe(c));
 }
 
-// ── UI helpers ─────────────────────────────────────────────────────────────────
+// ─── UI helpers ───────────────────────────────────────────────────────────────
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
@@ -465,6 +950,51 @@ function esc(s) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function js(s) { return esc(JSON.stringify(String(s))); }
+
+// ─── Drag to move ─────────────────────────────────────────────────────────────
+(function() {
+  const app = document.querySelector('.app');
+  const hdr = document.querySelector('header');
+
+  // Restore saved position
+  const saved = localStorage.getItem('stui_pos');
+  if (saved) {
+    try {
+      const {x, y} = JSON.parse(saved);
+      app.style.left = clampX(x) + 'px';
+      app.style.top  = clampY(y) + 'px';
+    } catch(e) {}
+  }
+
+  function clampX(x) { return Math.max(0, Math.min(x, window.innerWidth  - app.offsetWidth)); }
+  function clampY(y) { return Math.max(0, Math.min(y, window.innerHeight - app.offsetHeight)); }
+
+  let dragging = false, ox = 0, oy = 0;
+
+  hdr.addEventListener('mousedown', e => {
+    if (e.target.closest('button,select,input')) return;
+    dragging = true;
+    ox = e.clientX - app.offsetLeft;
+    oy = e.clientY - app.offsetTop;
+    app.classList.add('dragging');
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    app.style.left = clampX(e.clientX - ox) + 'px';
+    app.style.top  = clampY(e.clientY - oy) + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    app.classList.remove('dragging');
+    localStorage.setItem('stui_pos', JSON.stringify({
+      x: app.offsetLeft, y: app.offsetTop
+    }));
+  });
+})();
 </script>
 </body>
 </html>

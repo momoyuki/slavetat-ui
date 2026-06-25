@@ -36,6 +36,10 @@ private:
     void handleAddTattoo(uint32_t actorId, std::string section, std::string name, int color, float alpha);
     void handleRemoveTattoo(uint32_t actorId, std::string section, std::string name);
     void handleSyncTattoos(uint32_t actorId);
+    void handleQueryActors();
+    void handleQuerySlots(uint32_t actorId, std::string area);
+    void handleApplyToSlot(uint32_t actorId, std::string section, std::string name, std::string domain, int slot, int color, float alpha);
+    void handleUpdateTattoo(uint32_t actorId, int tattooHandle, int color, float alpha);
     void handleGetTexture(std::string texPath);
     void handleGetTextureBSA(std::string texPath, std::filesystem::path cachePath);
     void sendDecodedTexture(std::string texPath, DirectX::ScratchImage& raw,
