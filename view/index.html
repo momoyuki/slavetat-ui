@@ -2,273 +2,347 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SlaveTats UI</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+/* ── Base ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{width:100vw;height:100vh;background:transparent;overflow:hidden;
+  font-family:'Segoe UI',sans-serif;color:#e8e8e8;font-size:12px}
 
-  body {
-    width: 100vw; height: 100vh;
-    background: transparent; overflow: hidden;
-    font-family: 'Segoe UI', sans-serif; color: #e8e8e8;
-    font-size: 12px;
-  }
+/* ── App ── */
+.app{
+  position:fixed;right:0;top:0;
+  width:520px;height:100vh;
+  background:#0a0a0a;
+  border-left:1px solid #222;
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:-4px 0 32px rgba(0,0,0,0.9);
+  user-select:none;
+}
+.app.dragging{opacity:.92}
 
-  /* ── Right panel ── */
-  .app {
-    position: fixed; left: calc(100vw - 540px); top: 0;
-    width: 540px; height: 100vh;
-    background: rgba(10,10,10,0.93);
-    border: 1px solid #2a2a2a;
-    display: flex; flex-direction: column; overflow: hidden;
-    box-shadow: 0 4px 32px rgba(0,0,0,0.8);
-    border-radius: 4px;
-    user-select: none;
-  }
-  .app.dragging { opacity: 0.92; }
+/* ── Header ── */
+header{
+  background:#101010;
+  padding:7px 10px;
+  border-bottom:1px solid #222;
+  display:flex;align-items:center;gap:7px;flex-shrink:0;
+  cursor:move;
+}
+header h1{font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.actor-bar{display:flex;gap:5px;align-items:center;flex:1;min-width:0}
+.actor-bar label{font-size:10px;color:#555;white-space:nowrap}
+.actor-bar select{
+  flex:1;min-width:0;max-width:120px;
+  background:#111;border:1px solid #282828;
+  border-radius:3px;color:#bbb;font-size:11px;padding:2px 4px;
+}
+.api-badge{
+  font-size:9px;padding:2px 6px;border-radius:3px;
+  border:1px solid #1a2a1a;background:#0a180a;color:#4a8a4a;
+  white-space:nowrap;flex-shrink:0;
+}
+.api-badge.err{border-color:#3a1a1a;background:#180a0a;color:#8a4a4a}
+.btn-hdr{
+  padding:5px 11px;font-size:11px;border-radius:3px;
+  border:1px solid #252525;cursor:pointer;background:#141414;color:#666;
+  white-space:nowrap;flex-shrink:0;
+}
+.btn-hdr:hover{background:#1e1e1e;color:#aaa}
 
-  /* ── Header ── */
-  header {
-    background: rgba(18,18,18,0.99);
-    padding: 7px 10px;
-    border-bottom: 1px solid #252525;
-    display: flex; align-items: center; gap: 7px; flex-shrink: 0;
-    cursor: move;
-  }
-  header h1 { font-size: 13px; font-weight: 600; flex: 1; }
-  .actor-bar { display: flex; gap: 5px; align-items: center; }
-  .actor-bar label { font-size: 10px; color: #555; white-space: nowrap; }
-  .actor-bar select {
-    width: 90px; background: #141414; border: 1px solid #2e2e2e;
-    border-radius: 3px; color: #ccc; font-size: 11px; padding: 2px 4px;
-  }
-  .btn-hdr {
-    padding: 3px 8px; font-size: 10px; border-radius: 3px;
-    border: 1px solid #2a2a2a; cursor: pointer; background: #161616; color: #777;
-  }
-  .btn-hdr:hover { background: #202020; color: #aaa; }
+/* ── View Stack ── */
+#viewStack{flex:1;overflow:hidden;position:relative}
+.view{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .18s ease;
+  overflow:hidden;
+  pointer-events:none;
+  background:#0a0a0a;
+}
+.view.active{transform:translateX(0);pointer-events:all}
+.view.behind {transform:translateX(-100%);pointer-events:none}
 
-  /* ── Tabs ── */
-  .tabs {
-    display: flex; gap: 3px; padding: 5px 8px;
-    background: rgba(14,14,14,0.98); border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
-  }
-  .tab {
-    padding: 4px 14px; font-size: 11px; border: 1px solid #2a2a2a;
-    border-radius: 3px; background: transparent; color: #666; cursor: pointer;
-  }
-  .tab.active { background: #7a2a0e; border-color: #9a3a1e; color: #fff; }
-  .tab:hover:not(.active) { background: rgba(255,255,255,0.04); }
+/* ── View Nav ── */
+.view-nav{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 10px;
+  background:#0c0c0c;
+  border-bottom:1px solid #1a1a1a;flex-shrink:0;
+}
+.btn-back{
+  padding:5px 12px;font-size:12px;border-radius:3px;
+  border:1px solid #252525;cursor:pointer;background:#141414;color:#777;
+}
+.btn-back:hover{background:#1e1e1e;color:#ccc}
+.view-title{font-size:12px;font-weight:600;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  /* ── Panels ── */
-  .panel { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
-  .panel.active { display: flex; }
-  .panel-inner { padding: 8px 10px 10px; display: flex; flex-direction: column; }
+/* ── Slot Grid View ── */
+#slotScrollArea{overflow-y:auto;height:100%;padding:6px 8px 50px}
 
-  /* ── Sticky search ── */
-  .search-bar {
-    display: flex; gap: 5px;
-    position: sticky; top: 0; z-index: 10;
-    background: rgba(10,10,10,0.97);
-    padding: 8px 10px;
-    border-bottom: 1px solid #181818;
-  }
-  .search-bar input {
-    flex: 1; background: #141414; border: 1px solid #2a2a2a;
-    border-radius: 3px; color: #e8e8e8; font-size: 11px; padding: 4px 8px;
-  }
-  .search-bar input::placeholder { color: #333; }
+/* ── Area Section ── */
+.area-section{margin-bottom:5px}
+.area-hdr{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 8px;cursor:pointer;border-radius:4px;
+  background:rgba(255,255,255,.02);border:1px solid #1c1c1c;margin-bottom:4px;
+}
+.area-hdr:hover{background:rgba(255,255,255,.05)}
+.area-arrow{font-size:8px;color:#3a3a3a;width:9px;flex-shrink:0}
+.area-label{font-size:11px;font-weight:700;letter-spacing:.5px;color:#888;flex:1}
+.area-count{font-size:10px;color:#444}
+.area-loading{font-size:9px;color:#333}
 
-  /* ── Tree ── */
-  .tree-node { display: flex; flex-direction: column; }
-  .tree-hdr {
-    display: flex; align-items: center; gap: 5px;
-    padding: 4px 6px; cursor: pointer; border-radius: 3px; user-select: none;
-  }
-  .tree-hdr:hover { background: rgba(255,255,255,0.04); }
-  .tree-arrow { font-size: 8px; color: #3a3a3a; width: 9px; flex-shrink: 0; }
-  .tree-label     { font-size: 12px; font-weight: 600; color: #aaa; flex: 1; }
-  .tree-sub-label { font-size: 11px; color: #777; flex: 1; padding-left: 2px; }
-  .badge {
-    font-size: 9px; background: #141414; border: 1px solid #222;
-    border-radius: 8px; padding: 1px 5px; color: #444;
-  }
-  .tree-children { padding-left: 10px; display: flex; flex-direction: column; gap: 2px; }
+/* ── Slot Grid (2-col) ── */
+.slot-grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:0 2px}
 
-  /* ── Grid ── */
-  .tat-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px; padding: 4px 2px 6px;
-  }
-  .grid-item {
-    display: flex; flex-direction: column; align-items: center; gap: 5px;
-    background: rgba(255,255,255,0.018); border: 1px solid #191919;
-    border-radius: 5px; padding: 7px 6px; min-width: 0;
-    transition: background 0.1s;
-  }
-  .grid-item:hover { background: rgba(255,255,255,0.04); }
+/* ── Slot Cell ── */
+.slot-cell{
+  display:flex;flex-direction:column;
+  border-radius:5px;border:1px solid #1a1a1a;background:#0e0e0e;
+  min-width:0;overflow:hidden;cursor:pointer;
+  transition:background .1s,border-color .1s;
+}
+/* Thumb area — full width, fixed height, same for all states */
+.sc-thumb-wrap{
+  width:100%;height:100px;flex-shrink:0;position:relative;
+  background:#141414;overflow:hidden;
+}
+.sc-thumb{width:100%;height:100%;display:block;image-rendering:pixelated}
+/* Text area below thumb */
+.sc-body{padding:6px 8px 7px;display:flex;flex-direction:column;gap:2px}
+.sc-num{font-size:10px;color:#333;line-height:1}
+.sc-name{
+  font-size:11px;width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  line-height:1.4;color:#555;
+}
+.sc-section{
+  font-size:9px;width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#333;
+}
+.sc-color{width:100%;height:3px;margin-top:3px;border-radius:2px}
 
-  /* ── Thumbnail 128×128 ── */
-  .tat-thumb-wrap {
-    flex-shrink: 0; width: 128px; height: 128px;
-    border-radius: 4px; overflow: hidden;
-    background: #080808; border: 1px solid #1c1c1c; position: relative;
-  }
-  .tat-thumb { width: 128px; height: 128px; display: block; image-rendering: pixelated; }
-  .tat-thumb-ph {
-    position: absolute; inset: 0; display: flex;
-    flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  }
-  .tat-thumb-ph .ph-icon { font-size: 24px; opacity: 0.12; }
-  .tat-thumb-ph .ph-err  { font-size: 8px; color: #5a2a2a; text-align: center; padding: 0 4px; word-break: break-all; }
+.slot-cell.occupied{background:#0c0c18;border-color:#1c1c2e}
+.slot-cell.occupied:hover{background:#121228;border-color:#3a3a6a}
+.slot-cell.occupied .sc-thumb-wrap{background:#1a1a2a}
+.slot-cell.occupied .sc-num{color:#3a3a6a}
+.slot-cell.occupied .sc-name{color:#7a7aaa}
 
-  /* ── Color swatch on thumb ── */
-  .thumb-color-bar {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    height: 6px; border-radius: 0 0 3px 3px; opacity: 0.85;
-  }
+.slot-cell.free{background:#0b140b;border-color:#152015}
+.slot-cell.free .sc-thumb-wrap{background:#0e1a0e}
+.slot-cell.free .sc-num{color:#233a23}
+.slot-cell.free .sc-name{color:#2a5a2a}
+.slot-cell.free:hover{background:#0f1f0f;border-color:#285028}
+.slot-cell.free:hover .sc-name{color:#4a9a4a}
 
-  /* ── Card labels ── */
-  .grid-name {
-    font-size: 11px; font-weight: 500; color: #b0b0b0;
-    text-align: center; width: 100%;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .grid-path {
-    font-size: 9px; color: #3a3a3a;
-    text-align: center; width: 100%;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .slot-badge {
-    font-size: 9px; color: #68a; background: #111;
-    border: 1px solid #1e2a3a; border-radius: 3px; padding: 1px 5px;
-    margin-left: 4px; vertical-align: middle;
-  }
-  .alpha-badge {
-    font-size: 9px; color: #555; background: #111;
-    border: 1px solid #1e1e1e; border-radius: 3px; padding: 1px 5px;
-  }
+.slot-cell.ext-occupied{background:#161200;border-color:#2a2200;cursor:default}
+.slot-cell.ext-occupied .sc-thumb-wrap{background:#1a1600}
+.slot-cell.ext-occupied .sc-num{color:#3a2800}
+.slot-cell.ext-occupied .sc-name{color:#554400}
 
-  /* ── Buttons ── */
-  .btn {
-    padding: 5px 10px; font-size: 11px; border-radius: 3px; border: 1px solid #2e2e2e;
-    cursor: pointer; background: #1c1c1c; color: #bbb; white-space: nowrap; width: 100%;
-  }
-  .btn:hover { background: #262626; }
-  .btn.primary { background: #7a2a0e; border-color: #9a3a1e; color: #fff; }
-  .btn.primary:hover { background: #9a3a1e; }
-  .btn.sm { padding: 3px 7px; font-size: 10px; }
-  .btn.danger { border-color: #3a0a0a; color: #b44; }
-  .btn.danger:hover { background: #4a1010; border-color: #7b1818; color: #f77; }
-  .btn.edit  { border-color: #1a2a3a; color: #68a; }
-  .btn.edit:hover { background: #1a2a3a; color: #9be; }
-  .btn:disabled { opacity: 0.3; cursor: default; }
+/* ── Browser in-use badges (Feature 1) ── */
+.grid-item.in-use{border-color:#4a3200}
+.grid-item.in-use-current{border-color:#c09000}
+.slot-badges{position:absolute;bottom:3px;right:3px;display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end;max-width:90%}
+.slot-badge{font-size:8px;padding:1px 4px;border-radius:2px;background:rgba(140,90,0,.85);color:#ffd;line-height:1.4;white-space:nowrap}
+.slot-badge.current{background:rgba(200,140,0,.95);color:#fff;font-weight:700}
 
-  /* Card button row */
-  .card-btns { display: flex; gap: 4px; width: 100%; }
-  .card-btns .btn { flex: 1; }
+/* ── Edit View ── */
+.view-body{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:10px}
+/* Edit view overrides view-body to be a full preview */
+#view-edit .view-body{padding:0;overflow:hidden;gap:0}
+.edit-preview-wrap{
+  flex:1;min-height:0;position:relative;
+  background:#141414;overflow:hidden;
+}
+.edit-preview-wrap canvas{
+  position:absolute;inset:0;width:100%;height:100%;
+  image-rendering:pixelated;
+}
+.edit-info{padding:8px 12px;flex-shrink:0;display:flex;flex-direction:column;gap:2px}
+/* Edit bottom panel — mirrors browser-panel position */
+.edit-panel{
+  flex-shrink:0;background:#0c0c0c;
+  border-top:1px solid #242424;padding:8px 10px;
+  display:flex;flex-direction:column;gap:7px;
+}
+.edit-actions{display:flex;gap:6px}
+.edit-thumb-wrap{
+  flex-shrink:0;width:80px;height:80px;
+  border-radius:4px;overflow:hidden;
+  background:#b0b0b0;border:1px solid #1a1a1a;position:relative;
+}
+.edit-info{display:flex;flex-direction:column;gap:4px;min-width:0;justify-content:center}
+.edit-tattoo-name{font-size:12px;font-weight:600;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.edit-tattoo-meta{font-size:10px;color:#555}
+.field-label{font-size:10px;color:#444;margin-bottom:4px}
 
-  /* ── Status bar ── */
-  .statusbar {
-    padding: 3px 10px; font-size: 10px; color: #2e2e2e;
-    background: rgba(6,6,6,0.98); border-top: 1px solid #141414; flex-shrink: 0;
-  }
-  .statusbar.ok   { color: #2a8; }
-  .statusbar.err  { color: #a44; }
-  .statusbar.busy { color: #668; }
+/* ── Remove Banner ── */
+.remove-banner{
+  margin:0 12px 8px;padding:8px 10px;
+  background:#180a0a;border:1px solid #3a1010;border-radius:4px;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;
+}
+.remove-warning{flex:1;font-size:11px;color:#c55}
 
-  .empty { text-align: center; padding: 28px; color: #262626; font-size: 11px; }
+/* ── Browser Filter ── */
+.browser-filter{
+  display:flex;gap:5px;align-items:center;
+  padding:5px 10px;
+  background:#0a0a0a;
+  border-bottom:1px solid #161616;flex-shrink:0;
+}
+.area-chip{
+  padding:2px 8px;font-size:10px;font-weight:700;border-radius:3px;
+  background:#12303a;border:1px solid #1a5a6a;color:#8ad;
+  white-space:nowrap;letter-spacing:.5px;flex-shrink:0;
+  transition:opacity .15s;
+}
+.btn-chip{
+  padding:2px 8px;font-size:10px;border-radius:3px;
+  border:1px solid #222;cursor:pointer;background:#111;color:#555;
+  white-space:nowrap;flex-shrink:0;
+}
+.btn-chip:hover{background:#1a1a1a;color:#888}
+.btn-chip.active{background:#122012;border-color:#285028;color:#6a9a6a}
+.browser-filter input{
+  flex:1;background:#111;border:1px solid #242424;
+  border-radius:3px;color:#e8e8e8;font-size:11px;padding:4px 8px;
+}
+.browser-filter input::placeholder{color:#2a2a2a}
+.browser-filter input:focus{outline:1px solid #333}
 
-  /* ─────────────────────────────────────── Modal ── */
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 100; display: none;
-  }
-  .modal-overlay.open { display: flex; }
-  .modal {
-    background: #111; border: 1px solid #2a2a2a; border-radius: 6px;
-    width: 420px; max-width: 90vw; max-height: 85vh;
-    overflow-y: auto; display: flex; flex-direction: column;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.8);
-  }
-  .modal-header {
-    display: flex; align-items: center; gap: 8px;
-    padding: 10px 14px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
-  }
-  .modal-title { font-size: 13px; font-weight: 600; flex: 1; }
-  .modal-close {
-    background: none; border: none; color: #555; cursor: pointer; font-size: 16px; padding: 0 4px;
-  }
-  .modal-close:hover { color: #ddd; }
-  .modal-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
-  .modal-footer { padding: 8px 14px; border-top: 1px solid #1a1a1a; display: flex; gap: 8px; flex-shrink: 0; }
+/* ── Browser List ── */
+.browser-list{flex:1;overflow-y:auto;padding:6px 10px}
+/* ── Browser Footer (persistent Back) ── */
+.browser-footer{
+  flex-shrink:0;display:flex;justify-content:flex-end;
+  padding:6px 10px;background:#0c0c0c;border-top:1px solid #1a1a1a;
+}
 
-  /* Field label */
-  .field-label { font-size: 10px; color: #555; margin-bottom: 5px; }
+/* ── Browser Bottom Panel ── */
+.browser-panel{
+  flex-shrink:0;background:#0c0c0c;
+  border-top:1px solid transparent;
+  display:flex;flex-direction:column;gap:7px;
+  max-height:0;padding:0 10px;overflow:hidden;
+  transition:max-height .25s ease, padding .22s ease, border-top-color .15s;
+}
+.browser-panel:not(.inactive){
+  max-height:480px;
+  padding:8px 10px;
+  border-top-color:#242424;
+}
+.panel-tattoo-row{display:flex;gap:8px;align-items:center}
+.panel-thumb-wrap{
+  flex-shrink:0;width:46px;height:46px;
+  border-radius:3px;overflow:hidden;
+  background:#b0b0b0;border:1px solid #222;position:relative;
+}
+.panel-tattoo-name{font-size:11px;font-weight:600;color:#ccc}
+.panel-tattoo-section{font-size:9px;color:#444;margin-top:2px}
+.panel-controls{display:flex;flex-direction:column;gap:6px}
 
-  /* ── SkyUI Color Palette ── */
-  .palette-grid {
-    display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
-  }
-  .pal-swatch {
-    width: 100%; aspect-ratio: 1; border-radius: 3px; cursor: pointer;
-    border: 2px solid transparent; transition: transform 0.1s, border-color 0.1s;
-  }
-  .pal-swatch:hover { transform: scale(1.12); }
-  .pal-swatch.selected { border-color: #fff; }
+/* ── Tree ── */
+.tree-node{display:flex;flex-direction:column}
+.tree-hdr{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 6px;cursor:pointer;border-radius:3px;
+}
+.tree-hdr:hover{background:rgba(255,255,255,.04)}
+.tree-arrow{font-size:8px;color:#2a2a2a;width:9px;flex-shrink:0}
+.tree-label{font-size:12px;font-weight:600;color:#888;flex:1}
+.tree-sub-label{font-size:11px;color:#666;flex:1;padding-left:2px}
+.badge{
+  font-size:9px;background:#111;border:1px solid #1e1e1e;
+  border-radius:8px;padding:1px 5px;color:#3a3a3a;
+}
+.tree-children{padding-left:10px;display:flex;flex-direction:column;gap:2px}
 
-  /* Color preview + hex input row */
-  .color-row {
-    display: flex; gap: 8px; align-items: center;
-  }
-  .color-preview {
-    width: 36px; height: 36px; border-radius: 4px;
-    border: 1px solid #333; flex-shrink: 0;
-  }
-  .hex-input {
-    flex: 1; background: #141414; border: 1px solid #2a2a2a;
-    border-radius: 3px; color: #e8e8e8; font-size: 12px;
-    font-family: monospace; padding: 6px 8px;
-  }
+/* ── Tattoo Grid ── */
+.tat-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:4px 2px 6px}
+.grid-item{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  background:rgba(255,255,255,.018);border:1px solid #181818;
+  border-radius:5px;padding:6px;min-width:0;
+  cursor:pointer;transition:background .1s,border-color .1s;
+}
+.grid-item:hover,.grid-item.selected{background:rgba(255,255,255,.06);border-color:#365a36}
+.grid-item.selected{border-color:#4a8a4a}
+.tat-thumb-wrap{
+  flex-shrink:0;width:100px;height:100px;
+  border-radius:4px;overflow:hidden;
+  background:#b0b0b0;border:1px solid #1a1a1a;position:relative;
+}
+.tat-thumb{width:100px;height:100px;display:block;image-rendering:pixelated}
+.tat-thumb-sm{display:block;image-rendering:pixelated}
+.tat-thumb-ph{
+  position:absolute;inset:0;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:3px;
+}
+.tat-thumb-ph .ph-icon{font-size:22px;opacity:.1}
+.tat-thumb-ph .ph-err{font-size:7px;color:#5a2a2a;text-align:center;padding:0 3px;word-break:break-all}
+.panel-thumb{width:46px;height:46px;display:block;image-rendering:pixelated}
+.grid-name{
+  font-size:10px;font-weight:500;color:#a0a0a0;
+  text-align:center;width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
 
-  /* Alpha slider */
-  .alpha-row { display: flex; align-items: center; gap: 8px; }
-  .alpha-row input[type=range] {
-    flex: 1; accent-color: #9a3a1e; height: 4px;
-  }
-  .alpha-val { font-size: 11px; color: #888; min-width: 32px; text-align: right; font-family: monospace; }
+/* ── Color Picker ── */
+.palette-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.pal-swatch{
+  width:100%;aspect-ratio:1;border-radius:3px;cursor:pointer;
+  border:2px solid transparent;transition:transform .1s,border-color .1s;
+}
+.pal-swatch:hover{transform:scale(1.12)}
+.pal-swatch.selected{border-color:#fff}
+.color-row{display:flex;gap:7px;align-items:center}
+.color-preview{width:30px;height:30px;border-radius:3px;border:1px solid #2a2a2a;flex-shrink:0}
+.hex-input{
+  flex:1;background:#111;border:1px solid #242424;
+  border-radius:3px;color:#e8e8e8;font-size:11px;
+  font-family:monospace;padding:5px 7px;
+}
+.hex-input:focus{outline:1px solid #333}
+.alpha-row{display:flex;align-items:center;gap:8px}
+.alpha-row input[type=range]{flex:1;accent-color:#9a3a1e;cursor:pointer}
+.alpha-val{font-size:11px;color:#777;min-width:30px;text-align:right;font-family:monospace}
 
-  /* Slot picker */
-  .slot-area-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
-  .area-btn {
-    padding: 3px 10px; font-size: 10px; border-radius: 3px;
-    border: 1px solid #2a2a2a; cursor: pointer; background: #161616; color: #666;
-  }
-  .area-btn.active { background: #1a3a5a; border-color: #2a5a8a; color: #9be; }
+/* ── Buttons ── */
+.btn{
+  padding:7px 14px;font-size:12px;border-radius:4px;
+  border:1px solid #2e2e2e;cursor:pointer;background:#181818;color:#bbb;
+  white-space:nowrap;
+}
+.btn:hover{background:#242424}
+.btn.primary{background:#7a2a0e;border-color:#9a3a1e;color:#fff}
+.btn.primary:hover{background:#9a3a1e}
+.btn.sm{padding:4px 10px;font-size:11px}
+.btn.danger{border-color:#3a0a0a;color:#b44}
+.btn.danger:hover{background:#3a0e0e;border-color:#6a1818;color:#f77}
+.btn:disabled{opacity:.3;cursor:default;pointer-events:none}
+.btn-full{width:100%}
 
-  .slot-grid {
-    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
-  }
-  .slot-btn {
-    padding: 5px 4px; font-size: 10px; border-radius: 3px; cursor: pointer;
-    border: 1px solid #1e1e1e; background: #141414; color: #888;
-    text-align: center; transition: background 0.1s;
-  }
-  .slot-btn:hover:not(.occupied) { background: #1c2c1c; border-color: #3a6a3a; color: #9c9; }
-  .slot-btn.occupied     { background: #1e1010; border-color: #3a1a1a; color: #966; cursor: default; }
-  .slot-btn.ext-occupied { background: #1a1600; border-color: #3a3000; color: #aa8; cursor: default; }
-  .slot-btn.selected     { background: #0e3a1e; border-color: #2a6a3a; color: #8da; }
-  .slot-btn .slot-num    { font-size: 9px; color: inherit; opacity: 0.6; }
-  .slot-btn .slot-name   { font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .slot-info { font-size: 9px; color: #444; padding: 4px 0; grid-column: 1/-1; line-height: 1.5; }
-  .slot-info code { color: #666; background: #111; padding: 1px 4px; border-radius: 2px; }
-  .slot-loading { font-size: 10px; color: #444; padding: 8px; text-align: center; }
+/* ── Bottom bar ── */
+.bottom-bar{
+  display:flex;align-items:center;padding:3px 10px;
+  background:#050505;border-top:1px solid #111;flex-shrink:0;
+}
+#statusbar{flex:1;font-size:10px;color:#282828}
+#statusbar.ok  {color:#2a8}
+#statusbar.err {color:#a44}
+#statusbar.busy{color:#668}
+.count-badge{font-size:9px;color:#2a2a2a;white-space:nowrap}
+
+.empty{text-align:center;padding:28px;color:#222;font-size:11px}
 </style>
 </head>
 <body>
-<div class="app">
+<div class="app" id="app">
 
+<!-- ── Header ── -->
 <header>
   <h1>SlaveTats UI</h1>
   <div class="actor-bar">
@@ -276,725 +350,780 @@
     <select id="actorSelect" onchange="onActorChange()">
       <option value="0x14">Player</option>
     </select>
-    <button class="btn-hdr" onclick="refreshActors()" title="Scan nearby NPCs">⟳</button>
+    <button class="btn-hdr" onclick="refreshActors()" title="Scan NPCs">&#8635;</button>
   </div>
-  <span id="slavetatsVersion" style="font-size:9px;color:#333;white-space:nowrap"></span>
+  <span id="apiBadge" class="api-badge" style="display:none"></span>
   <button class="btn-hdr" onclick="syncTattoos()">Sync</button>
-  <button class="btn-hdr" onclick="sendCmd({action:'toggleUI'})">✕</button>
+  <button class="btn-hdr" onclick="sendCmd({action:'toggleUI'})">&#x2715;</button>
 </header>
 
-<div class="tabs">
-  <button class="tab active" onclick="switchTab('available',this)">Available</button>
-  <button class="tab"        onclick="switchTab('applied',this)">Applied</button>
-</div>
+<!-- ── View Stack ── -->
+<div id="viewStack">
 
-<div id="panel-available" class="panel active">
-  <div class="search-bar">
-    <input id="searchAvail" type="text" placeholder="Search…" oninput="renderAvailable()">
-    <button class="btn primary sm" onclick="fetchAvailable()">Refresh</button>
+  <!-- Slot Grid View -->
+  <div id="view-slots" class="view active">
+    <div id="slotScrollArea"></div>
   </div>
-  <div class="panel-inner">
-    <div id="listAvailable">
-      <div class="empty">Press Refresh to load tattoos</div>
+
+  <!-- Edit View -->
+  <div id="view-edit" class="view">
+    <div class="view-nav">
+      <span class="view-title" id="editViewTitle">Slot N &middot; AREA</span>
     </div>
-  </div>
-</div>
-
-<div id="panel-applied" class="panel">
-  <div class="search-bar">
-    <input id="searchApplied" type="text" placeholder="Filter…" oninput="renderApplied()">
-    <button class="btn primary sm" onclick="fetchApplied()">Refresh</button>
-  </div>
-  <div class="panel-inner">
-    <div id="listApplied">
-      <div class="empty">Press Refresh</div>
-    </div>
-  </div>
-</div>
-
-<div id="statusbar" class="statusbar">Ready</div>
-</div>
-
-<!-- ── Apply Modal ──────────────────────────────────────── -->
-<div id="applyModal" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-header">
-      <span class="modal-title" id="applyTitle">Apply Tattoo</span>
-      <button class="modal-close" onclick="closeModal('applyModal')">✕</button>
-    </div>
-    <div class="modal-body">
-
-      <div>
-        <div class="field-label">COLOR — SkyUI Palette</div>
-        <div class="palette-grid" id="applyPalette"></div>
+    <div class="view-body">
+      <div class="edit-preview-wrap">
+        <canvas id="editThumb" width="256" height="256" style="opacity:0"></canvas>
+        <div class="tat-thumb-ph">
+          <div class="ph-icon">&#128444;</div>
+          <div class="ph-err"></div>
+        </div>
       </div>
+      <div class="edit-info">
+        <div class="edit-tattoo-name" id="editTattooName">&mdash;</div>
+        <div class="edit-tattoo-meta" id="editTattooMeta"></div>
+      </div>
+    </div>
+    <div id="removeBanner" class="remove-banner" style="display:none"></div>
+    <div class="edit-panel">
+      <div class="palette-grid" id="editPalette"></div>
+      <div class="color-row">
+        <div class="color-preview" id="editColorPreview" style="background:#ffffff"></div>
+        <input class="hex-input" id="editHex" type="text" maxlength="7" placeholder="#FFFFFF"
+          oninput="onHexInput('edit')">
+        <button class="btn sm" onclick="resetEditColor()" title="Reset">&#8634;</button>
+      </div>
+      <div class="alpha-row">
+        <input type="range" min="0" max="100" value="100" id="editAlphaSlider"
+          oninput="onAlphaSlider('edit')">
+        <span class="alpha-val" id="editAlphaVal">1.00</span>
+      </div>
+      <div class="edit-actions">
+        <button class="btn primary" onclick="confirmSave()">Save</button>
+        <button class="btn" onclick="openReplace()">Replace</button>
+        <button class="btn danger" onclick="startRemove()">Remove</button>
+        <button class="btn" style="margin-left:auto" onclick="popView()">&larr; Back</button>
+      </div>
+    </div>
+  </div>
 
-      <div>
-        <div class="field-label">CUSTOM COLOR</div>
+  <!-- Browser View -->
+  <div id="view-browser" class="view">
+    <div class="view-nav">
+      <span class="view-title" id="browserViewTitle">Select Tattoo</span>
+    </div>
+    <div class="browser-filter">
+      <span class="area-chip" id="browserAreaChip">BODY</span>
+      <button class="btn-chip" id="showAllBtn" onclick="toggleShowAll()">Show All</button>
+      <input id="browserSearch" type="text" placeholder="Search&hellip;" oninput="debouncedRenderBrowser()">
+    </div>
+    <div id="browserList" class="browser-list">
+      <div class="empty">Loading tattoos&hellip;</div>
+    </div>
+    <div id="browserPanel" class="browser-panel inactive">
+      <div class="panel-tattoo-row">
+        <div class="panel-thumb-wrap">
+          <canvas id="browserThumb" class="panel-thumb" width="46" height="46" style="opacity:0"></canvas>
+          <div class="tat-thumb-ph"><div class="ph-icon" style="font-size:14px">&#128444;</div></div>
+        </div>
+        <div>
+          <div class="panel-tattoo-name" id="panelTattooName">&mdash;</div>
+          <div class="panel-tattoo-section" id="panelTattooSection"></div>
+        </div>
+      </div>
+      <div class="panel-controls">
+        <div class="palette-grid" id="browserPalette"></div>
         <div class="color-row">
-          <div class="color-preview" id="applyColorPreview"></div>
-          <input class="hex-input" id="applyHex" type="text" maxlength="7" placeholder="#FFFFFF"
-            oninput="onHexInput('apply')">
+          <div class="color-preview" id="browserColorPreview" style="background:#ffffff"></div>
+          <input class="hex-input" id="browserHex" type="text" maxlength="7" value="#FFFFFF"
+            oninput="onHexInput('browser')">
+          <button class="btn sm" onclick="setColor('browser',0xFFFFFF)" title="Reset">&#8634;</button>
         </div>
-      </div>
-
-      <div>
-        <div class="field-label">ALPHA / OPACITY</div>
         <div class="alpha-row">
-          <input type="range" min="0" max="100" value="100" id="applyAlpha"
-            oninput="document.getElementById('applyAlphaVal').textContent=(this.value/100).toFixed(2)">
-          <span class="alpha-val" id="applyAlphaVal">1.00</span>
+          <input type="range" min="0" max="100" value="100" id="browserAlphaSlider"
+            oninput="onAlphaSlider('browser')">
+          <span class="alpha-val" id="browserAlphaVal">1.00</span>
         </div>
       </div>
-
-      <div id="slotSection">
-        <div class="field-label">SLOT — <span id="slotAreaName" style="color:#68a"></span> <span style="color:#333;font-size:9px">(occupied = cannot select)</span></div>
-        <div id="slotGrid" class="slot-loading">Loading slots…</div>
-      </div>
-
+      <button class="btn primary btn-full" id="applySlotBtn" onclick="confirmApplyToSlot()">Apply to Slot &mdash;</button>
     </div>
-    <div class="modal-footer">
-      <button class="btn primary" onclick="confirmApply()">Apply</button>
-      <button class="btn" onclick="setModalColor('apply',0xFFFFFF);setModalAlpha('apply',1.0)" title="Reset to white (no tint)">↺ Default</button>
-      <button class="btn" onclick="closeModal('applyModal')">Cancel</button>
+    <div class="browser-footer">
+      <button class="btn" onclick="popView()">&larr; Back</button>
     </div>
   </div>
+
+</div><!-- /viewStack -->
+
+<div class="bottom-bar">
+  <div id="statusbar">Ready</div>
+  <div class="count-badge" id="countBadge"></div>
 </div>
-
-<!-- ── Edit Modal ───────────────────────────────────────── -->
-<div id="editModal" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-header">
-      <span class="modal-title" id="editTitle">Edit Tattoo</span>
-      <button class="modal-close" onclick="closeModal('editModal')">✕</button>
-    </div>
-    <div class="modal-body">
-
-      <div>
-        <div class="field-label">COLOR — SkyUI Palette</div>
-        <div class="palette-grid" id="editPalette"></div>
-      </div>
-
-      <div>
-        <div class="field-label">CUSTOM COLOR</div>
-        <div class="color-row">
-          <div class="color-preview" id="editColorPreview"></div>
-          <input class="hex-input" id="editHex" type="text" maxlength="7" placeholder="#FFFFFF"
-            oninput="onHexInput('edit')">
-        </div>
-      </div>
-
-      <div>
-        <div class="field-label">ALPHA / OPACITY</div>
-        <div class="alpha-row">
-          <input type="range" min="0" max="100" value="100" id="editAlpha"
-            oninput="document.getElementById('editAlphaVal').textContent=(this.value/100).toFixed(2)">
-          <span class="alpha-val" id="editAlphaVal">1.00</span>
-        </div>
-      </div>
-
-    </div>
-    <div class="modal-footer">
-      <button class="btn primary" onclick="confirmEdit()">Save</button>
-      <button class="btn" onclick="resetEditToOriginal()" title="Revert to color before editing">↺ Original</button>
-      <button class="btn" onclick="closeModal('editModal')">Cancel</button>
-    </div>
-  </div>
-</div>
+</div><!-- /app -->
 
 <script>
-// ─── SkyUI 28-color palette (RGB values, matching RaceMenu overlay palette) ────
-const SKYUI_PALETTE = [
-  { name:'White',      hex:'#FFFFFF' }, { name:'Silver',     hex:'#C8C8C8' },
-  { name:'Gray',       hex:'#969696' }, { name:'Black',      hex:'#282828' },
-  { name:'Red',        hex:'#FF0000' }, { name:'Dark Red',   hex:'#960000' },
-  { name:'Orange',     hex:'#FF6400' }, { name:'Brown',      hex:'#964600' },
-  { name:'Yellow',     hex:'#FFFF00' }, { name:'Olive',      hex:'#969600' },
-  { name:'Lime',       hex:'#64FF00' }, { name:'Green',      hex:'#008200' },
-  { name:'Aqua',       hex:'#00FFFF' }, { name:'Teal',       hex:'#008282' },
-  { name:'Sky',        hex:'#64C8FF' }, { name:'Blue',       hex:'#0000FF' },
-  { name:'Navy',       hex:'#000096' }, { name:'Violet',     hex:'#9600FF' },
-  { name:'Purple',     hex:'#460096' }, { name:'Magenta',    hex:'#FF00FF' },
-  { name:'Pink',       hex:'#FF82C8' }, { name:'Rose',       hex:'#FF1482' },
-  { name:'Pale',       hex:'#FFDCC8' }, { name:'Peach',      hex:'#F0B496' },
-  { name:'Tan',        hex:'#C87832' }, { name:'Chocolate',  hex:'#784614' },
-  { name:'Gold',       hex:'#FFD200' }, { name:'Steel',      hex:'#8296AA' },
+// ─── Palette ─────────────────────────────────────────────────────────────────
+var SKYUI_PALETTE=[
+  {n:'White',    h:'#FFFFFF'},{n:'Silver',    h:'#C8C8C8'},
+  {n:'Gray',     h:'#969696'},{n:'Black',     h:'#282828'},
+  {n:'Red',      h:'#FF0000'},{n:'Dark Red',  h:'#960000'},
+  {n:'Orange',   h:'#FF6400'},{n:'Brown',     h:'#964600'},
+  {n:'Yellow',   h:'#FFFF00'},{n:'Olive',     h:'#969600'},
+  {n:'Lime',     h:'#64FF00'},{n:'Green',     h:'#008200'},
+  {n:'Aqua',     h:'#00FFFF'},{n:'Teal',      h:'#008282'},
+  {n:'Sky',      h:'#64C8FF'},{n:'Blue',      h:'#0000FF'},
+  {n:'Navy',     h:'#000096'},{n:'Violet',    h:'#9600FF'},
+  {n:'Purple',   h:'#460096'},{n:'Magenta',   h:'#FF00FF'},
+  {n:'Pink',     h:'#FF82C8'},{n:'Rose',      h:'#FF1482'},
+  {n:'Pale',     h:'#FFDCC8'},{n:'Peach',     h:'#F0B496'},
+  {n:'Tan',      h:'#C87832'},{n:'Chocolate', h:'#784614'},
+  {n:'Gold',     h:'#FFD200'},{n:'Steel',     h:'#8296AA'},
 ];
 
-// ─── State ──────────────────────────────────────────────────────────────────
-let availableTattoos = [];
-let appliedTattoos   = [];
-const expanded       = {};
+// ─── State ───────────────────────────────────────────────────────────────────
+var AREAS=['BODY','FACE','HANDS','FEET'];
+var allSlotsData   ={};
+var areaCollapsed  ={};
+var availableTattoos=[];
+var availableDomain='default';
+var tattooByHandle ={};
+var expanded       ={};
 
-// Lookup maps — avoid serialising full objects into onclick attributes
-let tattooByHandle  = {};   // handle → available tattoo
-let appliedByHandle = {};   // handle → applied tattoo
+var viewStack=['slots'];
+var ctxArea='',ctxSlot=-1,ctxHandle=0,ctxIsReplace=false;
+var editColor=0xFFFFFF,editOrigColor=0xFFFFFF,editAlphaV=1,editOrigAlpha=1;
+var browserShowAll=false,browserSelectedHandle=0,browserColor=0xFFFFFF,browserAlphaV=1;
+var slotUsageMap={}; // key:"section:name" → [slot,...] for ctxArea
 
-// Available tattoo domain (tracks which domain the current list came from)
-let availableDomain = 'default';
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function pushView(name){
+  var prev=viewStack[viewStack.length-1];
+  viewStack.push(name);
+  if(prev){var el=document.getElementById('view-'+prev);if(el){el.classList.remove('active');el.classList.add('behind');}}
+  var el=document.getElementById('view-'+name);
+  if(el){el.classList.remove('behind');el.classList.add('active');}
+}
+function popView(){
+  if(viewStack.length<=1)return;
+  var cur=viewStack.pop();
+  var prev=viewStack[viewStack.length-1];
+  var curEl=document.getElementById('view-'+cur);
+  var prevEl=document.getElementById('view-'+prev);
+  if(curEl)curEl.classList.remove('active');
+  if(prevEl){prevEl.classList.remove('behind');prevEl.classList.add('active');}
+}
+var _removeBusy=false;
+function resetToSlots(){
+  _removeBusy=false;
+  // Bypass CSS transitions to avoid blank-frame artifact on rapid navigation
+  var allViews=document.querySelectorAll('#viewStack .view');
+  for(var i=0;i<allViews.length;i++){
+    allViews[i].style.transition='none';
+    allViews[i].classList.remove('active','behind');
+  }
+  viewStack=['slots'];
+  var slotsEl=document.getElementById('view-slots');
+  if(slotsEl)slotsEl.classList.add('active');
+  requestAnimationFrame(function(){
+    var vs=document.querySelectorAll('#viewStack .view');
+    for(var i=0;i<vs.length;i++)vs[i].style.transition='';
+  });
+}
+function currentView(){return viewStack[viewStack.length-1];}
 
-// Apply modal state
-let applyTattoo     = null;
-let applyColor      = 0xFFFFFF;
-let applyAlphaVal   = 1.0;
-let applySlot       = -1;
-let applyArea       = '';
-let slotsData       = {};
-
-// Edit modal state
-let editHandle      = 0;
-let editColor       = 0xFFFFFF;
-let editOrigColor   = 0xFFFFFF;   // original color before edits
-let editAlphaV      = 1.0;
-let editOrigAlpha   = 1.0;
-
-// ─── PrismaUI interop ────────────────────────────────────────────────────────
-function slavetatsOnData(jsonStr) {
-  let d;
-  try { d = JSON.parse(jsonStr); } catch(e) { setStatus('JSON error','err'); return; }
-  switch (d.type) {
+// ─── PrismaUI interop ─────────────────────────────────────────────────────────
+function slavetatsOnData(jsonStr){
+  var d;
+  try{d=JSON.parse(jsonStr);}catch(e){setStatus('JSON error','err');return;}
+  switch(d.type){
     case 'ready':
+      showAPIBadge(d.apiVersion,d.apiOk!==false);
       setStatus('Connected','ok');
-      fetchAvailable(); fetchApplied(); refreshActors();
+      refreshActors();
+      fetchAvailable();
+      break;
+    case 'show':
+      refreshAllSlots();
       break;
     case 'available':
-      availableDomain  = d.domain || 'default';
-      availableTattoos = d.tattoos || [];
-      tattooByHandle = {};
-      for (const t of availableTattoos) if (t.handle) tattooByHandle[t.handle] = t;
-      renderAvailable();
-      setStatus(availableTattoos.length+' available','ok');
+      availableDomain=d.domain||'default';
+      availableTattoos=d.tattoos||[];
+      tattooByHandle={};
+      for(var i=0;i<availableTattoos.length;i++){var t=availableTattoos[i];if(t.handle)tattooByHandle[t.handle]=t;}
+      document.getElementById('countBadge').textContent=availableTattoos.length+' available';
+      if(currentView()==='browser')renderBrowser();
       break;
     case 'actors':
-      onActorsData(d.actors || []);
-      break;
-    case 'applied':
-      appliedTattoos = d.tattoos || [];
-      appliedByHandle = {};
-      for (const t of appliedTattoos) if (t.handle) appliedByHandle[t.handle] = t;
-      renderApplied();
-      if (d.version) document.getElementById('slavetatsVersion').textContent = 'ST '+d.version;
-      setStatus(appliedTattoos.length+' applied','ok');
+      onActorsData(d.actors||[]);
       break;
     case 'slots':
       onSlotsData(d);
       break;
     case 'success':
-      setStatus('OK: '+d.action,'ok');
-      if (['addTattoo','removeTattoo','syncTattoos','applyToSlot','updateTattoo'].includes(d.action))
-        fetchApplied();
-      if (d.action === 'applyToSlot' || d.action === 'addTattoo')
-        closeModal('applyModal');
-      if (d.action === 'updateTattoo')
-        closeModal('editModal');
+      setStatus('Done','ok');
+      refreshAllSlots();
+      if(d.action==='removeFromSlot'||d.action==='applyToSlot'||d.action==='updateTattoo')
+        resetToSlots();
       break;
     case 'error':
-      setStatus('Error: '+d.message,'err');
+      _removeBusy=false;
+      setStatus(d.message||'Error','err');
       break;
     case 'texture':
-      onTextureData(d.path, d.w||128, d.h||128, d.data);
+      onTextureData(d.path,d.w||128,d.h||128,d.data);
       break;
     case 'textureError':
       onTextureError(d.path);
       break;
   }
 }
-
-function sendCmd(obj) {
-  try { slavetatsCmd(JSON.stringify(obj)); }
-  catch(e) { setStatus('Bridge not ready: '+e,'err'); }
+function sendCmd(obj){
+  try{slavetatsCmd(JSON.stringify(obj));}
+  catch(e){setStatus('Bridge not ready','err');}
 }
 
-// ─── Commands ────────────────────────────────────────────────────────────────
-function refreshActors() { sendCmd({action:'queryActors'}); }
-function onActorsData(actors) {
-  const sel    = document.getElementById('actorSelect');
-  const curVal = sel.value;
-  sel.innerHTML = '';
-  for (const a of actors) {
-    const opt = document.createElement('option');
-    opt.value       = a.id;
-    opt.textContent = a.isPlayer ? `Player (${a.id})` : `${a.name} (${a.id})`;
+// ─── Commands ─────────────────────────────────────────────────────────────────
+function refreshActors(){sendCmd({action:'queryActors'});}
+function fetchAvailable(){sendCmd({action:'queryAvailable',domain:'default'});}
+function syncTattoos(){sendCmd({action:'syncTattoos',actorId:getActorId()});setStatus('Syncing…','busy');}
+function onActorChange(){refreshAllSlots();}
+function getActorId(){return parseInt(document.getElementById('actorSelect').value,16)||0x14;}
+function refreshAllSlots(){sendCmd({action:'queryAllSlots',actorId:getActorId()});setStatus('Loading…','busy');}
+
+function onActorsData(actors){
+  var sel=document.getElementById('actorSelect');
+  var cur=sel.value;
+  sel.innerHTML='';
+  for(var i=0;i<actors.length;i++){
+    var a=actors[i];
+    var opt=document.createElement('option');
+    opt.value=a.id;
+    opt.textContent=a.isPlayer?'Player ('+a.id+')':a.name+' ('+a.id+')';
     sel.appendChild(opt);
   }
-  // Restore previous selection if still present
-  if ([...sel.options].some(o => o.value === curVal)) sel.value = curVal;
-}
-function onActorChange() { fetchApplied(); }
-
-function fetchAvailable() { setStatus('Loading…','busy'); sendCmd({action:'queryAvailable',domain:'default'}); }
-function fetchApplied()   {
-  const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  setStatus('Loading applied…','busy');
-  sendCmd({action:'queryApplied',actorId});
-}
-function syncTattoos() {
-  const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  sendCmd({action:'syncTattoos',actorId});
-}
-function removeTattoo(sec,name) {
-  const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  setStatus('Removing '+name+'…','busy');
-  sendCmd({action:'removeTattoo',actorId,section:sec,name});
+  var opts=sel.options;
+  for(var j=0;j<opts.length;j++){if(opts[j].value===cur){sel.value=cur;break;}}
 }
 
-// ─── Apply modal ─────────────────────────────────────────────────────────────
-function openApplyModal(handle) {
-  const t = tattooByHandle[handle];
-  if (!t) { setStatus('Tattoo not in cache — press Refresh','err'); return; }
+// ─── Slot data ────────────────────────────────────────────────────────────────
+function onSlotsData(d){
+  allSlotsData[d.area]={slots:d.slots||[],maxSlots:d.maxSlots||0};
+  updateAreaSection(d.area);
+  var allDone=true;
+  for(var i=0;i<AREAS.length;i++){if(!allSlotsData[AREAS[i]]){allDone=false;break;}}
+  if(allDone)setStatus('Ready','');
+}
 
-  applyTattoo   = t;
-  applyColor    = (t.color && t.color !== 0) ? t.color : 0xFFFFFF;
-  applyAlphaVal = t.alpha ?? 1.0;
-  applySlot     = -1;
+function updateAreaSection(area){
+  var existing=document.getElementById('area-sec-'+area);
+  var node=buildAreaSection(area);
+  if(existing)existing.parentNode.replaceChild(node,existing);
+  else document.getElementById('slotScrollArea').appendChild(node);
+}
 
-  // Area locked to tattoo's own area — empty area means unknown, hide slot picker
-  applyArea = (t.area || '').toUpperCase();
+function buildAreaSection(area){
+  var collapsed=!!areaCollapsed[area];
+  var data=allSlotsData[area];
+  var occCount=0;
+  if(data)for(var i=0;i<data.slots.length;i++){if(data.slots[i].occupied&&!data.slots[i].external)occCount++;}
+  var maxSlots=data?data.maxSlots:'?';
 
-  document.getElementById('applyTitle').textContent = 'Apply — '+t.name;
-  setModalColor('apply', applyColor);
-  setModalAlpha('apply', applyAlphaVal);
+  var sec=document.createElement('div');
+  sec.className='area-section';sec.id='area-sec-'+area;
 
-  const slotSec = document.getElementById('slotSection');
-  if (applyArea) {
-    slotSec.style.display = '';
-    document.getElementById('slotAreaName').textContent = applyArea;
-    // Show cached data immediately if available; always fire a fresh query
-    if (slotsData[applyArea]) {
-      renderSlotGrid(slotsData[applyArea].slots, slotsData[applyArea].maxSlots);
-    } else {
-      document.getElementById('slotGrid').className = 'slot-loading';
-      document.getElementById('slotGrid').textContent = 'Loading…';
+  var hdr=document.createElement('div');
+  hdr.className='area-hdr';
+  (function(a){hdr.onclick=function(){areaCollapsed[a]=!areaCollapsed[a];updateAreaSection(a);};})(area);
+  hdr.innerHTML=
+    '<span class="area-arrow">'+(collapsed?'&#9658;':'&#9660;')+'</span>'+
+    '<span class="area-label">'+esc(area)+'</span>'+
+    '<span class="area-count">'+(data?occCount+'/'+maxSlots:'')+'</span>'+
+    (!data?'<span class="area-loading">Loading…</span>':'');
+  sec.appendChild(hdr);
+
+  if(!collapsed&&data){
+    var grid=document.createElement('div');
+    grid.className='slot-grid-2';
+    for(var i=0;i<data.slots.length;i++)grid.appendChild(buildSlotCell(area,data.slots[i]));
+    sec.appendChild(grid);
+  }
+  return sec;
+}
+
+function buildSlotCell(area,s){
+  var cell=document.createElement('div');
+  var phHtml='<div class="tat-thumb-ph" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">'+
+    '<div class="ph-icon" style="font-size:28px;opacity:.07">&#128444;</div></div>';
+  if(s.external){
+    cell.className='slot-cell ext-occupied';
+    cell.title='Used by another mod';
+    cell.innerHTML=
+      '<div class="sc-thumb-wrap">'+phHtml+'</div>'+
+      '<div class="sc-body">'+
+        '<div class="sc-num">Slot '+s.slot+'</div>'+
+        '<div class="sc-name">External</div>'+
+      '</div>';
+  }else if(s.occupied){
+    var hex=intToHex((s.color&&s.color!==0)?s.color:0xFFFFFF);
+    cell.className='slot-cell occupied';
+    cell.title=(s.name||'')+(s.section?' — '+s.section:'');
+    (function(a,sl){cell.onclick=function(){openEditView(a,sl);};})(area,s);
+    var texAttr=s.texture?' data-tex="'+esc(s.texture)+'"':'';
+    cell.innerHTML=
+      '<div class="sc-thumb-wrap">'+
+        '<canvas class="sc-thumb"'+texAttr+' style="opacity:0"></canvas>'+
+        phHtml+
+      '</div>'+
+      '<div class="sc-body">'+
+        '<div class="sc-num">Slot '+s.slot+'</div>'+
+        '<div class="sc-name">'+esc(s.name||'?')+'</div>'+
+        '<div class="sc-section">'+esc(s.section||'')+'</div>'+
+        '<div class="sc-color" style="background:'+hex+'"></div>'+
+      '</div>';
+    if(s.texture){
+      var canvas=cell.querySelector('.sc-thumb');
+      if(canvas)thumbObserver.observe(canvas);
     }
-    loadSlotsForArea(applyArea);
-  } else {
-    slotSec.style.display = 'none';
+  }else{
+    cell.className='slot-cell free';
+    (function(a,si){cell.onclick=function(){openBrowserView(a,si,false);};})(area,s.slot);
+    cell.innerHTML=
+      '<div class="sc-thumb-wrap">'+phHtml+'</div>'+
+      '<div class="sc-body">'+
+        '<div class="sc-num">Slot '+s.slot+'</div>'+
+        '<div class="sc-name">+ Select Tattoo</div>'+
+      '</div>';
   }
-
-  document.getElementById('applyModal').classList.add('open');
+  return cell;
 }
 
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
+// ─── Edit View ────────────────────────────────────────────────────────────────
+function openEditView(area,slotInfo){
+  ctxArea=area;ctxSlot=slotInfo.slot;ctxHandle=slotInfo.handle||0;
+  editColor=(slotInfo.color&&slotInfo.color!==0)?slotInfo.color:0xFFFFFF;
+  editOrigColor=editColor;
+  editAlphaV=(slotInfo.alpha!=null)?slotInfo.alpha:1;
+  editOrigAlpha=editAlphaV;
+
+  document.getElementById('editViewTitle').textContent='Slot '+ctxSlot+' · '+area;
+  document.getElementById('editTattooName').textContent=slotInfo.name||'—';
+  document.getElementById('editTattooMeta').textContent=slotInfo.section||'';
+  document.getElementById('removeBanner').style.display='none';
+  setColor('edit',editColor);setAlpha('edit',editAlphaV);
+
+  var canvas=document.getElementById('editThumb');
+  canvas.style.opacity='0';
+  var ph=canvas.nextElementSibling;
+  if(ph){ph.style.display='';var _e=ph.querySelector('.ph-err');if(_e)_e.textContent='';}
+  if(slotInfo.texture){canvas.dataset.tex=slotInfo.texture;loadThumb(canvas);}
+  else delete canvas.dataset.tex;
+
+  pushView('edit');
+}
+function resetEditColor(){setColor('edit',editOrigColor);setAlpha('edit',editOrigAlpha);}
+function confirmSave(){
+  if(!ctxHandle){setStatus('Invalid handle — press Refresh','err');return;}
+  sendCmd({action:'updateTattoo',actorId:getActorId(),tattooHandle:ctxHandle,color:editColor,alpha:editAlphaV});
+  setStatus('Saving…','busy');
+}
+function openReplace(){openBrowserView(ctxArea,ctxSlot,true);}
+function startRemove(){
+  var name=document.getElementById('editTattooName').textContent;
+  var b=document.getElementById('removeBanner');
+  b.innerHTML=
+    '<span class="remove-warning">⚠ Remove "'+esc(name)+'" from Slot '+ctxSlot+'?</span>'+
+    '<button class="btn danger sm" onclick="confirmRemove()">Yes, Remove</button>'+
+    '<button class="btn sm" onclick="document.getElementById(\'removeBanner\').style.display=\'none\'">Cancel</button>';
+  b.style.display='';
+}
+function confirmRemove(){
+  if(_removeBusy)return;
+  _removeBusy=true;
+  sendCmd({action:'removeFromSlot',actorId:getActorId(),area:ctxArea,slot:ctxSlot});
+  setStatus('Removing…','busy');
 }
 
-function loadSlotsForArea(area) {
-  document.getElementById('slotGrid').className = 'slot-loading';
-  document.getElementById('slotGrid').textContent = 'Loading…';
-  const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  sendCmd({action:'querySlots', actorId, area});
-}
+// ─── Browser View ─────────────────────────────────────────────────────────────
+function openBrowserView(area,slot,isReplace){
+  ctxArea=area;ctxSlot=slot;ctxIsReplace=isReplace;
+  browserShowAll=false;browserSelectedHandle=0;
+  browserColor=0xFFFFFF;browserAlphaV=1;
 
-function onSlotsData(d) {
-  slotsData[d.area] = { slots: d.slots || [], maxSlots: d.maxSlots };
-  if (d.area === applyArea) renderSlotGrid(slotsData[d.area].slots, slotsData[d.area].maxSlots);
-}
+  document.getElementById('browserViewTitle').textContent=isReplace?'Replace Tattoo':'Select Tattoo';
+  document.getElementById('browserAreaChip').textContent=area;
+  document.getElementById('browserAreaChip').style.opacity='1';
+  document.getElementById('showAllBtn').classList.remove('active');
+  document.getElementById('applySlotBtn').textContent='Apply to Slot '+slot;
+  document.getElementById('browserSearch').value='';
+  document.getElementById('browserPanel').classList.add('inactive');
+  var _bt=document.getElementById('browserThumb');_bt.style.opacity='0';
+  setColor('browser',0xFFFFFF);setAlpha('browser',1);
 
-function renderSlotGrid(slots, maxSlots) {
-  const grid = document.getElementById('slotGrid');
-  grid.className = 'slot-grid';
-  grid.innerHTML = slots.map(s => {
-    if (s.occupied && s.external) {
-      return `<div class="slot-btn ext-occupied" title="Used by another mod (NiOverride)">
-        <div class="slot-num">${s.slot}</div>
-        <div class="slot-name">Ext.</div>
-      </div>`;
-    } else if (s.occupied) {
-      return `<div class="slot-btn occupied" title="${esc(s.name||'')}">
-        <div class="slot-num">${s.slot}</div>
-        <div class="slot-name">${esc(s.name||'–')}</div>
-      </div>`;
-    } else {
-      const sel = applySlot === s.slot;
-      return `<div class="slot-btn${sel?' selected':''}" onclick="selectSlot(${s.slot})">
-        <div class="slot-num">${s.slot}</div>
-        <div class="slot-name">free</div>
-      </div>`;
+  renderBrowser();
+  pushView('browser');
+}
+function toggleShowAll(){
+  browserShowAll=!browserShowAll;
+  document.getElementById('showAllBtn').classList.toggle('active',browserShowAll);
+  document.getElementById('browserAreaChip').style.opacity=browserShowAll?'.4':'1';
+  renderBrowser();
+}
+var _browserSearchTimer=null;
+function debouncedRenderBrowser(){clearTimeout(_browserSearchTimer);_browserSearchTimer=setTimeout(renderBrowser,150);}
+function renderBrowser(){
+  // Build in-use map: section:name → [slot,...] for current area
+  slotUsageMap={};
+  var areaData=allSlotsData[ctxArea];
+  if(areaData){
+    for(var i=0;i<areaData.slots.length;i++){
+      var s=areaData.slots[i];
+      if(s.occupied&&!s.external&&s.name){
+        var k=(s.section||'')+':'+s.name;
+        if(!slotUsageMap[k])slotUsageMap[k]=[];
+        slotUsageMap[k].push(s.slot);
+      }
     }
-  }).join('') +
-  (maxSlots != null ? `<div class="slot-info">Max ${maxSlots} slots — increase in <code>Data/SKSE/Plugins/skee64.ini</code> → <code>iNumOverlays</code></div>` : '');
-}
-
-function selectSlot(slot) {
-  applySlot = slot;
-  if (slotsData[applyArea]) renderSlotGrid(slotsData[applyArea].slots, slotsData[applyArea].maxSlots);
-}
-
-function confirmApply() {
-  if (!applyTattoo) return;
-  const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  setStatus('Applying…','busy');
-
-  if (applySlot >= 0) {
-    // Use add_and_get_tattoo for specific slot — C++ re-queries for a live handle
-    sendCmd({action:'applyToSlot', actorId,
-      section: applyTattoo.section, name: applyTattoo.name,
-      domain: availableDomain,
-      slot: applySlot,
-      color: applyColor, alpha: applyAlphaVal});
-  } else {
-    // Fallback: simple_add_tattoo (auto slot)
-    sendCmd({action:'addTattoo', actorId,
-      section: applyTattoo.section, name: applyTattoo.name,
-      color: applyColor, alpha: applyAlphaVal});
-    closeModal('applyModal');
   }
-}
-
-// ─── Edit modal ──────────────────────────────────────────────────────────────
-function openEditModal(handle) {
-  const t = appliedByHandle[handle];
-  if (!t) { setStatus('Tattoo not in cache — press Refresh','err'); return; }
-
-  editHandle    = t.handle || 0;
-  editColor     = (t.color && t.color !== 0) ? t.color : 0xFFFFFF;
-  editOrigColor = editColor;
-  editAlphaV    = t.alpha ?? 1.0;
-  editOrigAlpha = editAlphaV;
-
-  document.getElementById('editTitle').textContent = 'Edit — '+t.name;
-  setModalColor('edit', editColor);
-  setModalAlpha('edit', editAlphaV);
-
-  document.getElementById('editModal').classList.add('open');
-}
-
-function resetEditToOriginal() {
-  setModalColor('edit', editOrigColor);
-  setModalAlpha('edit', editOrigAlpha);
-}
-
-function confirmEdit() {
-  if (!editHandle) {
-    setStatus('Cannot save: invalid handle — press Refresh then reopen', 'err');
-    return;
-  }
-  const actorId = parseInt(document.getElementById('actorSelect').value,16);
-  setStatus('Updating…','busy');
-  sendCmd({action:'updateTattoo', actorId, tattooHandle: editHandle, color: editColor, alpha: editAlphaV});
-}
-
-// ─── Color picker shared ─────────────────────────────────────────────────────
-function buildPalette(prefix) {
-  const el = document.getElementById(prefix+'Palette');
-  el.innerHTML = SKYUI_PALETTE.map((c,i) =>
-    `<div class="pal-swatch" title="${c.name}" style="background:${c.hex}"
-      onclick="${prefix==='apply'?'pickApplyColor':'pickEditColor'}(${i})"></div>`
-  ).join('');
-}
-
-function pickApplyColor(idx) {
-  const hex = SKYUI_PALETTE[idx].hex;
-  applyColor = hexToInt(hex);
-  setModalColor('apply', applyColor);
-  highlightPalette('apply', idx);
-}
-function pickEditColor(idx) {
-  const hex = SKYUI_PALETTE[idx].hex;
-  editColor = hexToInt(hex);
-  setModalColor('edit', editColor);
-  highlightPalette('edit', idx);
-}
-
-function highlightPalette(prefix, idx) {
-  document.querySelectorAll('#'+prefix+'Palette .pal-swatch').forEach((s,i) => {
-    s.classList.toggle('selected', i === idx);
-  });
-}
-
-function setModalColor(prefix, colorInt) {
-  const hex = intToHex(colorInt);
-  document.getElementById(prefix+'ColorPreview').style.background = hex;
-  document.getElementById(prefix+'Hex').value = hex;
-  if (prefix === 'apply') applyColor = colorInt;
-  else                    editColor  = colorInt;
-}
-
-function setModalAlpha(prefix, val) {
-  const v = Math.round(val * 100);
-  document.getElementById(prefix+'Alpha').value = v;
-  document.getElementById(prefix+'AlphaVal').textContent = val.toFixed(2);
-  if (prefix === 'apply') applyAlphaVal = val;
-  else                    editAlphaV    = val;
-}
-
-function onHexInput(prefix) {
-  const hex = document.getElementById(prefix+'Hex').value;
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
-  const ci = hexToInt(hex);
-  document.getElementById(prefix+'ColorPreview').style.background = hex;
-  if (prefix === 'apply') applyColor = ci;
-  else                    editColor  = ci;
-  // Deselect palette swatches
-  document.querySelectorAll('#'+prefix+'Palette .pal-swatch').forEach(s=>s.classList.remove('selected'));
-}
-
-// Alpha slider live update
-document.addEventListener('DOMContentLoaded', () => {
-  buildPalette('apply');
-  buildPalette('edit');
-
-  document.getElementById('applyAlpha').addEventListener('input', function() {
-    applyAlphaVal = this.value / 100;
-    document.getElementById('applyAlphaVal').textContent = applyAlphaVal.toFixed(2);
-  });
-  document.getElementById('editAlpha').addEventListener('input', function() {
-    editAlphaV = this.value / 100;
-    document.getElementById('editAlphaVal').textContent = editAlphaV.toFixed(2);
-  });
-});
-
-// ─── Color conversion ────────────────────────────────────────────────────────
-function intToHex(n) {
-  const r = (n >> 16) & 0xFF, g = (n >> 8) & 0xFF, b = n & 0xFF;
-  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-function hexToInt(hex) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return (r<<16)|(g<<8)|b;
-}
-
-// ─── Tree toggle ─────────────────────────────────────────────────────────────
-function toggleNode(key) {
-  expanded[key] = !(expanded[key] !== false);
-  const node  = document.getElementById('tn-'+key);
-  if (!node) return;
-  const ch    = node.querySelector(':scope > .tree-children');
-  const arrow = node.querySelector(':scope > .tree-hdr > .tree-arrow');
-  const open  = expanded[key] !== false;
-  if (ch)    ch.style.display  = open ? '' : 'none';
-  if (arrow) arrow.textContent = open ? '▼' : '▶';
-  if (open) node.querySelectorAll('.tat-thumb[data-tex]').forEach(c => thumbObserver.observe(c));
-}
-
-// ─── Thumbnails ──────────────────────────────────────────────────────────────
-const thumbCache    = new Map();
-const thumbInFlight = new Set();
-
-function loadThumb(canvas) {
-  const tex = canvas.dataset.tex;
-  if (!tex) return;
-  if (thumbCache.has(tex)) {
-    const v = thumbCache.get(tex);
-    if (v && v !== 'err') drawThumb(canvas, v);
-    return;
-  }
-  if (thumbInFlight.has(tex)) return;
-  thumbInFlight.add(tex);
-  sendCmd({action:'getTexture', path:tex});
-}
-
-async function onTextureData(path, w, h, b64) {
-  try {
-    const bin = atob(b64);
-    const u8  = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    const bmp = await createImageBitmap(new ImageData(new Uint8ClampedArray(u8.buffer), w, h));
-    thumbCache.set(path, bmp);
-    document.querySelectorAll('.tat-thumb').forEach(c => {
-      if (c.dataset.tex === path) drawThumb(c, bmp);
+  var q=document.getElementById('browserSearch').value.toLowerCase();
+  var list=availableTattoos.slice();
+  if(!browserShowAll&&ctxArea)
+    list=list.filter(function(t){return(t.area||'').toUpperCase()===ctxArea;});
+  if(q)
+    list=list.filter(function(t){
+      return(t.name||'').toLowerCase().indexOf(q)>=0||(t.section||'').toLowerCase().indexOf(q)>=0;
     });
-  } catch(e) {
-    thumbCache.set(path, 'err');
-    markThumbErr(path, String(e).slice(0,50));
-  } finally {
-    thumbInFlight.delete(path);
+
+  var container=document.getElementById('browserList');
+  if(!list.length){
+    container.innerHTML=availableTattoos.length?'<div class="empty">No matches</div>':'<div class="empty">Loading…</div>';
+    return;
   }
+  renderTree(container,buildTree(list));
+}
+function selectBrowserTattoo(handle){
+  browserSelectedHandle=handle;
+  var t=tattooByHandle[handle];
+  if(!t)return;
+  document.getElementById('panelTattooName').textContent=t.name||'—';
+  document.getElementById('panelTattooSection').textContent=t.section||'';
+  var canvas=document.getElementById('browserThumb');
+  canvas.style.opacity='0';
+  if(t.texture){canvas.dataset.tex=t.texture;loadThumb(canvas);}
+  document.getElementById('browserPanel').classList.remove('inactive');
+  var items=document.querySelectorAll('#browserList .grid-item');
+  for(var i=0;i<items.length;i++)
+    items[i].classList.toggle('selected',parseInt(items[i].getAttribute('data-handle')||0)===handle);
+}
+function confirmApplyToSlot(){
+  if(!browserSelectedHandle)return;
+  var t=tattooByHandle[browserSelectedHandle];
+  if(!t)return;
+  sendCmd({action:'applyToSlot',actorId:getActorId(),
+    section:t.section,name:t.name,domain:availableDomain,
+    slot:ctxSlot,color:browserColor,alpha:browserAlphaV});
+  setStatus('Applying…','busy');
 }
 
-function onTextureError(path) {
-  thumbInFlight.delete(path);
-  thumbCache.set(path, 'err');
-  markThumbErr(path, 'not found');
+// ─── API badge ────────────────────────────────────────────────────────────────
+function showAPIBadge(ver,ok){
+  var el=document.getElementById('apiBadge');
+  if(!ver&&ok){el.style.display='none';return;}
+  el.style.display='';
+  if(ok){el.textContent='ST v'+ver;el.className='api-badge';}
+  else{el.textContent=ver?'API v'+ver+' ≠ v1':'ST not found';el.className='api-badge err';}
 }
 
-function markThumbErr(path, msg) {
-  document.querySelectorAll('.tat-thumb').forEach(c => {
-    if (c.dataset.tex !== path) return;
-    const ph = c.closest('.tat-thumb-wrap')?.querySelector('.tat-thumb-ph');
-    if (!ph) return;
-    ph.querySelector('.ph-icon').textContent = '⚠';
-    const e = ph.querySelector('.ph-err'); if (e) e.textContent = msg;
-  });
+// ─── Color / alpha ────────────────────────────────────────────────────────────
+function setColor(prefix,colorInt){
+  var hex=intToHex(colorInt);
+  document.getElementById(prefix+'ColorPreview').style.background=hex;
+  document.getElementById(prefix+'Hex').value=hex;
+  if(prefix==='edit')editColor=colorInt; else browserColor=colorInt;
+  syncPaletteHighlight(prefix,hex);
+}
+function setAlpha(prefix,val){
+  document.getElementById(prefix+'AlphaSlider').value=Math.round(val*100);
+  document.getElementById(prefix+'AlphaVal').textContent=val.toFixed(2);
+  if(prefix==='edit')editAlphaV=val; else browserAlphaV=val;
+}
+function onHexInput(prefix){
+  var hex=document.getElementById(prefix+'Hex').value;
+  if(!/^#[0-9a-fA-F]{6}$/.test(hex))return;
+  document.getElementById(prefix+'ColorPreview').style.background=hex;
+  var ci=hexToInt(hex);
+  if(prefix==='edit')editColor=ci; else browserColor=ci;
+  syncPaletteHighlight(prefix,hex);
+}
+function onAlphaSlider(prefix){
+  var val=document.getElementById(prefix+'AlphaSlider').value/100;
+  document.getElementById(prefix+'AlphaVal').textContent=val.toFixed(2);
+  if(prefix==='edit')editAlphaV=val; else browserAlphaV=val;
+}
+function syncPaletteHighlight(prefix,hex){
+  var pal=document.getElementById(prefix+'Palette');
+  if(!pal)return;
+  var swatches=pal.querySelectorAll('.pal-swatch');
+  for(var i=0;i<swatches.length;i++)
+    swatches[i].classList.toggle('selected',i<SKYUI_PALETTE.length&&SKYUI_PALETTE[i].h.toLowerCase()===hex.toLowerCase());
+}
+function buildPalette(prefix){
+  var html='';
+  for(var i=0;i<SKYUI_PALETTE.length;i++){
+    var c=SKYUI_PALETTE[i];
+    html+='<div class="pal-swatch" title="'+esc(c.n)+'" style="background:'+c.h+'" onclick="pickColor(\''+prefix+'\','+i+')"></div>';
+  }
+  document.getElementById(prefix+'Palette').innerHTML=html;
+}
+function pickColor(prefix,idx){
+  var c=SKYUI_PALETTE[idx];
+  setColor(prefix,hexToInt(c.h));
+}
+function intToHex(n){
+  var r=(n>>16)&0xFF,g=(n>>8)&0xFF,b=n&0xFF;
+  return '#'+('00'+r.toString(16)).slice(-2)+('00'+g.toString(16)).slice(-2)+('00'+b.toString(16)).slice(-2);
+}
+function hexToInt(hex){
+  return(parseInt(hex.slice(1,3),16)<<16)|(parseInt(hex.slice(3,5),16)<<8)|parseInt(hex.slice(5,7),16);
 }
 
-function drawThumb(canvas, bmp) {
-  canvas.getContext('2d').drawImage(bmp, 0, 0, 128, 128);
-  canvas.style.opacity = '1';
-  const ph = canvas.closest('.tat-thumb-wrap')?.querySelector('.tat-thumb-ph');
-  if (ph) ph.style.display = 'none';
-}
-
-const thumbObserver = new IntersectionObserver(entries => {
-  for (const e of entries)
-    if (e.isIntersecting) { thumbObserver.unobserve(e.target); loadThumb(e.target); }
-}, {rootMargin:'300px'});
-
-// ─── Grid card ───────────────────────────────────────────────────────────────
-function tatGridItem(t, showRemove) {
-  const texAttr = t.texture ? ` data-tex="${esc(t.texture)}"` : '';
-  const path    = [t.section, t.area].filter(Boolean).join(' › ');
-  const colorHex  = intToHex((t.color && t.color !== 0) ? t.color : 0xFFFFFF);
-  const alphaLabel = (t.alpha != null && t.alpha < 0.99) ? `<span class="alpha-badge">α${(t.alpha).toFixed(2)}</span>` : '';
-  const slotLabel  = showRemove && t.slot != null ? `<span class="slot-badge">Slot ${t.slot}</span>` : '';
-
-  const buttons = showRemove
-    ? `<div class="card-btns">
-        <button class="btn edit sm" onclick="openEditModal(${t.handle|0})">Edit</button>
-        <button class="btn danger sm" onclick="removeTattoo(${js(t.section)},${js(t.name)})"${t.locked?' disabled':''}>Remove</button>
-       </div>`
-    : `<button class="btn primary" onclick="openApplyModal(${t.handle|0})">Apply…</button>`;
-
-  return `<div class="grid-item">
-    <div class="tat-thumb-wrap">
-      <canvas class="tat-thumb" width="128" height="128"${texAttr} style="opacity:0"></canvas>
-      <div class="tat-thumb-ph"><div class="ph-icon">🖼</div><div class="ph-err"></div></div>
-      <div class="thumb-color-bar" style="background:${colorHex}"></div>
-    </div>
-    <div class="grid-name" title="${esc(t.name)}">${esc(t.name)}</div>
-    <div class="grid-path">${esc(path)}${slotLabel}${alphaLabel}</div>
-    ${buttons}
-  </div>`;
-}
-
-// ─── Build tree ───────────────────────────────────────────────────────────────
-function buildTree(items) {
-  const tree = {};
-  for (const t of items) {
-    const sec  = t.section || 'Unknown';
-    const area = t.area    || 'Unknown';
-    if (!tree[sec]) tree[sec] = {};
-    (tree[sec][area] = tree[sec][area] || []).push(t);
+// ─── Tree ────────────────────────────────────────────────────────────────────
+function buildTree(items){
+  var tree={};
+  for(var i=0;i<items.length;i++){
+    var t=items[i];
+    var sec=t.section||'(no section)';
+    var area=t.area||'(no area)';
+    if(!tree[sec])tree[sec]={};
+    if(!tree[sec][area])tree[sec][area]=[];
+    tree[sec][area].push(t);
   }
   return tree;
 }
-
-function renderTree(container, tree, showRemove) {
-  let html = '';
-  for (const [sec, areas] of Object.entries(tree)) {
-    const sk   = 'sec:'+sec;
-    const open = expanded[sk] !== false;
-    const tot  = Object.values(areas).reduce((s,a)=>s+a.length, 0);
-    html += `<div class="tree-node" id="tn-${esc(sk)}">
-      <div class="tree-hdr" onclick="toggleNode(${js(sk)})">
-        <span class="tree-arrow">${open?'▼':'▶'}</span>
-        <span class="tree-label">${esc(sec)}</span>
-        <span class="badge">${tot}</span>
-      </div>
-      <div class="tree-children" style="${open?'':'display:none'}">`;
-    for (const [area, tats] of Object.entries(areas)) {
-      const ak    = 'area:'+sec+':'+area;
-      const aopen = expanded[ak] !== false;
-      html += `<div class="tree-node" id="tn-${esc(ak)}">
-        <div class="tree-hdr" onclick="toggleNode(${js(ak)})">
-          <span class="tree-arrow">${aopen?'▼':'▶'}</span>
-          <span class="tree-sub-label">${esc(area)}</span>
-          <span class="badge">${tats.length}</span>
-        </div>
-        <div class="tree-children" style="${aopen?'':'display:none'}">
-          <div class="tat-grid">${tats.map(t=>tatGridItem(t,showRemove)).join('')}</div>
-        </div>
-      </div>`;
+function renderTree(container,tree){
+  var html='';
+  var secKeys=Object.keys(tree);
+  for(var si=0;si<secKeys.length;si++){
+    var sec=secKeys[si];
+    var areas=tree[sec];
+    var sk='sec:'+sec;
+    var open=expanded[sk]!==false;
+    var tot=0;
+    var akeys=Object.keys(areas);
+    for(var ai=0;ai<akeys.length;ai++)tot+=areas[akeys[ai]].length;
+    html+='<div class="tree-node" id="tn-'+escId(sk)+'">'+
+      '<div class="tree-hdr" onclick="toggleNode('+JSON.stringify(sk).replace(/"/g,'&quot;')+')">'+
+        '<span class="tree-arrow">'+(open?'&#9660;':'&#9658;')+'</span>'+
+        '<span class="tree-label">'+esc(sec)+'</span>'+
+        '<span class="badge">'+tot+'</span>'+
+      '</div>'+
+      '<div class="tree-children" '+(open?'':'style="display:none"')+'>';
+    for(var ai=0;ai<akeys.length;ai++){
+      var area=akeys[ai];
+      var tats=areas[area];
+      var ak='area:'+sec+':'+area;
+      var aopen=expanded[ak]!==false;
+      var gridItems='';
+      for(var ti=0;ti<tats.length;ti++){
+        var t=tats[ti];
+        var texAttr=t.texture?' data-tex="'+esc(t.texture)+'"':'';
+        var ukey=(t.section||'')+':'+t.name;
+        var usedSlots=slotUsageMap[ukey]||[];
+        var inUseCls=usedSlots.length?(usedSlots.indexOf(ctxSlot)>=0&&ctxIsReplace?' in-use-current':' in-use'):'';
+        var badges='';
+        for(var bi=0;bi<usedSlots.length;bi++){
+          var isCur=usedSlots[bi]===ctxSlot&&ctxIsReplace;
+          badges+='<span class="slot-badge'+(isCur?' current':'')+'">S'+usedSlots[bi]+'</span>';
+        }
+        var badgeHtml=badges?'<div class="slot-badges">'+badges+'</div>':'';
+        gridItems+='<div class="grid-item'+inUseCls+'" data-handle="'+(t.handle|0)+'" onclick="selectBrowserTattoo('+(t.handle|0)+')">'+
+          '<div class="tat-thumb-wrap">'+
+            '<canvas class="tat-thumb" width="100" height="100"'+texAttr+' style="opacity:0"></canvas>'+
+            '<div class="tat-thumb-ph"><div class="ph-icon">&#128444;</div><div class="ph-err"></div></div>'+
+            badgeHtml+
+          '</div>'+
+          '<div class="grid-name" title="'+esc(t.name||'')+'">'+esc(t.name||'?')+'</div>'+
+        '</div>';
+      }
+      html+='<div class="tree-node" id="tn-'+escId(ak)+'">'+
+        '<div class="tree-hdr" onclick="toggleNode('+JSON.stringify(ak).replace(/"/g,'&quot;')+')">'+
+          '<span class="tree-arrow">'+(aopen?'&#9660;':'&#9658;')+'</span>'+
+          '<span class="tree-sub-label">'+esc(area)+'</span>'+
+          '<span class="badge">'+tats.length+'</span>'+
+        '</div>'+
+        '<div class="tree-children" '+(aopen?'':'style="display:none"')+'>'+
+          '<div class="tat-grid">'+gridItems+'</div>'+
+        '</div>'+
+      '</div>';
     }
-    html += `</div></div>`;
+    html+='</div></div>';
   }
-  container.innerHTML = html || '<div class="empty">No matches</div>';
-  container.querySelectorAll('.tat-thumb[data-tex]').forEach(c=>thumbObserver.observe(c));
+  container.innerHTML=html;
+  var thumbs=container.querySelectorAll('.tat-thumb[data-tex]');
+  for(var i=0;i<thumbs.length;i++)thumbObserver.observe(thumbs[i]);
 }
+function toggleNode(key){
+  expanded[key]=!(expanded[key]!==false);
+  var node=document.getElementById('tn-'+escId(key));
+  if(!node)return;
+  var ch=node.querySelector('.tree-children');
+  var arrow=node.querySelector('.tree-hdr .tree-arrow');
+  var open=expanded[key]!==false;
+  if(ch)ch.style.display=open?'':'none';
+  if(arrow)arrow.innerHTML=open?'&#9660;':'&#9658;';
+  if(open){var thumbs=node.querySelectorAll('.tat-thumb[data-tex]');for(var i=0;i<thumbs.length;i++)thumbObserver.observe(thumbs[i]);}
+}
+function escId(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,function(c){return '_'+c.charCodeAt(0)+'_';});}
 
-// ─── Render ───────────────────────────────────────────────────────────────────
-function renderAvailable() {
-  const q    = document.getElementById('searchAvail').value.toLowerCase();
-  const list = document.getElementById('listAvailable');
-  const items = availableTattoos.filter(t =>
-    !q || t.name.toLowerCase().includes(q) ||
-    (t.section||'').toLowerCase().includes(q) ||
-    (t.area||'').toLowerCase().includes(q));
-  if (!items.length) {
-    list.innerHTML = `<div class="empty">${availableTattoos.length?'No matches':'No tattoos loaded'}</div>`;
+// ─── Thumbnails ───────────────────────────────────────────────────────────────
+var thumbCache={},thumbInFlight={};
+var thumbObserver=new IntersectionObserver(function(entries){
+  entries.forEach(function(e){if(e.isIntersecting){thumbObserver.unobserve(e.target);loadThumb(e.target);}});
+},{rootMargin:'200px'});
+
+function loadThumb(canvas){
+  var path=canvas.dataset.tex;
+  if(!path)return;
+  if(thumbCache[path]==='err'){
+    canvas.style.opacity='.15';
+    var _ph=canvas.nextElementSibling;
+    if(_ph){_ph.style.display='';var _e=_ph.querySelector('.ph-err');if(_e)_e.textContent=path;}
     return;
   }
-  renderTree(list, buildTree(items), false);
+  if(thumbCache[path]){drawThumb(canvas,thumbCache[path]);return;}
+  if(thumbInFlight[path])return;
+  thumbInFlight[path]=true;
+  sendCmd({action:'getTexture',path:path});
 }
-
-function renderApplied() {
-  const q    = document.getElementById('searchApplied').value.toLowerCase();
-  const list = document.getElementById('listApplied');
-  const items = appliedTattoos.filter(t =>
-    !q || t.name.toLowerCase().includes(q) ||
-    (t.section||'').toLowerCase().includes(q));
-  if (!items.length) {
-    list.innerHTML = `<div class="empty">${appliedTattoos.length?'No matches':'None applied'}</div>`;
-    return;
+function drawThumb(canvas,bmp){
+  var ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(bmp,0,0,canvas.width,canvas.height);
+  canvas.style.opacity='1';
+  var ph=canvas.nextElementSibling;
+  if(ph)ph.style.display='none';
+}
+function onTextureData(path,w,h,b64){
+  var bin,u8;
+  try{bin=atob(b64);u8=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);}
+  catch(e){delete thumbInFlight[path];thumbCache[path]='err';onTextureError(path);return;}
+  createImageBitmap(new ImageData(new Uint8ClampedArray(u8.buffer),w,h)).then(function(bmp){
+    delete thumbInFlight[path];
+    thumbCache[path]=bmp;
+    var canvases=document.querySelectorAll('canvas[data-tex]');
+    for(var i=0;i<canvases.length;i++){if(canvases[i].dataset.tex===path)drawThumb(canvases[i],bmp);}
+  }).catch(function(){
+    delete thumbInFlight[path];
+    thumbCache[path]='err';
+    onTextureError(path);
+  });
+}
+function onTextureError(path){
+  delete thumbInFlight[path];
+  thumbCache[path]='err';
+  var canvases=document.querySelectorAll('canvas[data-tex]');
+  for(var i=0;i<canvases.length;i++){
+    if(canvases[i].dataset.tex===path){
+      canvases[i].style.opacity='.15';
+      var ph=canvases[i].nextElementSibling;
+      if(ph){ph.style.display='';var e=ph.querySelector('.ph-err');if(e)e.textContent=path;}
+    }
   }
-  list.innerHTML = `<div class="tat-grid">${items.map(t=>tatGridItem(t,true)).join('')}</div>`;
-  list.querySelectorAll('.tat-thumb[data-tex]').forEach(c=>thumbObserver.observe(c));
 }
 
-// ─── UI helpers ───────────────────────────────────────────────────────────────
-function switchTab(name, el) {
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('panel-'+name).classList.add('active');
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function setStatus(msg,cls){
+  var el=document.getElementById('statusbar');
+  el.textContent=msg;el.className=cls||'';
 }
-function setStatus(msg, type) {
-  const el = document.getElementById('statusbar');
-  el.textContent = msg; el.className = 'statusbar '+(type||'');
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-function esc(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function js(s) { return esc(JSON.stringify(String(s))); }
 
 // ─── Drag to move ─────────────────────────────────────────────────────────────
-(function() {
-  const app = document.querySelector('.app');
-  const hdr = document.querySelector('header');
-
-  // Restore saved position
-  const saved = localStorage.getItem('stui_pos');
-  if (saved) {
-    try {
-      const {x, y} = JSON.parse(saved);
-      app.style.left = clampX(x) + 'px';
-      app.style.top  = clampY(y) + 'px';
-    } catch(e) {}
-  }
-
-  function clampX(x) { return Math.max(0, Math.min(x, window.innerWidth  - app.offsetWidth)); }
-  function clampY(y) { return Math.max(0, Math.min(y, window.innerHeight - app.offsetHeight)); }
-
-  let dragging = false, ox = 0, oy = 0;
-
-  hdr.addEventListener('mousedown', e => {
-    if (e.target.closest('button,select,input')) return;
-    dragging = true;
-    ox = e.clientX - app.offsetLeft;
-    oy = e.clientY - app.offsetTop;
-    app.classList.add('dragging');
-    e.preventDefault();
+(function(){
+  var app=document.getElementById('app');
+  var hdr=document.querySelector('header');
+  try{
+    var saved=localStorage.getItem('stui_pos');
+    if(saved){
+      var p=JSON.parse(saved);
+      app.style.right='auto';
+      app.style.left=Math.max(0,Math.min(p.x,window.innerWidth-app.offsetWidth))+'px';
+      app.style.top=Math.max(0,Math.min(p.y,window.innerHeight-app.offsetHeight))+'px';
+    }
+  }catch(e){}
+  var drag=false,ox=0,oy=0;
+  hdr.addEventListener('mousedown',function(e){
+    if(e.target.closest('button,select,input'))return;
+    drag=true;ox=e.clientX-app.offsetLeft;oy=e.clientY-app.offsetTop;
+    app.classList.add('dragging');e.preventDefault();
   });
-
-  document.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    app.style.left = clampX(e.clientX - ox) + 'px';
-    app.style.top  = clampY(e.clientY - oy) + 'px';
+  document.addEventListener('mousemove',function(e){
+    if(!drag)return;
+    app.style.right='auto';
+    app.style.left=Math.max(0,Math.min(e.clientX-ox,window.innerWidth-app.offsetWidth))+'px';
+    app.style.top=Math.max(0,Math.min(e.clientY-oy,window.innerHeight-app.offsetHeight))+'px';
   });
-
-  document.addEventListener('mouseup', () => {
-    if (!dragging) return;
-    dragging = false;
-    app.classList.remove('dragging');
-    localStorage.setItem('stui_pos', JSON.stringify({
-      x: app.offsetLeft, y: app.offsetTop
-    }));
+  document.addEventListener('mouseup',function(){
+    if(!drag)return;drag=false;app.classList.remove('dragging');
+    try{localStorage.setItem('stui_pos',JSON.stringify({x:app.offsetLeft,y:app.offsetTop}));}catch(e){}
   });
 })();
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+window.addEventListener('keydown',function(e){
+  if(e.key==='Escape'||e.keyCode===27){e.preventDefault();resetToSlots();}
+});
+
+document.addEventListener('DOMContentLoaded',function(){
+  buildPalette('edit');
+  buildPalette('browser');
+  var container=document.getElementById('slotScrollArea');
+  for(var i=0;i<AREAS.length;i++){
+    var area=AREAS[i];
+    var sec=document.createElement('div');
+    sec.className='area-section';sec.id='area-sec-'+area;
+    var hdr=document.createElement('div');hdr.className='area-hdr';
+    (function(a){hdr.onclick=function(){areaCollapsed[a]=!areaCollapsed[a];updateAreaSection(a);};})(area);
+    hdr.innerHTML='<span class="area-arrow">&#9660;</span><span class="area-label">'+area+'</span><span class="area-loading">Loading…</span>';
+    sec.appendChild(hdr);
+    container.appendChild(sec);
+  }
+});
+
+// ── DEV PREVIEW ──────────────────────────────────────────────────────────────
+// Auto-runs only in browser (slavetatsCmd not injected by PrismaUI).
+// Safe to ship — in-game slavetatsCmd already exists, this block never executes.
+if(typeof slavetatsCmd==='undefined'){
+  window.slavetatsCmd=function(json){console.log('[DEV CMD]',JSON.parse(json));};
+  setTimeout(function(){
+    // Bridge ready
+    slavetatsOnData('{"type":"ready","apiVersion":1,"apiOk":true}');
+    // Actors
+    slavetatsOnData(JSON.stringify({type:'actors',actors:[
+      {id:'0x14',name:'Player',isPlayer:true},{id:'0x64',name:'Serana'}
+    ]}));
+    // BODY slots — mix of occupied / free / external
+    var body=[];
+    for(var i=0;i<12;i++){
+      if(i===0) body.push({slot:0,occupied:true,name:'Neck Chain',section:'Slavetats',texture:'',color:0xCCCCCC,alpha:1.0,handle:1001});
+      else if(i===1) body.push({slot:1,occupied:true,name:'Arm Band',section:'Tattoos Inc',texture:'',color:0xFF6644,alpha:0.85,handle:1002});
+      else if(i===2) body.push({slot:2,external:true});
+      else body.push({slot:i,occupied:false});
+    }
+    slavetatsOnData(JSON.stringify({type:'slots',area:'BODY',slots:body}));
+    // FACE slots — mostly empty
+    var face=[];
+    for(var i=0;i<8;i++) face.push({slot:i,occupied:i===0,name:i===0?'Eye Mark':'',section:i===0?'Slavetats':'',texture:'',color:0xFFFFFF,alpha:1,handle:i===0?2001:0});
+    slavetatsOnData(JSON.stringify({type:'slots',area:'FACE',slots:face}));
+    // Available tattoos
+    var tats=[],idx=3001;
+    [['Slavetats','Body'],['Slavetats','Arms'],['Slavetats','Legs'],
+     ['Tattoos Inc','Body'],['Tattoos Inc','Arms'],['Angelic','Body']].forEach(function(p){
+      for(var t=0;t<6;t++) tats.push({handle:idx++,section:p[0],area:p[1],name:p[0]+' '+p[1]+' '+(t+1),texture:'',color:0xFFFFFF,alpha:1});
+    });
+    slavetatsOnData(JSON.stringify({type:'available',domain:'default',tattoos:tats}));
+  },200);
+}
 </script>
 </body>
 </html>

@@ -99,9 +99,17 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
 static void onSlaveTatsMessage(SKSE::MessagingInterface::Message* msg) {
     if (msg->type != slavetats::interface::Interface) return;
 
+    // Peek version before the strict check so the UI can surface a named error
+    uint32_t gotVersion = (msg->data && msg->dataLen >= 4)
+        ? *reinterpret_cast<const uint32_t*>(msg->data)
+        : 0u;
+
     auto* api = slavetats::interface::Addresses::from_void(msg->data);
     if (!api) {
-        logger::error("SlaveTatsUI: SlaveTatsNG interface version mismatch");
+        logger::error("SlaveTatsUI: SlaveTatsNG API version mismatch (got v{}, need v{})",
+            gotVersion, static_cast<uint32_t>(slavetats::interface::Addresses::version));
+        // Store peeked version so the UI can display a meaningful error on connect
+        Bridge::get()->onSlaveTatsVersionMismatch(gotVersion);
         return;
     }
     Bridge::get()->onSlaveTatsInterface(api);

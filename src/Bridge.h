@@ -19,6 +19,7 @@ public:
 
     // Call these from SKSE message handlers, in order
     void onSlaveTatsInterface(const slavetats::interface::Addresses* api);
+    void onSlaveTatsVersionMismatch(uint32_t gotVersion);
     void onJContainersReady(const jc::root_interface* root);
     void onDataLoaded();  // init PrismaUI, create view
 
@@ -38,7 +39,9 @@ private:
     void handleSyncTattoos(uint32_t actorId);
     void handleQueryActors();
     void handleQuerySlots(uint32_t actorId, std::string area);
+    void handleQueryAllSlots(uint32_t actorId);
     void handleApplyToSlot(uint32_t actorId, std::string section, std::string name, std::string domain, int slot, int color, float alpha);
+    void handleRemoveFromSlot(uint32_t actorId, std::string area, int slot);
     void handleUpdateTattoo(uint32_t actorId, int tattooHandle, int color, float alpha);
     void handleGetTexture(std::string texPath);
     void handleGetTextureBSA(std::string texPath, std::filesystem::path cachePath);
@@ -59,7 +62,9 @@ private:
     PRISMA_UI_API::IVPrismaUI1* m_prismaUI = nullptr;
     PrismaView m_view = 0;
     bool m_jcReady = false;
+    std::mutex m_toggleMutex;
     bool m_hidden = false;
+    uint32_t m_slaveTatsAPIVersion = 0;
 };
 
 }  // namespace stui
