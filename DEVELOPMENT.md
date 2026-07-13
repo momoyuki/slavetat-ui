@@ -60,12 +60,13 @@ handleGetTexture (background thread)
 
 ## Build Requirements
 
-| Tool | Version |
-|------|---------|
-| Visual Studio 2022 | with "Desktop development with C++" workload |
-| CMake | 3.21 or later |
-| vcpkg | integrated with Visual Studio or standalone |
-| Windows SDK | 10.0.19041.0 or later (for DirectXTex COM) |
+| Tool | Version | Notes |
+|------|---------|-------|
+| Visual Studio 2022 | any edition, "Desktop development with C++" workload | provides `vcvarsall.bat` + `vswhere.exe` |
+| CMake | 3.21 or later | |
+| Ninja | latest | CMake presets use the Ninja generator |
+| vcpkg | standalone clone | set `VCPKG_ROOT` to point at it (see below) |
+| Windows SDK | 10.0.19041.0 or later | for DirectXTex COM |
 
 ---
 
@@ -85,42 +86,45 @@ Declared in [vcpkg.json](vcpkg.json):
 }
 ```
 
-Run `vcpkg install` in the project root, or let CMake's toolchain file handle it automatically.
+`commonlibsse-ng` is pulled from the overlay registry declared in [vcpkg-configuration.json](vcpkg-configuration.json) (colorglass' vcpkg fork), not the main vcpkg registry. The custom triplet `x64-windows-skse` ([cmake/x64-windows-skse.cmake](cmake/x64-windows-skse.cmake)) links SKSE/game-engine ports dynamically and everything else statically — this is what CommonLibSSE-NG plugins expect.
+
+Dependencies are resolved automatically by CMake's vcpkg toolchain integration during configure — no manual `vcpkg install` step needed.
 
 ---
 
 ## Building
 
+### One-time setup
+
 ```powershell
-# Configure
-cmake -B build -S . `
-  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-  -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+$env:VCPKG_ROOT = "C:\path\to\your\vcpkg"   # set once, e.g. in your PowerShell profile
+```
 
-# Build (debug)
-cmake --build build --config Debug
+### Build
 
-# Build (release)
-cmake --build build --config Release
+```powershell
+.\build.ps1 -Config debug    # or -Config release (default)
+```
+
+`build.ps1`:
+1. Locates your Visual Studio 2022 install via `vswhere.exe` (works with any edition, not just Build Tools) and imports the MSVC x64 environment.
+2. Runs `cmake --preset build-$Config` (see [CMakePresets.json](CMakePresets.json)) to configure with the vcpkg toolchain and `x64-windows-skse` triplet.
+3. Runs `cmake --build build/$Config`.
+
+Equivalent manual steps, if you'd rather not use the script:
+
+```powershell
+cmake --preset build-debug      # or build-release
+cmake --build build/debug       # or build/release
 ```
 
 Output DLL: `build\debug\SlaveTatsUI.dll` or `build\release\SlaveTatsUI.dll`
 
 ---
 
-## Deployment (MO2)
+## Deployment
 
-```powershell
-$mod = "D:\Modding\SKYRIM-MOD\mods\SlaveTatsUI"
-
-# DLL
-Copy-Item "build\debug\SlaveTatsUI.dll" "$mod\SKSE\Plugins\SlaveTatsUI.dll" -Force
-
-# UI
-Copy-Item "view\index.html" "$mod\PrismaUI\views\SlaveTatsUI\index.html" -Force
-```
-
-> **Never** place files directly in the Skyrim data directory. MO2's usvfs virtualises them at runtime.
+See [DEPLOY.md](DEPLOY.md) for copying a build into an MO2 profile for in-game testing.
 
 ---
 
@@ -180,6 +184,8 @@ slavetat-ui\
 ├── vcpkg.json
 ├── README.md
 ├── DEVELOPMENT.md
+├── DEPLOY.md
+├── build.ps1
 ├── include\
 │   ├── PrismaUI_API.h             PrismaUI C++ header
 │   ├── SlaveTatsNG_Interface.h    SlaveTatsNG API

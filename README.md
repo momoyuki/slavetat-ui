@@ -2,6 +2,8 @@
 
 A PrismaUI overlay for SlaveTatsNG — browse, apply, and remove body tattoos from an in-game panel without opening any menus.
 
+> Building from source or contributing? See [DEVELOPMENT.md](DEVELOPMENT.md) and [DEPLOY.md](DEPLOY.md).
+
 ---
 
 ## Requirements
