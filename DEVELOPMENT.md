@@ -24,15 +24,27 @@ HTML (index.html)                         Bridge.cpp
 slavetatsCmd(JSON)  ──── PrismaUI ──────► onJSCommand()
                                               │
                                          dispatch by action:
-                                         ┌── queryAvailable → handleQueryAvailable (game thread)
-                                         ├── queryApplied   → handleQueryApplied   (game thread)
-                                         ├── addTattoo      → handleAddTattoo      (game thread)
-                                         ├── removeTattoo   → handleRemoveTattoo   (game thread)
-                                         ├── syncTattoos    → handleSyncTattoos    (game thread)
-                                         └── getTexture     → std::thread → handleGetTexture (bg)
+                                         ┌── toggleUI        → toggleUI()                (UI thread)
+                                         ├── queryActors     → handleQueryActors          (game thread)
+                                         ├── queryAvailable  → handleQueryAvailable       (game thread)
+                                         ├── querySlots      → handleQuerySlots           (game thread)
+                                         ├── queryAllSlots   → handleQueryAllSlots        (game thread, loops 4 areas)
+                                         ├── applyToSlot     → handleApplyToSlot          (game thread)
+                                         ├── removeFromSlot  → handleRemoveFromSlot       (game thread)
+                                         ├── updateTattoo    → handleUpdateTattoo         (game thread)
+                                         ├── syncTattoos     → handleSyncTattoos          (game thread)
+                                         ├── getTexture      → std::thread → handleGetTexture (bg)
+                                         │
+                                         │  legacy actions — still handled, but the current
+                                         │  index.html UI does not call these anymore:
+                                         ├── queryApplied    → handleQueryApplied         (game thread)
+                                         ├── addTattoo       → handleAddTattoo            (game thread)
+                                         └── removeTattoo    → handleRemoveTattoo         (game thread)
 
 slavetatsOnData(JSON) ◄─── PrismaUI ──── sendToUI(json)
 ```
+
+Current UI (`view/index.html`) is slot-based: it queries all slots for BODY/FACE/HANDS/FEET up front (`queryAllSlots`) and renders a grid per area. Clicking a free slot opens the tattoo browser (`applyToSlot`); clicking an occupied slot opens the edit view (`updateTattoo` / `removeFromSlot`). The older `queryApplied`/`addTattoo`/`removeTattoo` actions and the `"applied"` response type predate this slot model — Bridge.cpp still implements them, but `slavetatsOnData` in `index.html` has no `case 'applied':`, so responses to `queryApplied` are silently dropped by the current front-end. Treat those three as legacy/available-for-reuse, not part of the active contract.
 
 ### Texture Pipeline
 
@@ -227,24 +239,40 @@ m_prismaUI->RegisterJSListener(m_view, "slavetatsCmd", onJSCommand);
 
 ### Message types (C++ → JS)
 
+Handled by the `switch(d.type)` in `slavetatsOnData` ([view/index.html](view/index.html)):
+
 | type | Fields | Trigger |
 |------|--------|---------|
-| `ready` | — | Plugin fully initialised |
-| `available` | `tattoos[]` | Response to `queryAvailable` |
-| `applied` | `tattoos[]` | Response to `queryApplied` |
-| `success` | `action`, `section`, `name` | Add/remove/sync succeeded |
+| `ready` | `apiVersion`, `apiOk` | View created; SlaveTatsNG API bound (or not) |
+| `show` | — | UI opened via `toggleUI` (F8) |
+| `available` | `domain`, `tattoos[]` | Response to `queryAvailable` |
+| `actors` | `actors[]` (`id`, `name`, `isPlayer`) | Response to `queryActors` |
+| `slots` | `area`, `maxSlots`, `slots[]` (`slot`, `occupied`, `external?`, `name?`, `section?`, `texture?`, `color?`, `alpha?`, `handle?`) | Response to `querySlots` / `queryAllSlots` (fired once per area) |
+| `success` | `action`, plus action-specific fields (e.g. `slot`/`section`/`name` for `applyToSlot`, `area`/`slot` for `removeFromSlot`) | `applyToSlot` / `removeFromSlot` / `updateTattoo` / `syncTattoos` succeeded |
 | `error` | `message` | Any error |
-| `texture` | `path`, `w`, `h`, `data` (base64 RGBA) | Response to `getTexture` |
-| `textureError` | `path` | Texture not found |
+| `texture` | `path`, `w`, `h`, `data` (base64 **raw RGBA**, not an encoded image — decode via `atob`+`ImageData`+`createImageBitmap` and draw to `<canvas>`) | Response to `getTexture` |
+| `textureError` | `path` | Texture not found / decode failed |
+
+Legacy, still sent by Bridge.cpp but **not handled** by the current `index.html` (no matching `case`): `applied` (response to `queryApplied`).
 
 ### Message types (JS → C++)
 
-| action | Fields |
-|--------|--------|
-| `queryAvailable` | `domain` |
-| `queryApplied` | `actorId` (hex FormID) |
-| `addTattoo` | `actorId`, `section`, `name`, `color`, `alpha` |
-| `removeTattoo` | `actorId`, `section`, `name` |
-| `syncTattoos` | `actorId` |
-| `getTexture` | `path` (relative to `textures\actors\character\slavetats\`) |
-| `toggleUI` | — |
+Dispatched by `action` in `onJSCommand` ([src/Bridge.cpp](src/Bridge.cpp)):
+
+| action | Fields | Used by current UI? |
+|--------|--------|------|
+| `toggleUI` | — | yes |
+| `queryActors` | — | yes |
+| `queryAvailable` | `domain` (default `"default"`) | yes |
+| `querySlots` | `actorId`, `area` | via `queryAllSlots` |
+| `queryAllSlots` | `actorId` | yes — queries BODY/FACE/HANDS/FEET |
+| `applyToSlot` | `actorId`, `section`, `name`, `domain`, `slot`, `color`, `alpha` | yes |
+| `removeFromSlot` | `actorId`, `area`, `slot` | yes |
+| `updateTattoo` | `actorId`, `tattooHandle`, `color`, `alpha` | yes |
+| `syncTattoos` | `actorId` | yes |
+| `getTexture` | `path` (relative to `textures\actors\character\slavetats\`) | yes |
+| `queryApplied` | `actorId` (hex FormID) | no — legacy |
+| `addTattoo` | `actorId`, `section`, `name`, `color`, `alpha` | no — legacy |
+| `removeTattoo` | `actorId`, `section`, `name` | no — legacy |
+
+`actorId` defaults to `0x14` (player) server-side if omitted. All actor-scoped actions except `getTexture`/`queryActors`/`toggleUI` run on the game thread via `SKSE::GetTaskInterface()->AddTask(...)`; `getTexture` runs on a detached background thread (file I/O + DirectXTex decode).

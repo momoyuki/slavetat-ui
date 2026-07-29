@@ -38,14 +38,26 @@ All of the following must be installed and enabled **before** loading SlaveTats 
 
 ## Usage
 
+The UI shows a **slot grid** grouped by body area (BODY / FACE / HANDS / FEET). Each slot is either empty (green), occupied (blue), or used by another mod's overlay (amber, read-only).
+
 | Action | How |
 |--------|-----|
-| Open / close UI | Press **F8** in-game |
-| Browse tattoos | **Available** tab → expand Section → Area → thumbnails |
-| Apply a tattoo | Click **Apply** on any thumbnail card |
-| Remove a tattoo | Switch to **Applied** tab → click **Remove** |
-| Filter | Type in the search bar (filters by name, section, area) |
+| Open / close UI | Press **F8** in-game (configurable — see [Changing the hotkey](#changing-the-hotkey) below) |
+| Switch actor | **Actor** dropdown in the header; click **&#8635;** to rescan nearby NPCs |
+| Apply a tattoo to an empty slot | Click a green (empty) slot → pick a tattoo from the browser (expand Section → Area, or **Show All** to search across areas) → adjust color/alpha → **Apply to Slot** |
+| Edit an applied tattoo | Click a blue (occupied) slot → adjust color/alpha → **Save** |
+| Replace an applied tattoo | Open the slot's edit view → **Replace** → pick a new tattoo from the browser |
+| Remove a tattoo | Open the slot's edit view → **Remove** → confirm |
+| Filter the tattoo browser | Type in the search bar (filters by name/section) while the browser view is open |
 | Sync visuals | Click **Sync** button (top-right) if tattoos appear out of sync |
+
+### Changing the hotkey
+
+The F8 toggle is configurable via `SlaveTatsUI.json`, created on first run at:
+```
+%USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SlaveTatsUI.json
+```
+Edit the `"hotkey"` field to any of `F1`-`F12`, `INSERT`, `DELETE`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`, `TILDE`, `BACKSLASH`, `NUMPAD0`-`NUMPAD9`, or a raw DIK scancode integer, then restart the game.
 
 ### Thumbnails
 
@@ -62,7 +74,7 @@ All of the following must be installed and enabled **before** loading SlaveTats 
 ## Compatibility
 
 - **Skyrim SE** (1.5.97) and **AE** (1.6.x) — depends on which SKSE64 and CommonLibSSE-NG build the DLL was compiled against.
-- The UI panel appears on the right side of the screen (540px wide) and does not obstruct the left-side view of your character.
+- The UI panel appears on the right side of the screen (520px wide, draggable) and does not obstruct the left-side view of your character.
 - Compatible with any SlaveTats texture pack that follows the standard path:
   `textures\actors\character\slavetats\<section>\*.dds`
 
