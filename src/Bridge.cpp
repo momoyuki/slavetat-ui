@@ -3,6 +3,7 @@
 #include "adapters/PrismaTattooSerializer.h"
 #include "jcontainers_mini.h"
 #include "textures/ExactStreamReader.h"
+#include "textures/TextureResolver.h"
 
 namespace stui {
 
@@ -580,9 +581,16 @@ void Bridge::handleGetTexture(std::string texPath) {
 
     wchar_t exeBuf[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
-    auto sourcePath = std::filesystem::path(exeBuf).parent_path()
-                      / L"Data" / L"textures" / L"actors" / L"character" / L"slavetats"
-                      / std::filesystem::path(texPath);
+    const auto textureRoot = std::filesystem::path(exeBuf).parent_path()
+        / L"Data" / L"textures" / L"actors" / L"character" / L"slavetats";
+    const auto normalizedPath = textures::TextureResolver::normalize(texPath);
+    if (!normalizedPath) {
+        logger::warn("SlaveTatsUI: rejected unsafe texture path: {}", texPath);
+        sendToUI(std::format(
+            R"({{"type":"textureError","path":"{}"}})", escapeJSON(texPath)));
+        return;
+    }
+    const auto sourcePath = textureRoot / std::filesystem::path(*normalizedPath);
 
     // Cache hit check: valid if cache exists AND (no loose source OR source is not newer)
     {
@@ -602,14 +610,21 @@ void Bridge::handleGetTexture(std::string texPath) {
         }
     }
 
-    // Cache miss or stale — try loose DDS file first
-    DirectX::ScratchImage raw;
-    DirectX::TexMetadata  meta;
-    HRESULT hr = DirectX::LoadFromDDSFile(sourcePath.wstring().c_str(),
-                                          DirectX::DDS_FLAGS_NONE, &meta, raw);
-    if (SUCCEEDED(hr)) {
-        sendDecodedTexture(texPath, raw, cachePath);
-        return;
+    textures::TextureResolver resolver(textureRoot);
+    auto loose = resolver.resolveLoose(*normalizedPath);
+    if (loose) {
+        DirectX::ScratchImage raw;
+        DirectX::TexMetadata meta;
+        const HRESULT hr = DirectX::LoadFromDDSMemory(
+            loose->bytes.data(), loose->bytes.size(), DirectX::DDS_FLAGS_NONE, &meta, raw);
+        if (SUCCEEDED(hr)) {
+            sendDecodedTexture(texPath, raw, cachePath);
+            return;
+        }
+        logger::warn(
+            "SlaveTatsUI: loose texture decode failed, trying BSA: {} hr=0x{:X}",
+            texPath,
+            static_cast<uint32_t>(hr));
     }
 
     // Loose file not found — fall back to game thread BSA reader
@@ -620,24 +635,36 @@ void Bridge::handleGetTexture(std::string texPath) {
 
 // Runs on game thread — reads texture from BSA via Skyrim's own reader
 void Bridge::handleGetTextureBSA(std::string texPath, std::filesystem::path cachePath) {
-    std::string relPath = "textures\\actors\\character\\slavetats\\";
-    for (char c : texPath) relPath += (c == '/') ? '\\' : c;
-
-    RE::BSResourceNiBinaryStream stream(relPath.c_str());
-    if (!stream.good()) {
-        logger::warn("SlaveTatsUI: texture not found (loose + BSA): {}", texPath);
+    wchar_t exeBuf[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
+    const auto textureRoot = std::filesystem::path(exeBuf).parent_path()
+        / L"Data" / L"textures" / L"actors" / L"character" / L"slavetats";
+    textures::TextureResolver resolver(textureRoot);
+    auto resolved = resolver.resolveArchive(texPath, [](std::string_view resourcePath) {
+        const std::string path(resourcePath);
+        RE::BSResourceNiBinaryStream stream(path.c_str());
+        if (!stream.good()) {
+            return textures::TextureBytesResult(
+                std::unexpected(textures::TextureResolveError::notFound));
+        }
+        const std::uint32_t resourceSize = stream.stream->totalSize;
+        auto bytes = textures::readExactBytes(stream, resourceSize);
+        if (!bytes) {
+            return textures::TextureBytesResult(
+                std::unexpected(textures::TextureResolveError::readFailed));
+        }
+        return textures::TextureBytesResult(std::move(*bytes));
+    });
+    if (!resolved) {
+        if (resolved.error() == textures::TextureResolveError::readFailed) {
+            logger::warn("SlaveTatsUI: BSA texture read failed: {}", texPath);
+        } else {
+            logger::warn("SlaveTatsUI: texture not found (loose + BSA): {}", texPath);
+        }
         sendToUI(std::format(R"({{"type":"textureError","path":"{}"}})", escapeJSON(texPath)));
         return;
     }
-
-    const std::uint32_t resourceSize = stream.stream->totalSize;
-    auto dataResult = textures::readExactBytes(stream, resourceSize);
-    if (!dataResult) {
-        logger::warn("SlaveTatsUI: BSA texture read failed: {} size={}", texPath, resourceSize);
-        sendToUI(std::format(R"({{"type":"textureError","path":"{}"}})", escapeJSON(texPath)));
-        return;
-    }
-    auto data = std::move(*dataResult);
+    auto data = std::move(resolved->bytes);
 
     // Decode on background thread so game thread isn't blocked
     std::thread([this, texPath, cachePath = std::move(cachePath), data = std::move(data)]() mutable {

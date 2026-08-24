@@ -30,6 +30,7 @@ set(headers
     src/repository/TattooSourceParser.h
     src/repository/TattooSourceScanner.h
     src/textures/ExactStreamReader.h
+    src/textures/TextureResolver.h
 )
 
 set(sources
@@ -43,6 +44,7 @@ set(sources
     src/repository/TattooRepository.cpp
     src/repository/TattooSourceParser.cpp
     src/repository/TattooSourceScanner.cpp
+    src/textures/TextureResolver.cpp
 )
 
 find_package(CommonLibSSE CONFIG REQUIRED)
@@ -131,4 +133,11 @@ if(BUILD_TESTING)
     target_include_directories(TattooCatalogStoreTests PRIVATE src)
     target_link_libraries(TattooCatalogStoreTests PRIVATE nlohmann_json::nlohmann_json)
     add_test(NAME TattooCatalogStoreTests COMMAND TattooCatalogStoreTests)
+
+    add_executable(TextureResolverTests
+        src/textures/TextureResolver.cpp
+        tests/textures/TextureResolverTests.cpp
+    )
+    target_include_directories(TextureResolverTests PRIVATE src)
+    add_test(NAME TextureResolverTests COMMAND TextureResolverTests)
 endif()
