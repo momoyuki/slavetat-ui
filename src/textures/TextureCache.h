@@ -25,6 +25,9 @@ public:
         }
 
         auto resource = std::invoke(std::forward<Loader>(loader));
+        if (!resource) {
+            return nullptr;
+        }
         m_recency.emplace_front(path);
         m_entries.emplace(m_recency.front(), Entry{resource, m_recency.begin()});
         if (m_entries.size() > m_capacity) {

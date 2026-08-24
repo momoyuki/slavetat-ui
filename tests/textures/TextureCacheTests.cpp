@@ -59,10 +59,27 @@ void evictsLeastRecentlyUsedTextureAtCapacity() {
     expect(cache.size() == 2, "expected cache to remain within capacity");
 }
 
+void doesNotCacheFailedTextureLoad() {
+    stui::textures::TextureCache<int> cache(2);
+    int loadCount = 0;
+    const auto fail = [&]() -> std::shared_ptr<int> {
+        ++loadCount;
+        return nullptr;
+    };
+
+    const auto first = cache.getOrLoad("broken.dds", fail);
+    const auto second = cache.getOrLoad("broken.dds", fail);
+    expect(!first && !second, "expected texture load failure to reach caller");
+
+    expect(loadCount == 2, "expected failed texture load to be retried");
+    expect(cache.size() == 0, "expected failed texture to stay out of cache");
+}
+
 }  // namespace
 
 int main() {
     run("cache hit skips duplicate texture load", reusesCachedTextureWithoutLoadingAgain);
     run("capacity evicts least recently used texture", evictsLeastRecentlyUsedTextureAtCapacity);
+    run("failed texture load is not cached", doesNotCacheFailedTextureLoad);
     return 0;
 }
