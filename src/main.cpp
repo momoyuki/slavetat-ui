@@ -1,14 +1,20 @@
 #include "pch.h"
 #include "Bridge.h"
 #include "SlaveTatsNG_Interface.h"
-#include "repository/TattooSourceParser.h"
-#include "repository/TattooSourceScanner.h"
+#include "repository/TattooCatalogLoader.h"
 
 #include <array>
+#include <optional>
 
 using namespace stui;
 
 // ── Config (SlaveTatsUI.json) ─────────────────────────────────────────────────
+namespace {
+
+std::optional<repository::TattooCatalog> g_tattooCatalog;
+
+}  // namespace
+
 
 namespace Config {
 
@@ -108,42 +114,31 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                 const auto sourceDirectory = std::filesystem::path(
                     executablePath.data(), executablePath.data() + pathLength).parent_path()
                     / L"Data" / repository::kTattooSourceRelativeDirectory;
-                const auto sources = repository::scanTattooSources(sourceDirectory);
+                auto catalog = repository::loadTattooCatalog(sourceDirectory);
 
-                if (!sources) {
+                if (!catalog) {
                     logger::warn(
                         "SlaveTatsUI: effective JSON scan failed for '{}': {}",
                         sourceDirectory.string(),
-                        sources.error().message());
+                        catalog.error().message());
                 } else {
                     logger::info(
-                        "SlaveTatsUI: discovered {} effective SlaveTats JSON sources",
-                        sources->size());
-                    std::size_t definitionCount = 0;
-                    std::size_t issueCount = 0;
-                    for (const auto& source : *sources) {
-                        logger::debug(
-                            "SlaveTatsUI: source id='{}' pack='{}' file='{}'",
-                            source.sourceId, source.packName, source.sourceFile);
-
-                        const auto report = repository::parseTattooSource(source);
-                        definitionCount += report.definitions.size();
-                        issueCount += report.issues.size();
-                        for (const auto& issue : report.issues) {
-                            if (issue.entryIndex) {
-                                logger::warn(
-                                    "SlaveTatsUI: source '{}' entry {} skipped: {}",
-                                    source.sourceId, *issue.entryIndex, issue.message);
-                            } else {
-                                logger::warn(
-                                    "SlaveTatsUI: source '{}' skipped: {}",
-                                    source.sourceId, issue.message);
-                            }
+                        "SlaveTatsUI: loaded {} tattoo definitions from {} sources ({} issues)",
+                        catalog->repository.query().totalEntries,
+                        catalog->sourceCount,
+                        catalog->issues.size());
+                    for (const auto& issue : catalog->issues) {
+                        if (issue.entryIndex) {
+                            logger::warn(
+                                "SlaveTatsUI: source '{}' entry {} skipped: {}",
+                                issue.sourceId, *issue.entryIndex, issue.message);
+                        } else {
+                            logger::warn(
+                                "SlaveTatsUI: source '{}' skipped: {}",
+                                issue.sourceId, issue.message);
                         }
                     }
-                    logger::info(
-                        "SlaveTatsUI: parsed {} tattoo definitions from {} sources ({} issues)",
-                        definitionCount, sources->size(), issueCount);
+                    g_tattooCatalog = std::move(*catalog);
                 }
             } catch (const std::exception& error) {
                 logger::warn(
