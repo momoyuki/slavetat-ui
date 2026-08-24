@@ -1,0 +1,267 @@
+#include "repository/TattooRepository.h"
+
+#include <algorithm>
+#include <exception>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace {
+
+using stui::repository::TattooDefinition;
+using stui::repository::TattooFilter;
+using stui::repository::TattooRepository;
+
+TattooDefinition definition(
+    std::string sourceId,
+    std::string pack,
+    std::string section,
+    std::string name,
+    std::string texture,
+    std::string area,
+    std::size_t sourceIndex = 0) {
+    return TattooDefinition{
+        .sourceId = std::move(sourceId),
+        .sourceFile = pack + ".json",
+        .packName = std::move(pack),
+        .sourceIndex = sourceIndex,
+        .name = std::move(name),
+        .section = std::move(section),
+        .texturePath = std::move(texture),
+        .area = std::move(area),
+    };
+}
+
+void expect(bool condition, std::string_view message) {
+    if (!condition) {
+        throw std::runtime_error(std::string(message));
+    }
+}
+
+void ordersDefinitionsDeterministicallyAndPreservesMetadata() {
+    auto alpha = definition("a.json", "pack a", "Marks", "Alpha", "a.dds", "Body", 4);
+    alpha.glow = 123;
+    alpha.inBsa = true;
+    alpha.credit = "Artist";
+    std::vector<TattooDefinition> definitions{
+        definition("z.json", "Pack B", "Marks", "Zulu", "z.dds", "Body"),
+        definition("a.json", "pack a", "Marks", "Beta", "b.dds", "Body", 5),
+        std::move(alpha),
+    };
+    TattooRepository repository(definitions);
+    std::ranges::reverse(definitions);
+    TattooRepository reversedRepository(std::move(definitions));
+
+    const auto page = repository.query();
+    const auto reversedPage = reversedRepository.query();
+
+    expect(page.entries.size() == 3, "expected all definitions");
+    expect(page.entries[0].name == "Alpha", "expected folded pack/name ordering");
+    expect(page.entries[1].name == "Beta", "expected stable order within pack");
+    expect(page.entries[2].name == "Zulu", "expected later pack last");
+    expect(page.entries[0].sourceId == "a.json" && page.entries[0].sourceIndex == 4,
+        "expected source provenance preserved");
+    expect(page.entries[0].glow == 123 && page.entries[0].inBsa == true &&
+            page.entries[0].credit == "Artist",
+        "expected optional metadata preserved");
+    expect(page.totalEntries == 3 && page.matchedEntries == 3,
+        "expected total and match counts");
+    expect(page.pageIndex == 0 && page.pageSize == 24 && page.pageCount == 1,
+        "expected default paging");
+    expect(reversedPage.entries.size() == page.entries.size(),
+        "expected input permutation to preserve result count");
+    for (std::size_t index = 0; index < page.entries.size(); ++index) {
+        expect(reversedPage.entries[index].sourceId == page.entries[index].sourceId &&
+                reversedPage.entries[index].sourceIndex == page.entries[index].sourceIndex,
+            "expected input permutation to preserve deterministic order");
+    }
+}
+
+void paginatesAndClampsOutOfRangePage() {
+    std::vector<TattooDefinition> definitions;
+    for (std::size_t index = 0; index < 5; ++index) {
+        definitions.push_back(definition(
+            "pack.json",
+            "Pack",
+            "Marks",
+            "Mark " + std::to_string(index),
+            std::to_string(index) + ".dds",
+            "Body",
+            index));
+    }
+    TattooRepository repository(std::move(definitions));
+
+    const auto page = repository.query(TattooFilter{.pageIndex = 9, .pageSize = 2});
+
+    expect(page.pageIndex == 2 && page.pageCount == 3,
+        "expected page index clamped to last page");
+    expect(page.entries.size() == 1, "expected one entry on final page");
+    expect(page.entries.front().name == "Mark 4", "expected deterministic final entry");
+}
+
+void zeroPageSizeUsesDefault() {
+    TattooRepository repository({
+        definition("pack.json", "Pack", "Marks", "Mark", "mark.dds", "Body"),
+    });
+
+    const auto page = repository.query(TattooFilter{.pageSize = 0});
+
+    expect(page.pageSize == 24, "expected zero page size to use default");
+    expect(page.entries.size() == 1, "expected entry returned with default page size");
+}
+
+void searchesAcrossMetadataCaseInsensitively() {
+    TattooRepository repository({
+        definition("rose.json", "Rose Pack", "Flowers", "Red Rose", "rose/red.dds", "Body"),
+        definition("rune.json", "Rune Pack", "Magic", "Blue Rune", "rune/blue.dds", "Face"),
+    });
+
+    for (const std::string_view search : {
+             "RED ROSE", "ROSE PACK", "ROSE PACK.JSON", "FLOWERS", "BODY", "ROSE/RED"}) {
+        const auto page = repository.query(TattooFilter{.search = std::string(search)});
+
+        expect(page.matchedEntries == 1, "expected folded metadata search match");
+        expect(page.entries.front().name == "Red Rose", "expected rose result");
+        expect(page.totalEntries == 2, "expected unfiltered total preserved");
+    }
+}
+
+void combinesSourceSectionAndAreaFilters() {
+    TattooRepository repository({
+        definition("one.json", "One", "Marks", "Body One", "one.dds", "Body"),
+        definition("one.json", "One", "Marks", "Face One", "face.dds", "Face"),
+        definition("two.json", "Two", "Marks", "Body Two", "two.dds", "Body"),
+    });
+
+    const auto page = repository.query(TattooFilter{
+        .sourceId = "ONE.JSON",
+        .section = "marks",
+        .area = "BODY",
+    });
+
+    expect(page.matchedEntries == 1, "expected all exact filters combined");
+    expect(page.entries.front().name == "Body One",
+        "expected only matching source, section, and area");
+}
+
+void emptyMatchResetsPaging() {
+    TattooRepository repository({
+        definition("one.json", "One", "Marks", "Mark", "one.dds", "Body"),
+    });
+
+    const auto page = repository.query(TattooFilter{
+        .search = "missing",
+        .pageIndex = 8,
+        .pageSize = 12,
+    });
+
+    expect(page.entries.empty(), "expected empty page");
+    expect(page.matchedEntries == 0 && page.pageCount == 0,
+        "expected zero match and page counts");
+    expect(page.pageIndex == 0 && page.pageSize == 12,
+        "expected empty result paging normalized");
+}
+
+void buildsStableSourceAwareFacets() {
+    TattooRepository repository({
+        definition("b.json", "Same Pack", "Marks", "B", "b.dds", "BODY"),
+        definition("a.json", "Same Pack", "marks", "A", "a.dds", "Body"),
+        definition("c.json", "Other", "Runes", "C", "c.dds", "Face"),
+    });
+
+    const auto& facets = repository.facets();
+
+    expect(facets.sources.size() == 3,
+        "expected identical pack labels to retain distinct sources");
+    expect(facets.sources[0] == stui::repository::TattooSourceOption{
+            .sourceId = "c.json",
+            .packName = "Other",
+        },
+        "expected folded source display ordering");
+    expect(facets.sections == std::vector<std::string>{"Marks", "Runes"},
+        "expected folded duplicate-free sections");
+    expect(facets.areas == std::vector<std::string>{"BODY", "Face"},
+        "expected folded duplicate-free areas");
+}
+
+void emptyRepositoryReturnsEmptyPageAndFacets() {
+    TattooRepository repository(std::vector<TattooDefinition>{});
+
+    const auto page = repository.query();
+    const auto& facets = repository.facets();
+
+    expect(page.entries.empty() && page.totalEntries == 0 && page.matchedEntries == 0,
+        "expected empty repository counts");
+    expect(page.pageIndex == 0 && page.pageCount == 0,
+        "expected empty repository paging");
+    expect(facets.sources.empty() && facets.sections.empty() && facets.areas.empty(),
+        "expected empty repository facets");
+}
+
+void queriesLargeLibraryWithoutExternalDependencies() {
+    std::vector<TattooDefinition> definitions;
+    definitions.reserve(2048);
+    for (std::size_t index = 0; index < 2048; ++index) {
+        definitions.push_back(definition(
+            "pack.json",
+            "Pack",
+            index % 2 == 0 ? "Even" : "Odd",
+            "Mark " + std::to_string(index),
+            std::to_string(index) + ".dds",
+            "Body",
+            index));
+    }
+    TattooRepository repository(std::move(definitions));
+
+    const auto page = repository.query(TattooFilter{
+        .section = "even",
+        .pageIndex = 1,
+        .pageSize = 48,
+    });
+
+    expect(page.totalEntries == 2048 && page.matchedEntries == 1024,
+        "expected complete metadata counts");
+    expect(page.entries.size() == 48 && page.pageCount == 22,
+        "expected bounded page from large library");
+}
+
+template <class Test>
+int run(std::string_view name, Test&& test) {
+    try {
+        std::forward<Test>(test)();
+        std::cout << "PASS " << name << '\n';
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "FAIL " << name << ": " << error.what() << '\n';
+        return 1;
+    }
+}
+
+}  // namespace
+
+int main() {
+    int failures = 0;
+    failures += run(
+        "orders definitions and preserves metadata",
+        ordersDefinitionsDeterministicallyAndPreservesMetadata);
+    failures += run("paginates and clamps out-of-range page", paginatesAndClampsOutOfRangePage);
+    failures += run("zero page size uses default", zeroPageSizeUsesDefault);
+    failures += run(
+        "searches across metadata case-insensitively",
+        searchesAcrossMetadataCaseInsensitively);
+    failures += run(
+        "combines source, section, and area filters",
+        combinesSourceSectionAndAreaFilters);
+    failures += run("empty match resets paging", emptyMatchResetsPaging);
+    failures += run("builds stable source-aware facets", buildsStableSourceAwareFacets);
+    failures += run(
+        "empty repository returns empty page and facets",
+        emptyRepositoryReturnsEmptyPageAndFacets);
+    failures += run(
+        "queries large library without external dependencies",
+        queriesLargeLibraryWithoutExternalDependencies);
+    return failures == 0 ? 0 : 1;
+}
