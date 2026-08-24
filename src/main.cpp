@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "Bridge.h"
 #include "SlaveTatsNG_Interface.h"
+#include "repository/TattooSourceScanner.h"
+
+#include <array>
 
 using namespace stui;
 
@@ -91,6 +94,42 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
     switch (msg->type) {
     case SKSE::MessagingInterface::kDataLoaded:
         RE::BSInputDeviceManager::GetSingleton()->AddEventSink(InputSink::get());
+        {
+            std::array<wchar_t, 32768> executablePath{};
+            const DWORD pathLength = GetModuleFileNameW(
+                nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
+
+            if (pathLength == 0 || pathLength >= executablePath.size()) {
+                logger::warn(
+                    "SlaveTatsUI: cannot locate Skyrim executable for effective JSON scan (error={})",
+                    GetLastError());
+            } else try {
+                const auto sourceDirectory = std::filesystem::path(
+                    executablePath.data(), executablePath.data() + pathLength).parent_path()
+                    / L"Data" / repository::kTattooSourceRelativeDirectory;
+                const auto sources = repository::scanTattooSources(sourceDirectory);
+
+                if (!sources) {
+                    logger::warn(
+                        "SlaveTatsUI: effective JSON scan failed for '{}': {}",
+                        sourceDirectory.string(),
+                        sources.error().message());
+                } else {
+                    logger::info(
+                        "SlaveTatsUI: discovered {} effective SlaveTats JSON sources",
+                        sources->size());
+                    for (const auto& source : *sources) {
+                        logger::debug(
+                            "SlaveTatsUI: source id='{}' pack='{}' file='{}'",
+                            source.sourceId, source.packName, source.sourceFile);
+                    }
+                }
+            } catch (const std::exception& error) {
+                logger::warn(
+                    "SlaveTatsUI: effective JSON scan aborted without blocking UI: {}",
+                    error.what());
+            }
+        }
         Bridge::get()->onDataLoaded();
         break;
     }

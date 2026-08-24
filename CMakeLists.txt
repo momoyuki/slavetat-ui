@@ -24,6 +24,7 @@ set(headers
     src/core/SlaveTatsService.h
     src/core/TattooModels.h
     src/runtime/SlaveTatsRuntime.h
+    src/repository/TattooSourceScanner.h
 )
 
 set(sources
@@ -32,6 +33,7 @@ set(sources
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/SlaveTatsRuntime.cpp
+    src/repository/TattooSourceScanner.cpp
 )
 
 find_package(CommonLibSSE CONFIG REQUIRED)
@@ -69,4 +71,11 @@ if(BUILD_TESTING)
     )
     target_include_directories(PrismaTattooSerializerTests PRIVATE src)
     add_test(NAME PrismaTattooSerializerTests COMMAND PrismaTattooSerializerTests)
+
+    add_executable(TattooSourceScannerTests
+        src/repository/TattooSourceScanner.cpp
+        tests/repository/TattooSourceScannerTests.cpp
+    )
+    target_include_directories(TattooSourceScannerTests PRIVATE src)
+    add_test(NAME TattooSourceScannerTests COMMAND TattooSourceScannerTests)
 endif()
