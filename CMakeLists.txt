@@ -140,4 +140,10 @@ if(BUILD_TESTING)
     )
     target_include_directories(TextureResolverTests PRIVATE src)
     add_test(NAME TextureResolverTests COMMAND TextureResolverTests)
+
+    add_executable(TextureCacheTests
+        tests/textures/TextureCacheTests.cpp
+    )
+    target_include_directories(TextureCacheTests PRIVATE src)
+    add_test(NAME TextureCacheTests COMMAND TextureCacheTests)
 endif()
