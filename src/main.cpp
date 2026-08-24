@@ -1,17 +1,16 @@
 #include "pch.h"
 #include "Bridge.h"
 #include "SlaveTatsNG_Interface.h"
-#include "repository/TattooCatalogLoader.h"
+#include "repository/TattooCatalogStore.h"
 
 #include <array>
-#include <optional>
 
 using namespace stui;
 
 // ── Config (SlaveTatsUI.json) ─────────────────────────────────────────────────
 namespace {
 
-std::optional<repository::TattooCatalog> g_tattooCatalog;
+repository::TattooCatalogStore g_tattooCatalogStore;
 
 }  // namespace
 
@@ -114,7 +113,7 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                 const auto sourceDirectory = std::filesystem::path(
                     executablePath.data(), executablePath.data() + pathLength).parent_path()
                     / L"Data" / repository::kTattooSourceRelativeDirectory;
-                auto catalog = repository::loadTattooCatalog(sourceDirectory);
+                auto catalog = g_tattooCatalogStore.refresh(sourceDirectory);
 
                 if (!catalog) {
                     logger::warn(
@@ -124,10 +123,10 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                 } else {
                     logger::info(
                         "SlaveTatsUI: loaded {} tattoo definitions from {} sources ({} issues)",
-                        catalog->repository.query().totalEntries,
-                        catalog->sourceCount,
-                        catalog->issues.size());
-                    for (const auto& issue : catalog->issues) {
+                        (*catalog)->repository.query().totalEntries,
+                        (*catalog)->sourceCount,
+                        (*catalog)->issues.size());
+                    for (const auto& issue : (*catalog)->issues) {
                         if (issue.entryIndex) {
                             logger::warn(
                                 "SlaveTatsUI: source '{}' entry {} skipped: {}",
@@ -138,7 +137,6 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                                 issue.sourceId, issue.message);
                         }
                     }
-                    g_tattooCatalog = std::move(*catalog);
                 }
             } catch (const std::exception& error) {
                 logger::warn(

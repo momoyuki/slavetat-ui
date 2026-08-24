@@ -25,6 +25,7 @@ set(headers
     src/core/TattooModels.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooCatalogLoader.h
+    src/repository/TattooCatalogStore.h
     src/repository/TattooRepository.h
     src/repository/TattooSourceParser.h
     src/repository/TattooSourceScanner.h
@@ -38,6 +39,7 @@ set(sources
     src/core/SlaveTatsService.cpp
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
+    src/repository/TattooCatalogStore.cpp
     src/repository/TattooRepository.cpp
     src/repository/TattooSourceParser.cpp
     src/repository/TattooSourceScanner.cpp
@@ -117,4 +119,16 @@ if(BUILD_TESTING)
     target_include_directories(TattooCatalogLoaderTests PRIVATE src)
     target_link_libraries(TattooCatalogLoaderTests PRIVATE nlohmann_json::nlohmann_json)
     add_test(NAME TattooCatalogLoaderTests COMMAND TattooCatalogLoaderTests)
+
+    add_executable(TattooCatalogStoreTests
+        src/repository/TattooCatalogLoader.cpp
+        src/repository/TattooCatalogStore.cpp
+        src/repository/TattooRepository.cpp
+        src/repository/TattooSourceParser.cpp
+        src/repository/TattooSourceScanner.cpp
+        tests/repository/TattooCatalogStoreTests.cpp
+    )
+    target_include_directories(TattooCatalogStoreTests PRIVATE src)
+    target_link_libraries(TattooCatalogStoreTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME TattooCatalogStoreTests COMMAND TattooCatalogStoreTests)
 endif()
