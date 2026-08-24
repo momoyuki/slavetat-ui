@@ -28,6 +28,7 @@ set(headers
     src/repository/TattooCatalogStore.h
     src/repository/TattooRepository.h
     src/repository/TattooSourceParser.h
+    src/textures/D3D11TextureManager.h
     src/textures/D3D11TextureUploader.h
     src/textures/DdsDecoder.h
     src/repository/TattooSourceScanner.h
@@ -44,6 +45,7 @@ set(sources
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
     src/repository/TattooCatalogStore.cpp
+    src/textures/D3D11TextureManager.cpp
     src/textures/D3D11TextureUploader.cpp
     src/textures/DdsDecoder.cpp
     src/repository/TattooRepository.cpp
@@ -176,4 +178,15 @@ if(BUILD_TESTING)
     target_include_directories(D3D11TextureUploaderTests PRIVATE src)
     target_link_libraries(D3D11TextureUploaderTests PRIVATE Microsoft::DirectXTex d3d11)
     add_test(NAME D3D11TextureUploaderTests COMMAND D3D11TextureUploaderTests)
+
+    add_executable(D3D11TextureManagerTests
+        tests/textures/D3D11TextureManagerTests.cpp
+        src/textures/D3D11TextureManager.cpp
+        src/textures/D3D11TextureUploader.cpp
+        src/textures/DdsDecoder.cpp
+        src/textures/TextureResolver.cpp
+    )
+    target_include_directories(D3D11TextureManagerTests PRIVATE src)
+    target_link_libraries(D3D11TextureManagerTests PRIVATE Microsoft::DirectXTex d3d11)
+    add_test(NAME D3D11TextureManagerTests COMMAND D3D11TextureManagerTests)
 endif()
