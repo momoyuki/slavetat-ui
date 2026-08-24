@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Bridge.h"
 #include "SlaveTatsNG_Interface.h"
+#include "repository/TattooSourceParser.h"
 #include "repository/TattooSourceScanner.h"
 
 #include <array>
@@ -118,11 +119,31 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                     logger::info(
                         "SlaveTatsUI: discovered {} effective SlaveTats JSON sources",
                         sources->size());
+                    std::size_t definitionCount = 0;
+                    std::size_t issueCount = 0;
                     for (const auto& source : *sources) {
                         logger::debug(
                             "SlaveTatsUI: source id='{}' pack='{}' file='{}'",
                             source.sourceId, source.packName, source.sourceFile);
+
+                        const auto report = repository::parseTattooSource(source);
+                        definitionCount += report.definitions.size();
+                        issueCount += report.issues.size();
+                        for (const auto& issue : report.issues) {
+                            if (issue.entryIndex) {
+                                logger::warn(
+                                    "SlaveTatsUI: source '{}' entry {} skipped: {}",
+                                    source.sourceId, *issue.entryIndex, issue.message);
+                            } else {
+                                logger::warn(
+                                    "SlaveTatsUI: source '{}' skipped: {}",
+                                    source.sourceId, issue.message);
+                            }
+                        }
                     }
+                    logger::info(
+                        "SlaveTatsUI: parsed {} tattoo definitions from {} sources ({} issues)",
+                        definitionCount, sources->size(), issueCount);
                 }
             } catch (const std::exception& error) {
                 logger::warn(

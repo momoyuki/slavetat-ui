@@ -24,6 +24,7 @@ set(headers
     src/core/SlaveTatsService.h
     src/core/TattooModels.h
     src/runtime/SlaveTatsRuntime.h
+    src/repository/TattooSourceParser.h
     src/repository/TattooSourceScanner.h
     src/textures/ExactStreamReader.h
 )
@@ -34,6 +35,7 @@ set(sources
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/SlaveTatsRuntime.cpp
+    src/repository/TattooSourceParser.cpp
     src/repository/TattooSourceScanner.cpp
 )
 
@@ -85,4 +87,12 @@ if(BUILD_TESTING)
     )
     target_include_directories(ExactStreamReaderTests PRIVATE src)
     add_test(NAME ExactStreamReaderTests COMMAND ExactStreamReaderTests)
+
+    add_executable(TattooSourceParserTests
+        src/repository/TattooSourceParser.cpp
+        tests/repository/TattooSourceParserTests.cpp
+    )
+    target_include_directories(TattooSourceParserTests PRIVATE src)
+    target_link_libraries(TattooSourceParserTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME TattooSourceParserTests COMMAND TattooSourceParserTests)
 endif()
