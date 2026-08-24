@@ -9,6 +9,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 include(GNUInstallDirs)
+include(CTest)
 
 set(headers
     include/PrismaUI_API.h
@@ -18,11 +19,19 @@ set(headers
     include/jcontainers_mini.h
     src/pch.h
     src/Bridge.h
+    src/adapters/PrismaTattooSerializer.h
+    src/core/ITattooRuntime.h
+    src/core/SlaveTatsService.h
+    src/core/TattooModels.h
+    src/runtime/SlaveTatsRuntime.h
 )
 
 set(sources
     src/main.cpp
     src/Bridge.cpp
+    src/adapters/PrismaTattooSerializer.cpp
+    src/core/SlaveTatsService.cpp
+    src/runtime/SlaveTatsRuntime.cpp
 )
 
 find_package(CommonLibSSE CONFIG REQUIRED)
@@ -45,3 +54,19 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
+
+if(BUILD_TESTING)
+    add_executable(SlaveTatsUICoreTests
+        src/core/SlaveTatsService.cpp
+        tests/core/SlaveTatsServiceTests.cpp
+    )
+    target_include_directories(SlaveTatsUICoreTests PRIVATE src)
+    add_test(NAME SlaveTatsUICoreTests COMMAND SlaveTatsUICoreTests)
+
+    add_executable(PrismaTattooSerializerTests
+        src/adapters/PrismaTattooSerializer.cpp
+        tests/adapters/PrismaTattooSerializerTests.cpp
+    )
+    target_include_directories(PrismaTattooSerializerTests PRIVATE src)
+    add_test(NAME PrismaTattooSerializerTests COMMAND PrismaTattooSerializerTests)
+endif()

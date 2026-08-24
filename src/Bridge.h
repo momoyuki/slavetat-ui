@@ -1,6 +1,8 @@
 #pragma once
 
 #include "PrismaUI_API.h"
+#include "core/SlaveTatsService.h"
+#include "runtime/SlaveTatsRuntime.h"
 #include "SlaveTatsNG_Interface.h"
 #include "JContainers/jc_interface.h"
 #include <DirectXTex.h>
@@ -58,13 +60,14 @@ private:
     static bool readCache(const std::filesystem::path& p, std::vector<uint8_t>& rgba, uint32_t& w, uint32_t& h);
     static void writeCache(const std::filesystem::path& p, const uint8_t* rgba, size_t sz, uint32_t w, uint32_t h);
 
+    runtime::SlaveTatsRuntime m_runtime;
+    core::SlaveTatsService m_service{m_runtime};
     const slavetats::interface::Addresses* m_tattooAPI = nullptr;
     PRISMA_UI_API::IVPrismaUI1* m_prismaUI = nullptr;
     PrismaView m_view = 0;
     bool m_jcReady = false;
     std::mutex m_toggleMutex;
     bool m_hidden = false;
-    uint32_t m_slaveTatsAPIVersion = 0;
 };
 
 }  // namespace stui

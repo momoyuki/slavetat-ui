@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Bridge.h"
+#include "adapters/PrismaTattooSerializer.h"
 #include "jcontainers_mini.h"
 
 namespace stui {
@@ -8,16 +9,17 @@ namespace stui {
 
 void Bridge::onSlaveTatsInterface(const slavetats::interface::Addresses* api) {
     m_tattooAPI = api;
-    m_slaveTatsAPIVersion = api->current_version;
+    m_runtime.bindSlaveTats(api);
     logger::info("SlaveTatsUI: SlaveTatsNG API v{} bound", api->current_version);
 }
 
 void Bridge::onSlaveTatsVersionMismatch(uint32_t gotVersion) {
-    m_slaveTatsAPIVersion = gotVersion;
+    m_tattooAPI = nullptr;
+    m_runtime.noteSlaveTatsVersionMismatch(gotVersion);
 }
 
 void Bridge::onJContainersReady(const jc::root_interface* root) {
-    m_jcReady = jcmini::Init(root);
+    m_jcReady = m_runtime.bindJContainers(root);
     if (m_jcReady)
         logger::info("SlaveTatsUI: JContainers initialized");
     else
@@ -35,8 +37,8 @@ void Bridge::onDataLoaded() {
         auto* b = Bridge::get();
         b->sendToUI(std::format(
             R"({{"type":"ready","apiVersion":{},"apiOk":{}}})",
-            b->m_slaveTatsAPIVersion,
-            b->m_tattooAPI != nullptr ? "true" : "false"));
+            b->m_runtime.apiVersion(),
+            b->m_runtime.apiAvailable() ? "true" : "false"));
     });
 
     m_prismaUI->RegisterJSListener(m_view, "slavetatsCmd", [](const char* data) {
@@ -177,35 +179,27 @@ void Bridge::onJSCommand(const char* jsonStr) {
 // ── Game-thread Handlers ──────────────────────────────────────────────────────
 
 void Bridge::handleQueryAvailable(const std::string& domain) {
-    if (!m_tattooAPI) {
-        sendToUI(R"({"type":"error","message":"SlaveTatsNG not available"})");
-        return;
-    }
-    if (!m_jcReady) {
-        sendToUI(R"({"type":"error","message":"JContainers not ready"})");
-        return;
-    }
-
     logger::info("SlaveTatsUI: queryAvailable domain={}", domain);
 
-    static constexpr const char* k_pool = "SlaveTatsUI-queryAvailable";
-    int matches = jcmini::JValue::addToPool(jcmini::JArray::object(), k_pool);
-    logger::info("SlaveTatsUI: queryAvailable JArray handle={}", matches);
-
-    bool failed = m_tattooAPI->query_available_tattoos(0, matches, 0, RE::BSFixedString(domain.c_str()));
-    logger::info("SlaveTatsUI: query_available_tattoos failed={}, count={}", failed, jcmini::JArray::count(matches));
-
-    if (failed) {
-        jcmini::JValue::cleanPool(k_pool);
-        sendToUI(R"({"type":"error","message":"query_available_tattoos failed"})");
+    const auto queryResult = m_service.queryAvailable(domain);
+    if (!queryResult) {
+        sendToUI(std::format(
+            R"({{"type":"error","message":"{}"}})",
+            escapeJSON(queryResult.error().message)));
         return;
     }
+
+    std::string tattoos = "[";
+    for (std::size_t index = 0; index < queryResult->size(); ++index) {
+        if (index > 0) tattoos += ',';
+        tattoos += adapters::toPrismaTattooJSON((*queryResult)[index]);
+    }
+    tattoos += ']';
 
     std::string result = std::format(
         R"({{"type":"available","domain":"{}","tattoos":{}}})",
-        escapeJSON(domain), jArrayToJSON(matches));
+        escapeJSON(domain), tattoos);
 
-    jcmini::JValue::cleanPool(k_pool);
     sendToUI(result);
 }
 
