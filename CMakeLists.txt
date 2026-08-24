@@ -30,6 +30,7 @@ set(headers
     src/repository/TattooSourceParser.h
     src/repository/TattooSourceScanner.h
     src/textures/ExactStreamReader.h
+    src/textures/TextureManager.h
     src/textures/TextureResolver.h
 )
 
@@ -146,4 +147,11 @@ if(BUILD_TESTING)
     )
     target_include_directories(TextureCacheTests PRIVATE src)
     add_test(NAME TextureCacheTests COMMAND TextureCacheTests)
+
+    add_executable(TextureManagerTests
+        tests/textures/TextureManagerTests.cpp
+        src/textures/TextureResolver.cpp
+    )
+    target_include_directories(TextureManagerTests PRIVATE src)
+    add_test(NAME TextureManagerTests COMMAND TextureManagerTests)
 endif()
