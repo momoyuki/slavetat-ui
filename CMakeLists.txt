@@ -28,6 +28,7 @@ set(headers
     src/repository/TattooCatalogStore.h
     src/repository/TattooRepository.h
     src/repository/TattooSourceParser.h
+    src/textures/DdsDecoder.h
     src/repository/TattooSourceScanner.h
     src/textures/ExactStreamReader.h
     src/textures/TextureManager.h
@@ -42,6 +43,7 @@ set(sources
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
     src/repository/TattooCatalogStore.cpp
+    src/textures/DdsDecoder.cpp
     src/repository/TattooRepository.cpp
     src/repository/TattooSourceParser.cpp
     src/repository/TattooSourceScanner.cpp
@@ -154,4 +156,12 @@ if(BUILD_TESTING)
     )
     target_include_directories(TextureManagerTests PRIVATE src)
     add_test(NAME TextureManagerTests COMMAND TextureManagerTests)
+
+    add_executable(DdsDecoderTests
+        tests/textures/DdsDecoderTests.cpp
+        src/textures/DdsDecoder.cpp
+    )
+    target_include_directories(DdsDecoderTests PRIVATE src)
+    target_link_libraries(DdsDecoderTests PRIVATE Microsoft::DirectXTex)
+    add_test(NAME DdsDecoderTests COMMAND DdsDecoderTests)
 endif()
