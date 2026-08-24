@@ -2,6 +2,7 @@
 #include "Bridge.h"
 #include "adapters/PrismaTattooSerializer.h"
 #include "jcontainers_mini.h"
+#include "textures/ExactStreamReader.h"
 
 namespace stui {
 
@@ -629,13 +630,14 @@ void Bridge::handleGetTextureBSA(std::string texPath, std::filesystem::path cach
         return;
     }
 
-    std::vector<uint8_t> data;
-    std::array<uint8_t, 8192> buf;
-    while (true) {
-        auto nr = stream.read(buf.data(), buf.size());
-        if (nr == 0) break;
-        data.insert(data.end(), buf.data(), buf.data() + static_cast<size_t>(nr));
+    const std::uint32_t resourceSize = stream.stream->totalSize;
+    auto dataResult = textures::readExactBytes(stream, resourceSize);
+    if (!dataResult) {
+        logger::warn("SlaveTatsUI: BSA texture read failed: {} size={}", texPath, resourceSize);
+        sendToUI(std::format(R"({{"type":"textureError","path":"{}"}})", escapeJSON(texPath)));
+        return;
     }
+    auto data = std::move(*dataResult);
 
     // Decode on background thread so game thread isn't blocked
     std::thread([this, texPath, cachePath = std::move(cachePath), data = std::move(data)]() mutable {

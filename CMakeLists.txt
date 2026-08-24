@@ -25,6 +25,7 @@ set(headers
     src/core/TattooModels.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooSourceScanner.h
+    src/textures/ExactStreamReader.h
 )
 
 set(sources
@@ -78,4 +79,10 @@ if(BUILD_TESTING)
     )
     target_include_directories(TattooSourceScannerTests PRIVATE src)
     add_test(NAME TattooSourceScannerTests COMMAND TattooSourceScannerTests)
+
+    add_executable(ExactStreamReaderTests
+        tests/textures/ExactStreamReaderTests.cpp
+    )
+    target_include_directories(ExactStreamReaderTests PRIVATE src)
+    add_test(NAME ExactStreamReaderTests COMMAND ExactStreamReaderTests)
 endif()
