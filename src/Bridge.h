@@ -5,7 +5,9 @@
 #include "runtime/SlaveTatsRuntime.h"
 #include "SlaveTatsNG_Interface.h"
 #include "JContainers/jc_interface.h"
+#include "textures/D3D11TextureManager.h"
 #include <DirectXTex.h>
+#include <memory>
 #ifdef interface
 #  undef interface
 #endif
@@ -68,6 +70,7 @@ private:
     bool m_jcReady = false;
     std::mutex m_toggleMutex;
     bool m_hidden = false;
+    std::unique_ptr<textures::D3D11TextureManager> m_textureManager;
 };
 
 }  // namespace stui

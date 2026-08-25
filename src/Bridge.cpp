@@ -4,6 +4,7 @@
 #include "jcontainers_mini.h"
 #include "textures/ExactStreamReader.h"
 #include "textures/TextureResolver.h"
+#include "RE/R/Renderer.h"
 
 namespace stui {
 
@@ -29,6 +30,15 @@ void Bridge::onJContainersReady(const jc::root_interface* root) {
 }
 
 void Bridge::onDataLoaded() {
+    auto* renderer = RE::BSGraphics::Renderer::GetSingleton();
+    if (renderer && renderer->data.forwarder) {
+        // Allocate a conservative budget of 256 for the texture manager
+        m_textureManager = std::make_unique<textures::D3D11TextureManager>(renderer->data.forwarder, 256);
+        logger::info("SlaveTatsUI: D3D11TextureManager initialized with capacity 256");
+    } else {
+        logger::error("SlaveTatsUI: Failed to get ID3D11Device from BSGraphics::Renderer");
+    }
+
     m_prismaUI = PRISMA_UI_API::RequestPluginAPI<PRISMA_UI_API::IVPrismaUI1>();
     if (!m_prismaUI) {
         logger::error("SlaveTatsUI: PrismaUI.dll not found — is PrismaUI installed?");
