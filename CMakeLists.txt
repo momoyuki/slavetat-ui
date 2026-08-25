@@ -77,6 +77,13 @@ target_link_libraries(${PROJECT_NAME}
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
 if(BUILD_TESTING)
+    add_executable(NativeMenuTests
+        src/native/NativeMenu.cpp
+        tests/native/NativeMenuTests.cpp
+    )
+    target_include_directories(NativeMenuTests PRIVATE src)
+    add_test(NAME NativeMenuTests COMMAND NativeMenuTests)
+
     add_executable(SlaveTatsUICoreTests
         src/core/SlaveTatsService.cpp
         tests/core/SlaveTatsServiceTests.cpp
