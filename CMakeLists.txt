@@ -84,6 +84,14 @@ if(BUILD_TESTING)
     target_include_directories(NativeMenuTests PRIVATE src)
     add_test(NAME NativeMenuTests COMMAND NativeMenuTests)
 
+    add_executable(OfficialMenuFrameworkAdapterTests
+        src/native/OfficialMenuFrameworkAdapter.cpp
+        tests/native/OfficialMenuFrameworkAdapterTests.cpp
+    )
+    target_include_directories(OfficialMenuFrameworkAdapterTests PRIVATE src include)
+    target_link_libraries(OfficialMenuFrameworkAdapterTests PRIVATE CommonLibSSE::CommonLibSSE)
+    add_test(NAME OfficialMenuFrameworkAdapterTests COMMAND OfficialMenuFrameworkAdapterTests)
+
     add_executable(SlaveTatsUICoreTests
         src/core/SlaveTatsService.cpp
         tests/core/SlaveTatsServiceTests.cpp
