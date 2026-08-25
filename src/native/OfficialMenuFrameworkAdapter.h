@@ -1,5 +1,6 @@
 #pragma once
 
+#include "native/NativeCatalogBrowserModel.h"
 #include "native/MenuFrameworkPort.h"
 
 #include <functional>
@@ -57,6 +58,9 @@ public:
         MenuPosition viewportPosition, MenuSize viewportSize) noexcept;
     [[nodiscard]] static bool renderLauncher();
     static void renderFoundation(const std::function<void()>& close);
+    static void renderFoundation(
+        NativeCatalogBrowserModel& model,
+        const std::function<void()>& close);
 
 private:
     MenuFrameworkBindings bindings_;

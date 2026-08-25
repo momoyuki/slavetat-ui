@@ -101,6 +101,8 @@ if(BUILD_TESTING)
 
     add_executable(OfficialMenuFrameworkAdapterTests
         src/native/OfficialMenuFrameworkAdapter.cpp
+        src/native/NativeCatalogBrowserModel.cpp
+        src/repository/TattooRepository.cpp
         tests/native/OfficialMenuFrameworkAdapterTests.cpp
     )
     target_include_directories(OfficialMenuFrameworkAdapterTests PRIVATE src include)

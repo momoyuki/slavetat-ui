@@ -2,9 +2,12 @@
 
 #include <RE/Skyrim.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <filesystem>
 #include <utility>
+#include <vector>
 
 #include "SKSEMenuFramework.h"
 
@@ -153,6 +156,133 @@ void OfficialMenuFrameworkAdapter::renderFoundation(const std::function<void()>&
         "Tattoo Browser##SlaveTatsUI", &open, ImGuiMCP::ImGuiWindowFlags_NoCollapse);
     ImGuiMCP::TextUnformatted("Native menu foundation is ready.");
     ImGuiMCP::TextUnformatted("Catalog browsing remains available through PrismaUI (F8).");
+    if (ImGuiMCP::Button("Close")) {
+        open = false;
+    }
+    ImGuiMCP::End();
+    if (!open && close) {
+        close();
+    }
+}
+
+void OfficialMenuFrameworkAdapter::renderFoundation(
+    NativeCatalogBrowserModel& model,
+    const std::function<void()>& close) {
+    model.refresh();
+
+    const auto* viewport = ImGuiMCP::GetMainViewport();
+    if (!viewport) {
+        return;
+    }
+    const auto layout = calculateFoundationLayout(
+        {viewport->Pos.x, viewport->Pos.y},
+        {viewport->Size.x, viewport->Size.y});
+    ImGuiMCP::SetNextWindowPos(
+        {layout.position.x, layout.position.y}, ImGuiMCP::ImGuiCond_Appearing, {0.0F, 0.0F});
+    ImGuiMCP::SetNextWindowSize(
+        {layout.size.width, layout.size.height}, ImGuiMCP::ImGuiCond_Appearing);
+    bool open = true;
+    ImGuiMCP::Begin(
+        "Tattoo Browser##SlaveTatsUI", &open, ImGuiMCP::ImGuiWindowFlags_NoCollapse);
+
+    constexpr std::size_t searchCapacity = 256;
+    std::array<char, searchCapacity> searchBuffer{};
+    const auto& filter = model.filter();
+    const std::size_t searchLength = std::min(filter.search.size(), searchBuffer.size() - 1);
+    std::copy_n(filter.search.data(), searchLength, searchBuffer.data());
+    if (ImGuiMCP::InputText("Search", searchBuffer.data(), searchBuffer.size())) {
+        model.setSearch(searchBuffer.data());
+    }
+
+    const auto snapshot = model.snapshot();
+    std::vector<const char*> sourceLabels{"All sources"};
+    std::vector<const char*> sectionLabels{"All sections"};
+    std::vector<const char*> areaLabels{"All areas"};
+    int sourceIndex = 0;
+    int sectionIndex = 0;
+    int areaIndex = 0;
+
+    if (snapshot) {
+        const auto& facets = snapshot->repository.facets();
+        for (std::size_t index = 0; index < facets.sources.size(); ++index) {
+            sourceLabels.push_back(facets.sources[index].packName.c_str());
+            if (facets.sources[index].sourceId == filter.sourceId) {
+                sourceIndex = static_cast<int>(index + 1);
+            }
+        }
+        for (std::size_t index = 0; index < facets.sections.size(); ++index) {
+            sectionLabels.push_back(facets.sections[index].c_str());
+            if (facets.sections[index] == filter.section) {
+                sectionIndex = static_cast<int>(index + 1);
+            }
+        }
+        for (std::size_t index = 0; index < facets.areas.size(); ++index) {
+            areaLabels.push_back(facets.areas[index].c_str());
+            if (facets.areas[index] == filter.area) {
+                areaIndex = static_cast<int>(index + 1);
+            }
+        }
+    }
+
+    if (ImGuiMCP::Combo(
+            "Source", &sourceIndex, sourceLabels.data(), static_cast<int>(sourceLabels.size()))) {
+        model.setSourceId(
+            sourceIndex == 0 ? "" : snapshot->repository.facets().sources[sourceIndex - 1].sourceId);
+    }
+    if (ImGuiMCP::Combo(
+            "Section", &sectionIndex, sectionLabels.data(), static_cast<int>(sectionLabels.size()))) {
+        model.setSection(
+            sectionIndex == 0 ? "" : snapshot->repository.facets().sections[sectionIndex - 1]);
+    }
+    if (ImGuiMCP::Combo("Area", &areaIndex, areaLabels.data(), static_cast<int>(areaLabels.size()))) {
+        model.setArea(areaIndex == 0 ? "" : snapshot->repository.facets().areas[areaIndex - 1]);
+    }
+
+    const auto& page = model.page();
+    if (page.entries.empty()) {
+        ImGuiMCP::TextUnformatted(
+            snapshot ? "No tattoos match the current filters."
+                     : "The tattoo catalog is empty. Refresh the catalog to browse tattoos.");
+    } else {
+        ImGuiMCP::Columns(2, "TattooCards", true);
+        for (const auto& tattoo : page.entries) {
+            ImGuiMCP::Text("Name: %s", tattoo.name.c_str());
+            ImGuiMCP::Text("Pack / Source: %s / %s", tattoo.packName.c_str(), tattoo.sourceId.c_str());
+            ImGuiMCP::Text("Section: %s", tattoo.section.c_str());
+            ImGuiMCP::Text("Area: %s", tattoo.area.c_str());
+            ImGuiMCP::Text("Texture: %s", tattoo.texturePath.c_str());
+            ImGuiMCP::Separator();
+            ImGuiMCP::NextColumn();
+        }
+        ImGuiMCP::Columns(1);
+    }
+
+    const bool hasPages = page.pageCount != 0;
+    ImGuiMCP::BeginDisabled(!hasPages || page.pageIndex == 0);
+    if (ImGuiMCP::Button("Prev")) {
+        model.previousPage();
+    }
+    ImGuiMCP::EndDisabled();
+
+    ImGuiMCP::SameLine();
+    ImGuiMCP::TextUnformatted("Page");
+    ImGuiMCP::SameLine();
+    int pageNumber = hasPages ? static_cast<int>(page.pageIndex + 1) : 0;
+    const bool committedOnEnter = ImGuiMCP::InputInt(
+        "##PageNumber", &pageNumber, 0, 0, ImGuiMCP::ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool committedOnDeactivate = ImGuiMCP::IsItemDeactivatedAfterEdit();
+    if (hasPages && (committedOnEnter || committedOnDeactivate)) {
+        model.setPageNumber(static_cast<std::size_t>(std::max(pageNumber, 1)));
+    }
+    ImGuiMCP::SameLine();
+    ImGuiMCP::Text("/ %zu", page.pageCount);
+    ImGuiMCP::SameLine();
+    ImGuiMCP::BeginDisabled(!hasPages || page.pageIndex + 1 >= page.pageCount);
+    if (ImGuiMCP::Button("Next")) {
+        model.nextPage();
+    }
+    ImGuiMCP::EndDisabled();
+
     if (ImGuiMCP::Button("Close")) {
         open = false;
     }

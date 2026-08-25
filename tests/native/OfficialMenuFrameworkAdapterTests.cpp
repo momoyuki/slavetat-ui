@@ -1,5 +1,7 @@
 #include "native/OfficialMenuFrameworkAdapter.h"
+#include "native/NativeCatalogBrowserModel.h"
 
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -104,6 +106,22 @@ void foundationLayoutAnchorsFortyPercentPanelToRightEdge() {
            "expected forty-percent full-height side panel");
 }
 
+void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
+    stui::native::NativeCatalogBrowserModel model([] { return nullptr; });
+    model.refresh();
+
+    const auto& page = model.page();
+    expect(page.entries.empty(), "expected no entries for a null snapshot");
+    expect(page.totalEntries == 0 && page.matchedEntries == 0,
+           "expected an empty catalog page");
+    expect(page.pageCount == 0 && page.pageSize == 6,
+           "expected safe six-item empty page metadata");
+
+    void (*render)(stui::native::NativeCatalogBrowserModel&, const std::function<void()>&) =
+        &stui::native::OfficialMenuFrameworkAdapter::renderFoundation;
+    (void)render;
+}
+
 }  // namespace
 
 int main() {
@@ -116,6 +134,8 @@ int main() {
         std::cout << "PASS default adapter is unavailable without loaded framework\n";
         foundationLayoutAnchorsFortyPercentPanelToRightEdge();
         std::cout << "PASS foundation layout anchors panel to right edge\n";
+        nullSnapshotModelHasSafeEmptyPageWithoutImGui();
+        std::cout << "PASS null snapshot model has safe empty page without ImGui\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL " << error.what() << '\n';
         return 1;
