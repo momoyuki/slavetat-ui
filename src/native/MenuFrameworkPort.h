@@ -14,6 +14,8 @@ enum class MenuRegistrationError {
     callbackFailed,
 };
 
+[[nodiscard]] std::string_view registrationErrorName(MenuRegistrationError error) noexcept;
+
 using MenuCallback = void (*)() noexcept;
 using MenuWindow = std::uintptr_t;
 using RegistrationResult = std::expected<void, MenuRegistrationError>;

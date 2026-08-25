@@ -2,6 +2,7 @@
 
 #include "native/MenuFrameworkPort.h"
 
+#include <functional>
 #include <string>
 
 namespace stui::native {
@@ -54,7 +55,8 @@ public:
 
     [[nodiscard]] static FoundationLayout calculateFoundationLayout(
         MenuPosition viewportPosition, MenuSize viewportSize) noexcept;
-    static void renderFoundation();
+    [[nodiscard]] static bool renderLauncher();
+    static void renderFoundation(const std::function<void()>& close);
 
 private:
     MenuFrameworkBindings bindings_;

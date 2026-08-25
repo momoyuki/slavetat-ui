@@ -9,7 +9,10 @@ namespace stui::native {
 
 class NativeMenu {
 public:
-    explicit NativeMenu(std::function<void()> render = {});
+    using RenderFunction = std::function<void(NativeMenu&)>;
+    using LaunchFunction = std::function<bool()>;
+
+    explicit NativeMenu(RenderFunction render = {}, LaunchFunction launch = {});
     ~NativeMenu();
 
     NativeMenu(const NativeMenu&) = delete;
@@ -28,7 +31,8 @@ private:
 
     MenuFrameworkPort* port_{};
     MenuWindow window_{};
-    std::function<void()> render_;
+    RenderFunction render_;
+    LaunchFunction launch_;
     std::optional<MenuRegistrationError> lastError_;
     bool registered_{};
 };

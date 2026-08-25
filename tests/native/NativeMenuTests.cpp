@@ -63,7 +63,7 @@ public:
     bool open{};
 };
 
-void registersOneNonPausingTattooBrowser() {
+void registersOneBlockingTattooBrowser() {
     FakeMenuFrameworkPort port;
     stui::native::NativeMenu menu;
 
@@ -74,7 +74,7 @@ void registersOneNonPausingTattooBrowser() {
     expect(port.itemPath == "Tattoo Browser", "expected browser item");
     expect(port.itemRegistrations == 1, "expected one browser item");
     expect(port.windowRegistrations == 1, "expected one native window");
-    expect(!port.pauseGame, "expected non-pausing window");
+    expect(port.pauseGame, "expected window to block gameplay input");
 }
 
 void repeatedRegistrationIsIdempotent() {
@@ -87,7 +87,7 @@ void repeatedRegistrationIsIdempotent() {
     expect(port.windowRegistrations == 1, "expected no duplicate native window");
 }
 
-void sectionCallbackOpensRegisteredWindow() {
+void sectionRenderingDoesNotOpenBrowserWithoutRequest() {
     FakeMenuFrameworkPort port;
     stui::native::NativeMenu menu;
 
@@ -95,7 +95,21 @@ void sectionCallbackOpensRegisteredWindow() {
     expect(port.itemCallback != nullptr, "expected section callback");
     port.itemCallback();
 
-    expect(port.open, "expected section callback to open window");
+    expect(!port.open, "expected section rendering not to open browser implicitly");
+}
+
+void explicitSectionRequestOpensBrowser() {
+    FakeMenuFrameworkPort port;
+    bool openRequested = false;
+    stui::native::NativeMenu menu({}, [&openRequested] { return openRequested; });
+    expect(menu.registerMenu(port).has_value(), "expected registration");
+    port.itemCallback();
+    expect(!menu.isOpen(), "expected idle launcher not to open browser");
+
+    openRequested = true;
+    port.itemCallback();
+
+    expect(menu.isOpen(), "expected explicit launcher request to open browser");
 }
 
 void unavailableFrameworkDoesNotRegisterAnything() {
@@ -169,7 +183,8 @@ void windowRegistrationPreservesNamedFrameworkError() {
 
 void renderExceptionIsContainedAtCallbackBoundary() {
     FakeMenuFrameworkPort port;
-    stui::native::NativeMenu menu([] { throw std::runtime_error("render failed"); });
+    stui::native::NativeMenu menu(
+        [](stui::native::NativeMenu&) { throw std::runtime_error("render failed"); });
     expect(menu.registerMenu(port).has_value(), "expected registration");
 
     port.windowCallback();
@@ -190,16 +205,53 @@ void openAndCloseUseRegisteredWindowState() {
     expect(!menu.isOpen(), "expected closed state");
 }
 
+void renderActionCanCloseOwningWindow() {
+    FakeMenuFrameworkPort port;
+    stui::native::NativeMenu menu([](stui::native::NativeMenu& owner) { owner.close(); });
+    expect(menu.registerMenu(port).has_value(), "expected registration");
+    menu.open();
+
+    port.windowCallback();
+
+    expect(!menu.isOpen(), "expected render action to close its owning window");
+}
+
+void unavailableRegistrationCanBeRetriedAndClearsError() {
+    FakeMenuFrameworkPort port;
+    port.isAvailable = false;
+    stui::native::NativeMenu menu;
+
+    expect(!menu.registerMenu(port), "expected unavailable registration failure");
+    expect(menu.lastError() == stui::native::MenuRegistrationError::unavailable,
+           "expected stored unavailable error");
+    port.isAvailable = true;
+    expect(menu.registerMenu(port).has_value(), "expected registration retry");
+    expect(!menu.lastError(), "expected successful retry to clear prior error");
+    expect(menu.isRegistered(), "expected registered state after retry");
+}
+
+void registrationErrorsHaveStableDiagnosticNames() {
+    expect(stui::native::registrationErrorName(
+               stui::native::MenuRegistrationError::missingExport) == "missing export",
+           "expected missing-export diagnostic");
+    expect(stui::native::registrationErrorName(
+               stui::native::MenuRegistrationError::windowCreationFailed) ==
+               "window creation failed",
+           "expected window-creation diagnostic");
+}
+
 }  // namespace
 
 int main() {
     try {
-        registersOneNonPausingTattooBrowser();
-        std::cout << "PASS registers one non-pausing tattoo browser\n";
+        registersOneBlockingTattooBrowser();
+        std::cout << "PASS registers one blocking tattoo browser\n";
         repeatedRegistrationIsIdempotent();
         std::cout << "PASS repeated registration is idempotent\n";
-        sectionCallbackOpensRegisteredWindow();
-        std::cout << "PASS section callback opens registered window\n";
+        sectionRenderingDoesNotOpenBrowserWithoutRequest();
+        std::cout << "PASS section rendering does not open browser without request\n";
+        explicitSectionRequestOpensBrowser();
+        std::cout << "PASS explicit section request opens browser\n";
         unavailableFrameworkDoesNotRegisterAnything();
         std::cout << "PASS unavailable framework does not register anything\n";
         unsupportedMajorVersionDoesNotRegisterAnything();
@@ -214,6 +266,12 @@ int main() {
         std::cout << "PASS render exception is contained at callback boundary\n";
         openAndCloseUseRegisteredWindowState();
         std::cout << "PASS open and close use registered window state\n";
+        renderActionCanCloseOwningWindow();
+        std::cout << "PASS render action can close owning window\n";
+        unavailableRegistrationCanBeRetriedAndClearsError();
+        std::cout << "PASS unavailable registration can be retried and clears error\n";
+        registrationErrorsHaveStableDiagnosticNames();
+        std::cout << "PASS registration errors have stable diagnostic names\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL " << error.what() << '\n';
         return 1;

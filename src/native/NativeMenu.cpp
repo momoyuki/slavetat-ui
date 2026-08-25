@@ -9,7 +9,24 @@ NativeMenu* g_activeMenu{};
 
 }  // namespace
 
-NativeMenu::NativeMenu(std::function<void()> render) : render_(std::move(render)) {}
+std::string_view registrationErrorName(MenuRegistrationError error) noexcept {
+    switch (error) {
+    case MenuRegistrationError::unavailable:
+        return "unavailable";
+    case MenuRegistrationError::unsupportedVersion:
+        return "unsupported version";
+    case MenuRegistrationError::missingExport:
+        return "missing export";
+    case MenuRegistrationError::windowCreationFailed:
+        return "window creation failed";
+    case MenuRegistrationError::callbackFailed:
+        return "callback failed";
+    }
+    return "unknown";
+}
+
+NativeMenu::NativeMenu(RenderFunction render, LaunchFunction launch)
+    : render_(std::move(render)), launch_(std::move(launch)) {}
 
 NativeMenu::~NativeMenu() {
     if (g_activeMenu == this) {
@@ -18,34 +35,39 @@ NativeMenu::~NativeMenu() {
 }
 
 RegistrationResult NativeMenu::registerMenu(MenuFrameworkPort& port) {
+    const auto fail = [this](MenuRegistrationError error) -> RegistrationResult {
+        lastError_ = error;
+        return std::unexpected(error);
+    };
     if (registered_) {
         return {};
     }
     if (!port.available()) {
-        return std::unexpected(MenuRegistrationError::unavailable);
+        return fail(MenuRegistrationError::unavailable);
     }
     const float frameworkVersion = port.version();
     if (frameworkVersion < 3.0F || frameworkVersion >= 4.0F) {
-        return std::unexpected(MenuRegistrationError::unsupportedVersion);
+        return fail(MenuRegistrationError::unsupportedVersion);
     }
     if (auto result = port.setSection("SlaveTatsUI"); !result) {
-        return result;
+        return fail(result.error());
     }
-    auto window = port.addWindow(&NativeMenu::renderCallback, false);
+    auto window = port.addWindow(&NativeMenu::renderCallback, true);
     if (!window) {
-        return std::unexpected(window.error());
+        return fail(window.error());
     }
     if (*window == 0) {
-        return std::unexpected(MenuRegistrationError::windowCreationFailed);
+        return fail(MenuRegistrationError::windowCreationFailed);
     }
     if (auto result = port.addSectionItem("Tattoo Browser", &NativeMenu::sectionCallback);
         !result) {
-        return result;
+        return fail(result.error());
     }
 
     port_ = &port;
     window_ = *window;
     registered_ = true;
+    lastError_.reset();
     g_activeMenu = this;
     return {};
 }
@@ -75,8 +97,15 @@ bool NativeMenu::isRegistered() const noexcept {
 }
 
 void NativeMenu::sectionCallback() noexcept {
-    if (g_activeMenu && g_activeMenu->port_ && g_activeMenu->window_ != 0) {
-        g_activeMenu->open();
+    if (!g_activeMenu || !g_activeMenu->launch_) {
+        return;
+    }
+    try {
+        if (g_activeMenu->launch_()) {
+            g_activeMenu->open();
+        }
+    } catch (...) {
+        g_activeMenu->lastError_ = MenuRegistrationError::callbackFailed;
     }
 }
 
@@ -85,7 +114,7 @@ void NativeMenu::renderCallback() noexcept {
         return;
     }
     try {
-        g_activeMenu->render_();
+        g_activeMenu->render_(*g_activeMenu);
     } catch (...) {
         g_activeMenu->lastError_ = MenuRegistrationError::callbackFailed;
     }

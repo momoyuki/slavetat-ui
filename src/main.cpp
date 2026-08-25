@@ -2,6 +2,8 @@
 #include "Bridge.h"
 #include "SlaveTatsNG_Interface.h"
 #include "repository/TattooCatalogStore.h"
+#include "native/NativeMenu.h"
+#include "native/OfficialMenuFrameworkAdapter.h"
 
 #include <array>
 
@@ -213,6 +215,20 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
         log->flush_on(spdlog::level::debug);
         spdlog::set_default_logger(std::move(log));
     } catch (...) {}
+
+    static native::OfficialMenuFrameworkAdapter menuFrameworkAdapter;
+    static native::NativeMenu nativeMenu([](native::NativeMenu& menu) {
+        native::OfficialMenuFrameworkAdapter::renderFoundation([&menu] { menu.close(); });
+    }, &native::OfficialMenuFrameworkAdapter::renderLauncher);
+    if (const auto result = nativeMenu.registerMenu(menuFrameworkAdapter); !result) {
+        logger::warn(
+            "SlaveTatsUI: native menu unavailable: {} (PrismaUI remains available)",
+            native::registrationErrorName(result.error()));
+    } else {
+        logger::info(
+            "SlaveTatsUI: native menu registered (frameworkVersion={:.2f}, blocking=true)",
+            menuFrameworkAdapter.version());
+    }
 
     Config::load(pluginDir);
 

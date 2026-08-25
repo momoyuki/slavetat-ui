@@ -13,12 +13,16 @@ include(CTest)
 
 set(headers
     include/PrismaUI_API.h
+    include/SKSEMenuFramework.h
     include/SlaveTatsNG_Interface.h
     include/JContainers/jc_interface.h
     include/JContainers/jcontainers_constants.h
     include/jcontainers_mini.h
     src/pch.h
     src/Bridge.h
+    src/native/MenuFrameworkPort.h
+    src/native/NativeMenu.h
+    src/native/OfficialMenuFrameworkAdapter.h
     src/adapters/PrismaTattooSerializer.h
     src/core/ITattooRuntime.h
     src/core/SlaveTatsService.h
@@ -40,6 +44,8 @@ set(headers
 set(sources
     src/main.cpp
     src/Bridge.cpp
+    src/native/NativeMenu.cpp
+    src/native/OfficialMenuFrameworkAdapter.cpp
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/SlaveTatsRuntime.cpp

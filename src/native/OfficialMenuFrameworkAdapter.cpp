@@ -131,7 +131,12 @@ FoundationLayout OfficialMenuFrameworkAdapter::calculateFoundationLayout(
     };
 }
 
-void OfficialMenuFrameworkAdapter::renderFoundation() {
+bool OfficialMenuFrameworkAdapter::renderLauncher() {
+    ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
+    return ImGuiMCP::Button("Open Tattoo Browser");
+}
+
+void OfficialMenuFrameworkAdapter::renderFoundation(const std::function<void()>& close) {
     const auto* viewport = ImGuiMCP::GetMainViewport();
     if (!viewport) {
         return;
@@ -143,11 +148,18 @@ void OfficialMenuFrameworkAdapter::renderFoundation() {
         {layout.position.x, layout.position.y}, ImGuiMCP::ImGuiCond_Appearing, {0.0F, 0.0F});
     ImGuiMCP::SetNextWindowSize(
         {layout.size.width, layout.size.height}, ImGuiMCP::ImGuiCond_Appearing);
+    bool open = true;
     ImGuiMCP::Begin(
-        "Tattoo Browser##SlaveTatsUI", nullptr, ImGuiMCP::ImGuiWindowFlags_NoCollapse);
+        "Tattoo Browser##SlaveTatsUI", &open, ImGuiMCP::ImGuiWindowFlags_NoCollapse);
     ImGuiMCP::TextUnformatted("Native menu foundation is ready.");
     ImGuiMCP::TextUnformatted("Catalog browsing remains available through PrismaUI (F8).");
+    if (ImGuiMCP::Button("Close")) {
+        open = false;
+    }
     ImGuiMCP::End();
+    if (!open && close) {
+        close();
+    }
 }
 
 }  // namespace stui::native
