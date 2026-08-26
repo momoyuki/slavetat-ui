@@ -4,6 +4,7 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -106,6 +107,28 @@ void mapsD3D11UploadFailureToManagerError() {
            "expected uploadFailed manager error");
 }
 
+void forwardsNormalizedLookupExpiryAndClear() {
+    using namespace std::chrono_literals;
+    const auto start = stui::textures::TextureCacheTimePoint{};
+    const auto device = createDevice();
+    stui::textures::D3D11TextureManager manager(device.Get(), 2, 2min);
+    const auto dds = makeDds(2, 3);
+
+    const auto loaded = manager.getOrLoad("Pack/Mark.dds", dds, start);
+    const auto found = manager.find("pack\\mark.dds", start + 90s);
+
+    expect(loaded.has_value(), "expected GPU texture upload");
+    expect(found == *loaded, "expected normalized lookup to share GPU texture");
+
+    manager.pruneExpired(start + 3min + 30s);
+    expect(manager.size() == 0, "expected manager to forward idle expiry");
+
+    const auto reloaded = manager.getOrLoad("Pack/Mark.dds", dds, start + 4min);
+    expect(reloaded.has_value(), "expected expired texture re-upload");
+    manager.clear();
+    expect(manager.size() == 0, "expected manager to forward cache clear");
+}
+
 void run(std::string_view name, void (*test)()) {
     try {
         test();
@@ -122,6 +145,7 @@ int main() {
     try {
         run("equivalent paths reuse one GPU texture", cachesEquivalentPathsWithoutUploadingAgain);
         run("LRU eviction releases GPU texture", evictsAndReleasesLeastRecentlyUsedTexture);
+        run("manager forwards lookup, expiry, and clear", forwardsNormalizedLookupExpiryAndClear);
         run("unsafe paths are rejected before upload", rejectsUnsafePathBeforeUploading);
         run("D3D11 failures map to manager errors", mapsD3D11UploadFailureToManagerError);
     } catch (...) {

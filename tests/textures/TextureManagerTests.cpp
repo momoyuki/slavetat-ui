@@ -1,5 +1,6 @@
 #include "textures/TextureManager.h"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -70,6 +71,46 @@ void retriesFailedUpload() {
     expect(uploadCount == 2, "expected failed upload retry");
 }
 
+void findsEquivalentNormalizedPathWithoutSecondUpload() {
+    stui::textures::TextureManager<int> manager(2);
+    const std::vector<std::uint8_t> ddsBytes{1, 2, 3};
+    int uploadCount = 0;
+    const auto upload = [&](std::span<const std::uint8_t>) {
+        ++uploadCount;
+        return std::make_shared<int>(42);
+    };
+
+    const auto loaded = manager.getOrLoad("Pack/Mark.dds", ddsBytes, upload);
+    const auto found = manager.find("pack\\mark.dds");
+
+    expect(loaded.has_value(), "expected texture upload");
+    expect(found == *loaded, "expected normalized find to return uploaded resource");
+    expect(uploadCount == 1, "expected normalized lookup without a second upload");
+}
+
+void expiresAndClearsManagedTextures() {
+    using namespace std::chrono_literals;
+    const auto start = stui::textures::TextureCacheTimePoint{};
+    stui::textures::TextureManager<int> manager(2, 2min);
+    const std::vector<std::uint8_t> ddsBytes{1};
+
+    const auto loaded = manager.getOrLoad(
+        "Pack/Mark.dds", ddsBytes,
+        [](std::span<const std::uint8_t>) { return std::make_shared<int>(7); }, start);
+    manager.pruneExpired(start + 2min);
+
+    expect(loaded.has_value(), "expected texture upload before expiry");
+    expect(manager.size() == 0, "expected manager to forward cache expiry");
+    expect(manager.find("pack\\mark.dds") == nullptr, "expected expired lookup to miss");
+
+    const auto reloaded = manager.getOrLoad(
+        "Pack/Mark.dds", ddsBytes,
+        [](std::span<const std::uint8_t>) { return std::make_shared<int>(7); }, start);
+    expect(reloaded.has_value(), "expected expired texture re-upload");
+    manager.clear();
+    expect(manager.size() == 0, "expected manager to forward cache clear");
+}
+
 }  // namespace
 
 int main() {
@@ -77,6 +118,8 @@ int main() {
         reusesUploadForEquivalentTexturePath();
         rejectsUnsafePathBeforeUpload();
         retriesFailedUpload();
+        findsEquivalentNormalizedPathWithoutSecondUpload();
+        expiresAndClearsManagedTextures();
         std::cout << "PASS TextureManager contracts\n";
         return 0;
     } catch (const std::exception& error) {

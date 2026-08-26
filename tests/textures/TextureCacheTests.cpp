@@ -1,5 +1,6 @@
 #include "textures/TextureCache.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -75,11 +76,69 @@ void doesNotCacheFailedTextureLoad() {
     expect(cache.size() == 0, "expected failed texture to stay out of cache");
 }
 
+void expiresIdleEntryAtTtlWhileVisibleReferenceRetainsResource() {
+    using namespace std::chrono_literals;
+    const auto start = stui::textures::TextureCacheTimePoint{};
+    stui::textures::TextureCache<int> cache(2, 2min);
+    auto visible = cache.getOrLoad(
+        "visible.dds", [] { return std::make_shared<int>(7); }, start);
+    std::weak_ptr<int> resource = visible;
+
+    cache.pruneExpired(start + 2min);
+    expect(cache.size() == 0, "expected idle entry removed at TTL");
+    expect(!resource.expired(), "expected visible reference to retain resource");
+
+    visible.reset();
+    expect(resource.expired(), "expected final visible release to destroy resource");
+}
+
+void refreshesIdleExpiryWhenTextureIsAccessed() {
+    using namespace std::chrono_literals;
+    const auto start = stui::textures::TextureCacheTimePoint{};
+    stui::textures::TextureCache<int> cache(2, 2min);
+    cache.getOrLoad("visible.dds", [] { return std::make_shared<int>(7); }, start);
+
+    const auto refreshed = cache.get("visible.dds", start + 90s);
+    cache.pruneExpired(start + 3min + 29s);
+
+    expect(refreshed != nullptr, "expected cache access to return resource");
+    expect(cache.size() == 1, "expected access to refresh idle expiry");
+
+    cache.pruneExpired(start + 3min + 30s);
+    expect(cache.size() == 0, "expected entry to expire from refreshed access time");
+}
+
+void clearsLookupState() {
+    stui::textures::TextureCache<int> cache(2);
+    cache.getOrLoad("first.dds", [] { return std::make_shared<int>(1); });
+    cache.getOrLoad("second.dds", [] { return std::make_shared<int>(2); });
+
+    cache.clear();
+
+    expect(cache.size() == 0, "expected clear to empty lookup state");
+    expect(cache.get("first.dds") == nullptr, "expected cleared entry lookup to miss");
+}
+
+void preservesLegacyNoExpiryBehaviorByDefault() {
+    using namespace std::chrono_literals;
+    const auto start = stui::textures::TextureCacheTimePoint{};
+    stui::textures::TextureCache<int> cache(2, stui::textures::TextureCacheDuration::max());
+    cache.getOrLoad("legacy.dds", [] { return std::make_shared<int>(7); }, start);
+
+    cache.pruneExpired(start + std::chrono::hours(24 * 365));
+
+    expect(cache.size() == 1, "expected maximum TTL to preserve legacy no-expiry behavior");
+}
+
 }  // namespace
 
 int main() {
     run("cache hit skips duplicate texture load", reusesCachedTextureWithoutLoadingAgain);
     run("capacity evicts least recently used texture", evictsLeastRecentlyUsedTextureAtCapacity);
     run("failed texture load is not cached", doesNotCacheFailedTextureLoad);
+    run("idle TTL removes cache ownership", expiresIdleEntryAtTtlWhileVisibleReferenceRetainsResource);
+    run("access refreshes idle TTL", refreshesIdleExpiryWhenTextureIsAccessed);
+    run("clear removes cache lookup state", clearsLookupState);
+    run("maximum TTL disables idle expiry", preservesLegacyNoExpiryBehaviorByDefault);
     return 0;
 }
