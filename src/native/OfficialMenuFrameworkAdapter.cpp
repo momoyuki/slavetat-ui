@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <filesystem>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -134,6 +135,80 @@ FoundationLayout OfficialMenuFrameworkAdapter::calculateFoundationLayout(
     };
 }
 
+void CatalogBrowserPageInputState::synchronize(
+    std::size_t pageIndex,
+    std::size_t pageCount) noexcept {
+    const std::size_t oneBasedPage = pageCount == 0 ? 0 : pageIndex + 1;
+    const int committedPageNumber = static_cast<int>(std::min(
+        oneBasedPage,
+        static_cast<std::size_t>(std::numeric_limits<int>::max())));
+    if (!editing_ || committedPageNumber != committedPageNumber_ || pageCount != pageCount_) {
+        pendingPageNumber_ = committedPageNumber;
+    }
+    committedPageNumber_ = committedPageNumber;
+    pageCount_ = pageCount;
+    if (pageCount_ == 0) {
+        editing_ = false;
+    }
+}
+
+int& CatalogBrowserPageInputState::pendingPageNumber() noexcept {
+    return pendingPageNumber_;
+}
+
+std::optional<std::size_t> CatalogBrowserPageInputState::finishFrame(
+    bool itemActive,
+    bool committedOnEnter,
+    bool committedOnDeactivate) noexcept {
+    if (pageCount_ == 0) {
+        editing_ = false;
+        return std::nullopt;
+    }
+    if (committedOnEnter || committedOnDeactivate) {
+        editing_ = false;
+        return pendingPageNumber_ > 0 ? static_cast<std::size_t>(pendingPageNumber_) : 0;
+    }
+    editing_ = itemActive;
+    return std::nullopt;
+}
+
+CatalogBrowserEmptyState classifyCatalogBrowserEmptyState(
+    bool hasSnapshot,
+    const repository::TattooPage& page) noexcept {
+    if (!hasSnapshot || page.totalEntries == 0) {
+        return CatalogBrowserEmptyState::emptyCatalog;
+    }
+    if (page.matchedEntries == 0) {
+        return CatalogBrowserEmptyState::noMatches;
+    }
+    return CatalogBrowserEmptyState::none;
+}
+
+std::string_view catalogBrowserEmptyMessage(CatalogBrowserEmptyState state) noexcept {
+    switch (state) {
+    case CatalogBrowserEmptyState::emptyCatalog:
+        return "The tattoo catalog is empty. Refresh the catalog to browse tattoos.";
+    case CatalogBrowserEmptyState::noMatches:
+        return "No tattoos match the current filters.";
+    case CatalogBrowserEmptyState::none:
+        return {};
+    }
+    return {};
+}
+
+std::vector<CatalogBrowserSourceOption> buildCatalogBrowserSourceOptions(
+    const std::vector<repository::TattooSourceOption>& sources) {
+    std::vector<CatalogBrowserSourceOption> options;
+    options.reserve(sources.size());
+    for (const auto& source : sources) {
+        options.push_back({
+            .label = source.packName + " (" + source.sourceId + ")",
+            .sourceId = source.sourceId,
+        });
+    }
+    return options;
+}
+
 bool OfficialMenuFrameworkAdapter::renderLauncher() {
     ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
     return ImGuiMCP::Button("Open Tattoo Browser");
@@ -169,7 +244,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     }
 
     const auto snapshot = model.snapshot();
-    std::vector<const char*> sourceLabels{"All sources"};
+    std::vector<CatalogBrowserSourceOption> sourceOptions;
     std::vector<const char*> sectionLabels{"All sections"};
     std::vector<const char*> areaLabels{"All areas"};
     int sourceIndex = 0;
@@ -178,8 +253,8 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
 
     if (snapshot) {
         const auto& facets = snapshot->repository.facets();
+        sourceOptions = buildCatalogBrowserSourceOptions(facets.sources);
         for (std::size_t index = 0; index < facets.sources.size(); ++index) {
-            sourceLabels.push_back(facets.sources[index].packName.c_str());
             if (facets.sources[index].sourceId == filter.sourceId) {
                 sourceIndex = static_cast<int>(index + 1);
             }
@@ -198,10 +273,16 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         }
     }
 
+    std::vector<const char*> sourceLabels{"All sources"};
+    sourceLabels.reserve(sourceOptions.size() + 1);
+    for (const auto& source : sourceOptions) {
+        sourceLabels.push_back(source.label.c_str());
+    }
+
     if (ImGuiMCP::Combo(
             "Source", &sourceIndex, sourceLabels.data(), static_cast<int>(sourceLabels.size()))) {
         model.setSourceId(
-            sourceIndex == 0 ? "" : snapshot->repository.facets().sources[sourceIndex - 1].sourceId);
+            sourceIndex == 0 ? "" : sourceOptions[sourceIndex - 1].sourceId);
     }
     if (ImGuiMCP::Combo(
             "Section", &sectionIndex, sectionLabels.data(), static_cast<int>(sectionLabels.size()))) {
@@ -213,10 +294,9 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     }
 
     const auto& page = model.page();
-    if (page.entries.empty()) {
-        ImGuiMCP::TextUnformatted(
-            snapshot ? "No tattoos match the current filters."
-                     : "The tattoo catalog is empty. Refresh the catalog to browse tattoos.");
+    const auto emptyState = classifyCatalogBrowserEmptyState(snapshot != nullptr, page);
+    if (emptyState != CatalogBrowserEmptyState::none) {
+        ImGuiMCP::TextUnformatted(catalogBrowserEmptyMessage(emptyState).data());
     } else {
         ImGuiMCP::Columns(2, "TattooCards", true);
         for (const auto& tattoo : page.entries) {
@@ -241,12 +321,18 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     ImGuiMCP::SameLine();
     ImGuiMCP::TextUnformatted("Page");
     ImGuiMCP::SameLine();
-    int pageNumber = hasPages ? static_cast<int>(page.pageIndex + 1) : 0;
-    const bool committedOnEnter = ImGuiMCP::InputInt(
-        "##PageNumber", &pageNumber, 0, 0, ImGuiMCP::ImGuiInputTextFlags_EnterReturnsTrue);
+    static CatalogBrowserPageInputState pageInputState;
+    pageInputState.synchronize(page.pageIndex, page.pageCount);
+    ImGuiMCP::InputInt(
+        "##PageNumber",
+        &pageInputState.pendingPageNumber(),
+        0,
+        0);
+    const bool itemActive = ImGuiMCP::IsItemActive();
     const bool committedOnDeactivate = ImGuiMCP::IsItemDeactivatedAfterEdit();
-    if (hasPages && (committedOnEnter || committedOnDeactivate)) {
-        model.setPageNumber(static_cast<std::size_t>(std::max(pageNumber, 1)));
+    if (const auto requestedPage = pageInputState.finishFrame(
+            itemActive, false, committedOnDeactivate)) {
+        model.setPageNumber(*requestedPage);
     }
     ImGuiMCP::SameLine();
     ImGuiMCP::Text("/ %zu", page.pageCount);

@@ -4,7 +4,10 @@
 #include "native/MenuFrameworkPort.h"
 
 #include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace stui::native {
 
@@ -38,6 +41,42 @@ struct FoundationLayout {
     MenuPosition position;
     MenuSize size;
 };
+
+class CatalogBrowserPageInputState {
+public:
+    void synchronize(std::size_t pageIndex, std::size_t pageCount) noexcept;
+    [[nodiscard]] int& pendingPageNumber() noexcept;
+    [[nodiscard]] std::optional<std::size_t> finishFrame(
+        bool itemActive,
+        bool committedOnEnter,
+        bool committedOnDeactivate) noexcept;
+
+private:
+    int pendingPageNumber_{};
+    int committedPageNumber_{};
+    std::size_t pageCount_{};
+    bool editing_{};
+};
+
+enum class CatalogBrowserEmptyState {
+    none,
+    emptyCatalog,
+    noMatches,
+};
+
+[[nodiscard]] CatalogBrowserEmptyState classifyCatalogBrowserEmptyState(
+    bool hasSnapshot,
+    const repository::TattooPage& page) noexcept;
+[[nodiscard]] std::string_view catalogBrowserEmptyMessage(
+    CatalogBrowserEmptyState state) noexcept;
+
+struct CatalogBrowserSourceOption {
+    std::string label;
+    std::string sourceId;
+};
+
+[[nodiscard]] std::vector<CatalogBrowserSourceOption> buildCatalogBrowserSourceOptions(
+    const std::vector<repository::TattooSourceOption>& sources);
 
 class OfficialMenuFrameworkAdapter final : public MenuFrameworkPort {
 public:

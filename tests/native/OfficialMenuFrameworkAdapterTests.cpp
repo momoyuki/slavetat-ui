@@ -106,6 +106,89 @@ void foundationLayoutAnchorsFortyPercentPanelToRightEdge() {
            "expected forty-percent full-height side panel");
 }
 
+void pageInputKeepsPendingEditsUntilEnterOrFocusLoss() {
+    stui::native::CatalogBrowserPageInputState state;
+    state.synchronize(1, 5);
+    expect(state.pendingPageNumber() == 2, "expected one-based committed page value");
+
+    state.pendingPageNumber() = 4;
+    expect(!state.finishFrame(true, false, false).has_value(),
+           "expected active edit not to commit on a keystroke");
+    state.synchronize(1, 5);
+    expect(state.pendingPageNumber() == 4,
+           "expected pending edit to survive the next frame");
+
+    const auto enterCommit = state.finishFrame(true, true, false);
+    expect(enterCommit == 4, "expected Enter to commit the edited one-based value");
+    state.synchronize(3, 5);
+    expect(state.pendingPageNumber() == 4,
+           "expected committed model page to resynchronize the input");
+
+    state.pendingPageNumber() = 5;
+    expect(!state.finishFrame(true, false, false).has_value(),
+           "expected second pending edit not to commit early");
+    const auto focusLossCommit = state.finishFrame(false, false, true);
+    expect(focusLossCommit == 5,
+           "expected focus loss to commit the edited one-based value");
+
+    state.synchronize(0, 5);
+    state.pendingPageNumber() = -7;
+    expect(state.finishFrame(false, true, false) == 0,
+           "expected invalid low input to reach model clamping as zero");
+    state.synchronize(0, 0);
+    state.pendingPageNumber() = 3;
+    expect(!state.finishFrame(false, true, false).has_value(),
+           "expected empty pagination not to commit");
+}
+
+void classifiesEmptyCatalogSeparatelyFromNoMatches() {
+    const stui::repository::TattooPage validEmptyCatalog{
+        .totalEntries = 0,
+        .matchedEntries = 0,
+        .pageCount = 0,
+    };
+    const auto emptyState =
+        stui::native::classifyCatalogBrowserEmptyState(true, validEmptyCatalog);
+    expect(emptyState == stui::native::CatalogBrowserEmptyState::emptyCatalog,
+           "expected a valid zero-entry snapshot to be an empty catalog");
+    expect(stui::native::catalogBrowserEmptyMessage(emptyState) ==
+               "The tattoo catalog is empty. Refresh the catalog to browse tattoos.",
+           "expected explicit empty-catalog message");
+
+    const stui::repository::TattooPage noMatches{
+        .totalEntries = 3,
+        .matchedEntries = 0,
+        .pageCount = 0,
+    };
+    const auto noMatchState =
+        stui::native::classifyCatalogBrowserEmptyState(true, noMatches);
+    expect(noMatchState == stui::native::CatalogBrowserEmptyState::noMatches,
+           "expected filtered zero matches from a non-empty catalog");
+    expect(stui::native::catalogBrowserEmptyMessage(noMatchState) ==
+               "No tattoos match the current filters.",
+           "expected explicit no-match message");
+
+    expect(stui::native::classifyCatalogBrowserEmptyState(false, noMatches) ==
+               stui::native::CatalogBrowserEmptyState::emptyCatalog,
+           "expected no snapshot to remain an empty-catalog state");
+}
+
+void sourceOptionsDistinguishDuplicatePackNamesAndPreserveIds() {
+    const std::vector<stui::repository::TattooSourceOption> sources{
+        {.sourceId = "source-a.json", .packName = "Shared Pack"},
+        {.sourceId = "source-b.json", .packName = "Shared Pack"},
+    };
+
+    const auto options = stui::native::buildCatalogBrowserSourceOptions(sources);
+    expect(options.size() == 2, "expected one presentation option per source");
+    expect(options[0].label == "Shared Pack (source-a.json)" &&
+               options[1].label == "Shared Pack (source-b.json)",
+           "expected duplicate pack names to include distinct source IDs");
+    expect(options[0].sourceId == "source-a.json" &&
+               options[1].sourceId == "source-b.json",
+           "expected selection payloads to preserve exact source IDs");
+}
+
 void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
     stui::native::NativeCatalogBrowserModel model([] { return nullptr; });
     model.refresh();
@@ -134,6 +217,12 @@ int main() {
         std::cout << "PASS default adapter is unavailable without loaded framework\n";
         foundationLayoutAnchorsFortyPercentPanelToRightEdge();
         std::cout << "PASS foundation layout anchors panel to right edge\n";
+        pageInputKeepsPendingEditsUntilEnterOrFocusLoss();
+        std::cout << "PASS page input keeps pending edits until commit\n";
+        classifiesEmptyCatalogSeparatelyFromNoMatches();
+        std::cout << "PASS classifies empty catalog separately from no matches\n";
+        sourceOptionsDistinguishDuplicatePackNamesAndPreserveIds();
+        std::cout << "PASS source options distinguish duplicate pack names\n";
         nullSnapshotModelHasSafeEmptyPageWithoutImGui();
         std::cout << "PASS null snapshot model has safe empty page without ImGui\n";
     } catch (const std::exception& error) {
