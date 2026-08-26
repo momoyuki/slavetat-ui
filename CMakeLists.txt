@@ -24,6 +24,7 @@ set(headers
     src/native/NativeMenu.h
     src/native/OfficialMenuFrameworkAdapter.h
     src/native/NativeCatalogBrowserModel.h
+    src/native/NativeThumbnailController.h
     src/adapters/PrismaTattooSerializer.h
     src/core/ITattooRuntime.h
     src/core/SlaveTatsService.h
@@ -48,6 +49,7 @@ set(sources
     src/native/NativeMenu.cpp
     src/native/OfficialMenuFrameworkAdapter.cpp
     src/native/NativeCatalogBrowserModel.cpp
+    src/native/NativeThumbnailController.cpp
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/SlaveTatsRuntime.cpp
@@ -85,6 +87,14 @@ target_link_libraries(${PROJECT_NAME}
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
 if(BUILD_TESTING)
+    add_executable(NativeThumbnailControllerTests
+        src/native/NativeThumbnailController.cpp
+        src/repository/TattooRepository.cpp
+        tests/native/NativeThumbnailControllerTests.cpp
+    )
+    target_include_directories(NativeThumbnailControllerTests PRIVATE src)
+    add_test(NAME NativeThumbnailControllerTests COMMAND NativeThumbnailControllerTests)
+
     add_executable(NativeCatalogBrowserModelTests
         src/native/NativeCatalogBrowserModel.cpp
         src/repository/TattooRepository.cpp
