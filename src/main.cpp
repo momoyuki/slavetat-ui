@@ -3,6 +3,7 @@
 #include "SlaveTatsNG_Interface.h"
 #include "repository/TattooCatalogStore.h"
 #include "native/NativeMenu.h"
+#include "native/NativeCatalogBrowserModel.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
 
 #include <array>
@@ -13,6 +14,8 @@ using namespace stui;
 namespace {
 
 repository::TattooCatalogStore g_tattooCatalogStore;
+native::NativeCatalogBrowserModel g_nativeCatalogBrowser(
+    [] { return g_tattooCatalogStore.snapshot(); });
 
 }  // namespace
 
@@ -218,7 +221,8 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
 
     static native::OfficialMenuFrameworkAdapter menuFrameworkAdapter;
     static native::NativeMenu nativeMenu([](native::NativeMenu& menu) {
-        native::OfficialMenuFrameworkAdapter::renderFoundation([&menu] { menu.close(); });
+        native::OfficialMenuFrameworkAdapter::renderFoundation(
+            g_nativeCatalogBrowser, [&menu] { menu.close(); });
     }, &native::OfficialMenuFrameworkAdapter::renderLauncher);
     if (const auto result = nativeMenu.registerMenu(menuFrameworkAdapter); !result) {
         logger::warn(

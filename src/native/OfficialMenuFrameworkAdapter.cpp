@@ -139,32 +139,6 @@ bool OfficialMenuFrameworkAdapter::renderLauncher() {
     return ImGuiMCP::Button("Open Tattoo Browser");
 }
 
-void OfficialMenuFrameworkAdapter::renderFoundation(const std::function<void()>& close) {
-    const auto* viewport = ImGuiMCP::GetMainViewport();
-    if (!viewport) {
-        return;
-    }
-    const auto layout = calculateFoundationLayout(
-        {viewport->Pos.x, viewport->Pos.y},
-        {viewport->Size.x, viewport->Size.y});
-    ImGuiMCP::SetNextWindowPos(
-        {layout.position.x, layout.position.y}, ImGuiMCP::ImGuiCond_Appearing, {0.0F, 0.0F});
-    ImGuiMCP::SetNextWindowSize(
-        {layout.size.width, layout.size.height}, ImGuiMCP::ImGuiCond_Appearing);
-    bool open = true;
-    ImGuiMCP::Begin(
-        "Tattoo Browser##SlaveTatsUI", &open, ImGuiMCP::ImGuiWindowFlags_NoCollapse);
-    ImGuiMCP::TextUnformatted("Native menu foundation is ready.");
-    ImGuiMCP::TextUnformatted("Catalog browsing remains available through PrismaUI (F8).");
-    if (ImGuiMCP::Button("Close")) {
-        open = false;
-    }
-    ImGuiMCP::End();
-    if (!open && close) {
-        close();
-    }
-}
-
 void OfficialMenuFrameworkAdapter::renderFoundation(
     NativeCatalogBrowserModel& model,
     const std::function<void()>& close) {
