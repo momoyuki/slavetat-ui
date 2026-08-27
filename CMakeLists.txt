@@ -25,6 +25,8 @@ set(headers
     src/native/OfficialMenuFrameworkAdapter.h
     src/native/NativeCatalogBrowserModel.h
     src/native/NativeThumbnailController.h
+    src/native/NativeThumbnailRuntime.h
+    src/native/D3D11NativeThumbnailSource.h
     src/adapters/PrismaTattooSerializer.h
     src/core/ITattooRuntime.h
     src/core/SlaveTatsService.h
@@ -50,6 +52,8 @@ set(sources
     src/native/OfficialMenuFrameworkAdapter.cpp
     src/native/NativeCatalogBrowserModel.cpp
     src/native/NativeThumbnailController.cpp
+    src/native/NativeThumbnailRuntime.cpp
+    src/native/D3D11NativeThumbnailSource.cpp
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/SlaveTatsRuntime.cpp
@@ -87,6 +91,27 @@ target_link_libraries(${PROJECT_NAME}
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
 if(BUILD_TESTING)
+    add_executable(NativeThumbnailRuntimeTests
+        src/native/NativeThumbnailController.cpp
+        src/native/NativeThumbnailRuntime.cpp
+        src/repository/TattooRepository.cpp
+        tests/native/NativeThumbnailRuntimeTests.cpp
+    )
+    target_include_directories(NativeThumbnailRuntimeTests PRIVATE src)
+    add_test(NAME NativeThumbnailRuntimeTests COMMAND NativeThumbnailRuntimeTests)
+
+    add_executable(D3D11NativeThumbnailSourceTests
+        src/native/D3D11NativeThumbnailSource.cpp
+        src/textures/D3D11TextureManager.cpp
+        src/textures/D3D11TextureUploader.cpp
+        src/textures/DdsDecoder.cpp
+        src/textures/TextureResolver.cpp
+        tests/native/D3D11NativeThumbnailSourceTests.cpp
+    )
+    target_include_directories(D3D11NativeThumbnailSourceTests PRIVATE src)
+    target_link_libraries(D3D11NativeThumbnailSourceTests PRIVATE Microsoft::DirectXTex d3d11)
+    add_test(NAME D3D11NativeThumbnailSourceTests COMMAND D3D11NativeThumbnailSourceTests)
+
     add_executable(NativeThumbnailControllerTests
         src/native/NativeThumbnailController.cpp
         src/repository/TattooRepository.cpp
