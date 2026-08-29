@@ -1,12 +1,32 @@
 #include "pch.h"
 #include "Bridge.h"
+#include "adapters/PrismaSlotSerializer.h"
 #include "adapters/PrismaTattooSerializer.h"
 #include "jcontainers_mini.h"
 #include "textures/ExactStreamReader.h"
 #include "textures/TextureResolver.h"
 #include "RE/R/Renderer.h"
 
+#include <cctype>
+#include <optional>
+
 namespace stui {
+namespace {
+
+std::optional<core::TattooArea> parseTattooArea(std::string_view value) {
+    std::string normalized(value);
+    for (char& character : normalized) {
+        character = static_cast<char>(std::toupper(static_cast<unsigned char>(character)));
+    }
+
+    if (normalized == "BODY") return core::TattooArea::body;
+    if (normalized == "FACE") return core::TattooArea::face;
+    if (normalized == "HANDS") return core::TattooArea::hands;
+    if (normalized == "FEET") return core::TattooArea::feet;
+    return std::nullopt;
+}
+
+}  // namespace
 
 // ── Initialization ────────────────────────────────────────────────────────────
 
@@ -78,6 +98,10 @@ void Bridge::toggleUI() {
         m_prismaUI->Hide(m_view);
     }
     m_hidden = !m_hidden;
+}
+
+core::SlaveTatsService& Bridge::tattooService() noexcept {
+    return m_service;
 }
 
 // ── Command Dispatch ──────────────────────────────────────────────────────────
@@ -154,6 +178,7 @@ void Bridge::onJSCommand(const char* jsonStr) {
         });
     } else if (action == "applyToSlot") {
         uint32_t actorId    = j.value("actorId", 0x14u);
+        std::string area    = j.value("area", "BODY");
         std::string section = j.value("section", "");
         std::string name    = j.value("name", "");
         std::string domain  = j.value("domain", "default");
@@ -161,11 +186,12 @@ void Bridge::onJSCommand(const char* jsonStr) {
         int  color          = j.value("color", 0xFFFFFF);
         float alpha         = j.value("alpha", 1.0f);
         SKSE::GetTaskInterface()->AddTask([this, actorId,
+                                          area    = std::move(area),
                                           section = std::move(section),
                                           name    = std::move(name),
                                           domain  = std::move(domain),
                                           slot, color, alpha]() {
-            handleApplyToSlot(actorId, section, name, domain, slot, color, alpha);
+            handleApplyToSlot(actorId, area, section, name, domain, slot, color, alpha);
         });
     } else if (action == "updateTattoo") {
         uint32_t actorId    = j.value("actorId", 0x14u);
@@ -360,84 +386,21 @@ void Bridge::handleQueryActors() {
 }
 
 void Bridge::handleQuerySlots(uint32_t actorId, std::string area) {
-    if (!m_tattooAPI) {
-        sendToUI(R"({"type":"error","message":"SlaveTatsNG not available"})");
-        return;
-    }
-    auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
-    if (!actor) {
-        sendToUI(std::format(R"({{"type":"error","message":"Actor 0x{:X} not found"}})", actorId));
+    const auto typedArea = parseTattooArea(area);
+    if (!typedArea) {
+        sendToUI(R"({"type":"error","message":"Invalid tattoo area"})");
         return;
     }
 
-    std::string areaUp = area;
-    for (char& c : areaUp) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-
-    // Read overlay count from skee64.ini; cache per area after first read
-    static std::unordered_map<std::string, int> s_slotCache;
-    if (!s_slotCache.count(areaUp)) {
-        static std::filesystem::path s_iniPath;
-        if (s_iniPath.empty()) {
-            wchar_t exeBuf[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
-            s_iniPath = std::filesystem::path(exeBuf).parent_path()
-                        / L"Data" / L"SKSE" / L"Plugins" / L"skee64.ini";
-        }
-        static const std::unordered_map<std::string, std::pair<std::wstring, int>> kAreaIni = {
-            {"BODY",  {L"Overlays/Body",  12}},
-            {"FACE",  {L"Overlays/Face",   3}},
-            {"HANDS", {L"Overlays/Hands",  3}},
-            {"FEET",  {L"Overlays/Feet",   3}},
-        };
-        int def = (areaUp == "BODY") ? 12 : 3;
-        auto it = kAreaIni.find(areaUp);
-        if (it != kAreaIni.end())
-            s_slotCache[areaUp] = static_cast<int>(GetPrivateProfileIntW(
-                it->second.first.c_str(), L"iNumOverlays", it->second.second, s_iniPath.c_str()));
-        else
-            s_slotCache[areaUp] = def;
-        logger::info("SlaveTatsUI: {} maxSlots={} (from skee64.ini)", areaUp, s_slotCache[areaUp]);
+    const auto result = m_service.querySlots(actorId, *typedArea);
+    if (!result) {
+        sendToUI(std::format(
+            R"({{"type":"error","message":"{}"}})",
+            escapeJSON(result.error().message)));
+        return;
     }
-    int maxSlots = s_slotCache.at(areaUp);
 
-    // Query slots occupied by non-SlaveTats overlays (other mods using NiOverride directly)
-    static constexpr const char* k_pool = "SlaveTatsUI-extSlots";
-    int extArr = jcmini::JValue::addToPool(jcmini::JArray::object(), k_pool);
-    m_tattooAPI->external_slots(actor, RE::BSFixedString(areaUp.c_str()), extArr);
-
-    std::unordered_set<int> externalSet;
-    int extCount = jcmini::JArray::count(extArr);
-    for (int i = 0; i < extCount; ++i)
-        externalSet.insert(jcmini::JArray::getInt(extArr, i));
-    jcmini::JValue::cleanPool(k_pool);
-
-    std::string result = std::format(
-        R"({{"type":"slots","area":"{}","maxSlots":{},"slots":[)", escapeJSON(area), maxSlots);
-    bool first = true;
-    for (int slot = 0; slot < maxSlots; slot++) {
-        int tattoo = m_tattooAPI->get_applied_tattoo_in_slot(
-            actor, RE::BSFixedString(areaUp.c_str()), slot);
-        if (!first) result += ',';
-        first = false;
-        if (tattoo) {
-            int rawColor = jcmini::JMap::getInt(tattoo, "color", 0);
-            result += std::format(
-                R"({{"slot":{},"occupied":true,"name":"{}","section":"{}","texture":"{}","color":{},"alpha":{:.2f},"handle":{}}})",
-                slot,
-                escapeJSON(jcmini::JMap::getStr(tattoo, "name")),
-                escapeJSON(jcmini::JMap::getStr(tattoo, "section")),
-                escapeJSON(jcmini::JMap::getStr(tattoo, "texture")),
-                (rawColor == 0) ? 0xFFFFFF : rawColor,
-                jcmini::JMap::getFlt(tattoo, "alpha", 1.0f),
-                tattoo);
-        } else if (externalSet.count(slot)) {
-            result += std::format(R"({{"slot":{},"occupied":true,"external":true,"name":"[External]"}})", slot);
-        } else {
-            result += std::format(R"({{"slot":{},"occupied":false}})", slot);
-        }
-    }
-    result += "]}";
-    sendToUI(result);
+    sendToUI(adapters::toPrismaSlotsJSON(*result));
 }
 
 void Bridge::handleQueryAllSlots(uint32_t actorId) {
@@ -484,78 +447,34 @@ void Bridge::handleRemoveFromSlot(uint32_t actorId, std::string area, int slot) 
         escapeJSON(area), slot));
 }
 
-void Bridge::handleApplyToSlot(uint32_t actorId, std::string section, std::string name, std::string domain, int slot, int color, float alpha) {
-    if (!m_tattooAPI) {
-        sendToUI(R"({"type":"error","message":"SlaveTatsNG not available"})");
-        return;
-    }
-    if (!m_jcReady) {
-        sendToUI(R"({"type":"error","message":"JContainers not ready"})");
-        return;
-    }
-    auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
-    if (!actor) {
-        sendToUI(std::format(R"({{"type":"error","message":"Actor 0x{:X} not found"}})", actorId));
-        return;
-    }
-    if (slot < 0) {
-        sendToUI(std::format(R"({{"type":"error","message":"Invalid slot {}"}})", slot));
+void Bridge::handleApplyToSlot(uint32_t actorId, std::string area, std::string section, std::string name, std::string domain, int slot, int color, float alpha) {
+    const auto typedArea = parseTattooArea(area);
+    if (!typedArea) {
+        sendToUI(R"({"type":"error","message":"Invalid tattoo area"})");
         return;
     }
 
-    logger::info("SlaveTatsUI: applyToSlot actor=0x{:X} domain='{}' section='{}' name='{}' slot={} color=0x{:X} alpha={:.2f}",
-        actorId, domain, section, name, slot, color, alpha);
+    logger::info("SlaveTatsUI: applyToSlot actor=0x{:X} area='{}' domain='{}' section='{}' name='{}' slot={} color=0x{:X} alpha={:.2f}",
+        actorId, area, domain, section, name, slot, color, alpha);
 
-    // Re-query with the same domain the UI used — handles from a prior queryAvailable
-    // were freed after that pool was cleaned, so we need a fresh reference here.
-    static constexpr const char* k_pool = "SlaveTatsUI-applyToSlot";
-    int arr = jcmini::JValue::addToPool(jcmini::JArray::object(), k_pool);
-    m_tattooAPI->query_available_tattoos(0, arr, 0, RE::BSFixedString(domain.c_str()));
-
-    int count = jcmini::JArray::count(arr);
-    int tattooHandle = 0;
-    for (int i = 0; i < count && !tattooHandle; ++i) {
-        int t = jcmini::JArray::getObj(arr, i);
-        if (jcmini::JMap::getStr(t, "section") == section &&
-            jcmini::JMap::getStr(t, "name")    == name) {
-            tattooHandle = t;
-        }
-    }
-
-    if (!tattooHandle) {
-        jcmini::JValue::cleanPool(k_pool);
-        logger::error("SlaveTatsUI: applyToSlot — '{}/{}' not found in domain '{}'", section, name, domain);
-        sendToUI(R"({"type":"error","message":"Tattoo not found in available list"})");
+    const auto result = m_service.applyToSlot(core::ApplyTattooRequest{
+        .actorFormId = actorId,
+        .area = *typedArea,
+        .slot = slot,
+        .domain = std::move(domain),
+        .section = std::move(section),
+        .name = std::move(name),
+        .color = color,
+        .alpha = alpha,
+    });
+    if (!result) {
+        sendToUI(std::format(
+            R"({{"type":"error","message":"{}"}})",
+            escapeJSON(result.error().message)));
         return;
     }
 
-    // Temporarily set color/alpha on the template so add_and_get_tattoo copies them
-    // into JFormDB. Restore original values after the call to avoid corrupting the
-    // shared template for subsequent queries.
-    int   origColor = jcmini::JMap::getInt(tattooHandle, "color", 0);
-    float origAlpha = jcmini::JMap::getFlt(tattooHandle, "alpha", 1.0f);
-    jcmini::JMap::setInt(tattooHandle, "color", color);
-    jcmini::JMap::setFlt(tattooHandle, "alpha", alpha);
-
-    int applied = m_tattooAPI->add_and_get_tattoo(actor, tattooHandle, slot, false, false, false);
-
-    // Restore template before pool cleanup so other concurrent readers see original values
-    jcmini::JMap::setInt(tattooHandle, "color", origColor);
-    jcmini::JMap::setFlt(tattooHandle, "alpha", origAlpha);
-    jcmini::JValue::cleanPool(k_pool);
-
-    if (!applied) {
-        logger::error("SlaveTatsUI: add_and_get_tattoo returned 0 — slot locked or invalid");
-        sendToUI(R"({"type":"error","message":"Failed to apply tattoo to slot"})");
-        return;
-    }
-
-    jcmini::JFormDB::setInt(actor, ".SlaveTats.updated", 1);
-    m_tattooAPI->synchronize_tattoos(actor, false);
-
-    sendToUI(std::format(
-        R"({{"type":"success","action":"applyToSlot","slot":{},"section":"{}","name":"{}"}})",
-        slot, escapeJSON(section), escapeJSON(name)));
+    sendToUI(adapters::toPrismaApplySuccessJSON(*result));
 }
 
 void Bridge::handleUpdateTattoo(uint32_t actorId, int tattooHandle, int color, float alpha) {

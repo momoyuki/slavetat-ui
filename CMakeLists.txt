@@ -27,6 +27,7 @@ set(headers
     src/native/NativeThumbnailController.h
     src/native/NativeThumbnailRuntime.h
     src/native/D3D11NativeThumbnailSource.h
+    src/adapters/PrismaSlotSerializer.h
     src/adapters/PrismaTattooSerializer.h
     src/core/ITattooRuntime.h
     src/core/SlaveTatsService.h
@@ -55,6 +56,7 @@ set(sources
     src/native/NativeThumbnailController.cpp
     src/native/NativeThumbnailRuntime.cpp
     src/native/D3D11NativeThumbnailSource.cpp
+    src/adapters/PrismaSlotSerializer.cpp
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/OverlaySlotConfiguration.cpp
@@ -168,6 +170,13 @@ if(BUILD_TESTING)
     )
     target_include_directories(PrismaTattooSerializerTests PRIVATE src)
     add_test(NAME PrismaTattooSerializerTests COMMAND PrismaTattooSerializerTests)
+
+    add_executable(PrismaSlotSerializerTests
+        src/adapters/PrismaSlotSerializer.cpp
+        tests/adapters/PrismaSlotSerializerTests.cpp
+    )
+    target_include_directories(PrismaSlotSerializerTests PRIVATE src)
+    add_test(NAME PrismaSlotSerializerTests COMMAND PrismaSlotSerializerTests)
 
     add_executable(TattooSourceScannerTests
         src/repository/TattooSourceScanner.cpp
