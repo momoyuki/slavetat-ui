@@ -47,7 +47,7 @@ The next migration slice makes the Player's current overlay slots the native ent
 10. On success, return to Current Tattoos and refresh only the selected area.
 11. On failure, retain the preview and target context, show the error, and permit retry or cancel.
 
-The initial apply uses the tattoo definition's default color and alpha. Color and alpha controls are deferred to the editor slice.
+The initial apply uses domain `default`, white `0xFFFFFF`, and alpha `1.0F`. The parsed catalog definition does not carry domain, color, or alpha fields, and the current Prisma catalog also queries domain `default`. Other domains and color/alpha controls are deferred to later slices.
 
 ## Architecture
 
@@ -84,7 +84,7 @@ Core defines transport-independent values:
 - `SlotOccupancy`: empty, SlaveTats, or external;
 - `TattooSlot`: zero-based slot number, occupancy, and optional copied tattoo metadata;
 - `TattooSlots`: area, configured slot count, and the complete ordered slot collection;
-- `ApplyTattooRequest`: actor form ID, area, slot, domain, section, name, default color, and default alpha;
+- `ApplyTattooRequest`: actor form ID, area, slot, domain, section, name, color, and alpha;
 - `ApplyTattooResult`: target identity and the applied tattoo metadata required for refresh/presentation.
 
 External runtime handles and JContainer objects never cross into core models. Any handle retained for later editing is copied as a numeric runtime identifier and treated as session-local.
@@ -202,7 +202,7 @@ BODY normally spans two pages with twelve slots. FACE, HANDS, and FEET normally 
 - Runtime slot copies represent empty, SlaveTats, and external occupancy correctly.
 - Overlay counts respect injected configuration values.
 - JContainer pools are cleaned on success and failure.
-- Apply preserves domain, section, name, area, slot, default color, and alpha.
+- Apply preserves domain `default`, section, name, area, slot, color `0xFFFFFF`, and alpha `1.0F`.
 - Apply failure does not issue synchronize or report success.
 - Successful apply marks updated and synchronizes once.
 
@@ -267,7 +267,7 @@ Each implementation slice receives its own test-first commit gate. No implementa
 - Current slots show six large cards per page with correct empty, SlaveTats, and external states.
 - Only mutable slots open the target-aware picker.
 - Selecting a catalog tattoo requires explicit Apply confirmation.
-- Apply uses the tattoo's default color and alpha and targets the selected Player area/slot.
+- Apply uses domain `default`, white `0xFFFFFF`, and alpha `1.0F` and targets the selected Player area/slot.
 - Successful and failed mutations transition predictably without losing picker state.
 - Native and Prisma slot queries and apply operations use the same core service.
 - Current Slots and Picker request thumbnails only for their six visible cards.
