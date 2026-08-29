@@ -123,6 +123,19 @@ TextureResolveResult TextureResolver::resolve(
         return std::unexpected(normalized.error());
     }
 
+    if (auto loose = resolveLoose(*normalized)) {
+        return loose;
+    }
+
+    return resolveArchiveBytes(std::move(*normalized), archiveReader);
+}
+
+TextureResolveResult TextureResolver::resolveLoose(std::string_view texturePath) const {
+    auto normalized = normalize(texturePath);
+    if (!normalized) {
+        return std::unexpected(normalized.error());
+    }
+
     auto loosePath = containedLoosePath(m_looseRoot, *normalized);
     if (!loosePath) {
         return std::unexpected(loosePath.error());
@@ -147,14 +160,7 @@ TextureResolveResult TextureResolver::resolve(
         };
     }
 
-    return resolveArchiveBytes(std::move(*normalized), archiveReader);
-}
-
-TextureResolveResult TextureResolver::resolveLoose(std::string_view texturePath) const {
-    return resolve(texturePath, [](std::string_view) {
-        return TextureBytesResult(
-            std::unexpected(TextureResolveError::notFound));
-    });
+    return std::unexpected(TextureResolveError::notFound);
 }
 
 TextureResolveResult TextureResolver::resolveArchive(

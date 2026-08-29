@@ -165,6 +165,38 @@ void symlinkCannotEscapeLooseRoot() {
         "expected symlink outside loose root rejected");
 }
 
+void redirectedLoosePathFallsBackToArchiveResolution() {
+    TemporaryDirectory root;
+    TemporaryDirectory redirected;
+    redirected.write("redirected.dds", {4, 2});
+    std::error_code error;
+    fs::create_symlink(
+        redirected.path() / "redirected.dds",
+        root.path() / "redirected.dds",
+        error);
+    if (error) {
+        std::cout << "SKIP redirected-path fallback unavailable: " << error.message() << '\n';
+        return;
+    }
+    TextureResolver resolver(root.path());
+    std::string requestedPath;
+
+    const auto result = resolver.resolve("redirected.dds", [&](std::string_view path) {
+        requestedPath = path;
+        return stui::textures::TextureBytesResult(std::vector<std::uint8_t>{7, 8});
+    });
+
+    expect(result.has_value(),
+        "expected redirected loose path to fall back to resource resolution");
+    expect(result->source == TextureSource::archive,
+        "expected redirected path to use the safe resource reader");
+    expect(result->bytes == std::vector<std::uint8_t>({7, 8}),
+        "expected bytes from the resource reader instead of the redirected loose path");
+    expect(requestedPath ==
+            "textures\\actors\\character\\slavetats\\redirected.dds",
+        "expected canonical resource path after loose redirection");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -195,5 +227,8 @@ int main() {
     failures += run(
         "symlink cannot escape loose root",
         symlinkCannotEscapeLooseRoot);
+    failures += run(
+        "redirected loose path falls back to archive resolution",
+        redirectedLoosePathFallsBackToArchiveResolution);
     return failures == 0 ? 0 : 1;
 }
