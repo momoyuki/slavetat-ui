@@ -7,6 +7,9 @@ vcpkg_installed/
 # Generated archives
 *.zip
 
+# Local Git worktrees
+.worktrees/
+
 # MSVC
 *.user
 *.suo
