@@ -68,21 +68,6 @@ public:
     ApplyTattooResult applyResult{stui::core::ApplyTattooSuccess{}};
 };
 
-class FallbackTattooRuntime final : public ITattooRuntime {
-public:
-    [[nodiscard]] bool apiAvailable() const noexcept override {
-        return true;
-    }
-
-    [[nodiscard]] bool jContainersReady() const noexcept override {
-        return true;
-    }
-
-    TattooQueryResult queryAvailable(std::string_view) override {
-        return std::vector<TattooEntry>{};
-    }
-};
-
 void expect(bool condition, std::string_view message) {
     if (!condition) {
         throw std::runtime_error(std::string(message));
@@ -403,24 +388,6 @@ void applyRuntimeFailureIsReturnedUnchanged() {
     expect(runtime.applyCount == 1, "expected one failed apply runtime call");
 }
 
-void missingSlotRuntimeUsesTypedFallback() {
-    FallbackTattooRuntime runtime;
-    SlaveTatsService service(runtime);
-
-    const auto result = service.querySlots(0x14, TattooArea::body);
-
-    expectError(result, ServiceErrorCode::slotQueryFailed, "Slot queries are not implemented");
-}
-
-void missingApplyRuntimeUsesTypedFallback() {
-    FallbackTattooRuntime runtime;
-    SlaveTatsService service(runtime);
-
-    const auto result = service.applyToSlot(validApplyRequest());
-
-    expectError(result, ServiceErrorCode::applyFailed, "Tattoo apply is not implemented");
-}
-
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -458,7 +425,5 @@ int main() {
     failures += run("boundary apply alpha is forwarded", boundaryApplyAlphaIsForwarded);
     failures += run("valid apply request is forwarded exactly once", validApplyRequestIsForwardedExactlyOnce);
     failures += run("apply runtime failure is returned unchanged", applyRuntimeFailureIsReturnedUnchanged);
-    failures += run("missing slot runtime uses typed fallback", missingSlotRuntimeUsesTypedFallback);
-    failures += run("missing apply runtime uses typed fallback", missingApplyRuntimeUsesTypedFallback);
     return failures == 0 ? 0 : 1;
 }

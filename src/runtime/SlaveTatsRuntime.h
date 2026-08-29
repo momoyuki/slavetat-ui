@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/ITattooRuntime.h"
+#include "runtime/OverlaySlotConfiguration.h"
 #include "JContainers/jc_interface.h"
 #include "SlaveTatsNG_Interface.h"
 
@@ -20,11 +21,14 @@ public:
     [[nodiscard]] std::uint32_t apiVersion() const noexcept;
     [[nodiscard]] const slavetats::interface::Addresses* api() const noexcept;
     core::TattooQueryResult queryAvailable(std::string_view domain) override;
+    core::TattooSlotsResult querySlots(std::uint32_t actorFormId, core::TattooArea area) override;
+    core::ApplyTattooResult applyToSlot(const core::ApplyTattooRequest& request) override;
 
 private:
     const slavetats::interface::Addresses* m_api{nullptr};
     std::uint32_t m_apiVersion{0};
     bool m_jContainersReady{false};
+    OverlaySlotConfiguration m_slotConfiguration;
 };
 
 }  // namespace stui::runtime

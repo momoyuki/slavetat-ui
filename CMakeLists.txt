@@ -31,6 +31,7 @@ set(headers
     src/core/ITattooRuntime.h
     src/core/SlaveTatsService.h
     src/core/TattooModels.h
+    src/runtime/OverlaySlotConfiguration.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooCatalogLoader.h
     src/repository/TattooCatalogStore.h
@@ -56,6 +57,7 @@ set(sources
     src/native/D3D11NativeThumbnailSource.cpp
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
+    src/runtime/OverlaySlotConfiguration.cpp
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
     src/repository/TattooCatalogStore.cpp
@@ -152,6 +154,13 @@ if(BUILD_TESTING)
     )
     target_include_directories(SlaveTatsUICoreTests PRIVATE src)
     add_test(NAME SlaveTatsUICoreTests COMMAND SlaveTatsUICoreTests)
+
+    add_executable(OverlaySlotConfigurationTests
+        src/runtime/OverlaySlotConfiguration.cpp
+        tests/runtime/OverlaySlotConfigurationTests.cpp
+    )
+    target_include_directories(OverlaySlotConfigurationTests PRIVATE src)
+    add_test(NAME OverlaySlotConfigurationTests COMMAND OverlaySlotConfigurationTests)
 
     add_executable(PrismaTattooSerializerTests
         src/adapters/PrismaTattooSerializer.cpp

@@ -13,19 +13,8 @@ public:
     [[nodiscard]] virtual bool apiAvailable() const noexcept = 0;
     [[nodiscard]] virtual bool jContainersReady() const noexcept = 0;
     virtual TattooQueryResult queryAvailable(std::string_view domain) = 0;
-    virtual TattooSlotsResult querySlots(std::uint32_t, TattooArea) {
-        return std::unexpected(ServiceError{
-            ServiceErrorCode::slotQueryFailed,
-            "Slot queries are not implemented",
-        });
-    }
-
-    virtual ApplyTattooResult applyToSlot(const ApplyTattooRequest&) {
-        return std::unexpected(ServiceError{
-            ServiceErrorCode::applyFailed,
-            "Tattoo apply is not implemented",
-        });
-    }
+    virtual TattooSlotsResult querySlots(std::uint32_t actorFormId, TattooArea area) = 0;
+    virtual ApplyTattooResult applyToSlot(const ApplyTattooRequest& request) = 0;
 };
 
 }  // namespace stui::core
