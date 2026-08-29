@@ -135,6 +135,41 @@ std::vector<std::string> collectVisibleSlotTexturePaths(
     return paths;
 }
 
+std::string formatSlotTargetLabel(core::TattooArea area, std::int32_t slot) {
+    return "Player / " + std::string(slotAreaLabel(area)) + " / Slot " +
+        std::to_string(slot);
+}
+
+std::string previewApplyButtonLabel(std::int32_t slot, bool retry) {
+    return std::string(retry ? "Retry Slot " : "Apply to Slot ") +
+        std::to_string(slot);
+}
+
+bool isPreviewApplyEnabled(
+    SlotWorkflowScreen screen,
+    bool hasTarget,
+    bool hasTattoo) noexcept {
+    return screen == SlotWorkflowScreen::preview && hasTarget && hasTattoo;
+}
+
+std::vector<std::string> collectPickerTexturePaths(
+    const repository::TattooPage& page) {
+    const std::size_t visibleCount = pickerVisibleCardCount(page);
+    std::vector<std::string> paths;
+    paths.reserve(visibleCount);
+    for (std::size_t index = 0; index < visibleCount; ++index) {
+        if (!page.entries[index].texturePath.empty()) {
+            paths.push_back(page.entries[index].texturePath);
+        }
+    }
+    return paths;
+}
+
+std::size_t pickerVisibleCardCount(const repository::TattooPage& page) noexcept {
+    constexpr std::size_t maximumVisibleCards = 6;
+    return std::min(page.entries.size(), maximumVisibleCards);
+}
+
 bool OfficialMenuFrameworkAdapter::available() const noexcept {
     return bindings_.getVersion && bindings_.addSectionItem && bindings_.addWindow &&
            bindings_.setWindowOpen && bindings_.isWindowOpen && bindings_.setWindowBlocking;
@@ -229,8 +264,10 @@ CatalogCardGridPosition catalogCardGridPosition(
 
 std::string catalogCardWidgetId(
     std::string_view role,
-    std::size_t index) {
-    return std::string(role) + "##" + std::to_string(index);
+    std::string_view sourceId,
+    std::size_t sourceIndex) {
+    return std::string(role) + "##" + std::string(sourceId) + ":" +
+        std::to_string(sourceIndex);
 }
 
 CatalogBrowserGridLayout calculateCatalogBrowserGridLayout(
@@ -671,6 +708,117 @@ void renderCurrentSlots(
     }
 }
 
+void renderPreview(
+    NativeSlotWorkflowModel& workflow,
+    NativeCatalogBrowserModel& catalog,
+    NativeThumbnailRuntime& thumbnails,
+    const std::function<void()>& close) {
+    const auto* preview = workflow.previewTattoo();
+    const auto target = workflow.targetSlot();
+    std::vector<std::string> paths;
+    if (preview && !preview->texturePath.empty()) {
+        paths.push_back(preview->texturePath);
+    }
+    NativeThumbnailEpoch epoch = catalog.snapshot();
+    if (!epoch) {
+        static const NativeThumbnailEpoch fallbackEpoch = std::make_shared<int>(4);
+        epoch = fallbackEpoch;
+    }
+    thumbnails.synchronize(std::move(epoch), paths);
+    thumbnails.pump();
+    const auto thumbnailViews = thumbnails.views();
+
+    const auto* viewport = ImGuiMCP::GetMainViewport();
+    if (!viewport) {
+        return;
+    }
+    const auto layout = OfficialMenuFrameworkAdapter::calculateFoundationLayout(
+        {viewport->Pos.x, viewport->Pos.y},
+        {viewport->Size.x, viewport->Size.y});
+    ImGuiMCP::SetNextWindowPos(
+        {layout.position.x, layout.position.y}, ImGuiMCP::ImGuiCond_Appearing, {0.0F, 0.0F});
+    ImGuiMCP::SetNextWindowSize(
+        {layout.size.width, layout.size.height}, ImGuiMCP::ImGuiCond_Appearing);
+    bool open = true;
+    ImGuiMCP::PushStyleVar(ImGuiMCP::ImGuiStyleVar_WindowBorderSize, 0.0F);
+    ImGuiMCP::Begin(
+        "Tattoo Browser##SlaveTatsUI",
+        &open,
+        ImGuiMCP::ImGuiWindowFlags_NoCollapse |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse);
+
+    ImGuiMCP::TextUnformatted("Preview Tattoo");
+    if (target) {
+        const auto targetLabel = formatSlotTargetLabel(workflow.selectedArea(), *target);
+        ImGuiMCP::TextUnformatted(targetLabel.c_str());
+    }
+    if (preview) {
+        ImGuiMCP::Text("%s / %s", preview->section.c_str(), preview->name.c_str());
+    }
+    if (const auto* error = workflow.error()) {
+        ImGuiMCP::TextUnformatted(error->message.c_str());
+    } else if (workflow.screen() == SlotWorkflowScreen::applying) {
+        ImGuiMCP::TextUnformatted("Applying tattoo...");
+    }
+
+    const float footerHeight = ImGuiMCP::GetFrameHeightWithSpacing();
+    const float imageHeight = std::max(
+        1.0F,
+        ImGuiMCP::GetContentRegionAvail().y - footerHeight);
+    ImGuiMCP::PushStyleColor(
+        ImGuiMCP::ImGuiCol_ChildBg,
+        ImGuiMCP::ImVec4(0.08F, 0.08F, 0.08F, 1.0F));
+    if (ImGuiMCP::BeginChild(
+            "PreviewImage",
+            {0.0F, imageHeight},
+            ImGuiMCP::ImGuiChildFlags_Border,
+            ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+                ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
+        if (preview) {
+            core::TattooSlot previewSlot{
+                .index = target.value_or(-1),
+                .occupancy = core::SlotOccupancy::slaveTats,
+                .tattoo = core::TattooEntry{
+                    .section = preview->section,
+                    .name = preview->name,
+                    .texturePath = preview->texturePath,
+                },
+            };
+            renderSlotImage(previewSlot, thumbnailViews, ImGuiMCP::GetContentRegionAvail());
+        }
+    }
+    ImGuiMCP::EndChild();
+    ImGuiMCP::PopStyleColor();
+
+    const bool applying = workflow.screen() == SlotWorkflowScreen::applying;
+    ImGuiMCP::BeginDisabled(applying);
+    if (ImGuiMCP::Button("Cancel")) {
+        workflow.cancelPreview();
+    }
+    ImGuiMCP::EndDisabled();
+    ImGuiMCP::SameLine();
+    const bool canApply = isPreviewApplyEnabled(
+        workflow.screen(), target.has_value(), preview != nullptr);
+    const auto applyLabel = previewApplyButtonLabel(
+        target.value_or(-1), workflow.error() != nullptr);
+    ImGuiMCP::BeginDisabled(!canApply);
+    if (ImGuiMCP::Button(applyLabel.c_str())) {
+        (void)workflow.confirmApply();
+    }
+    ImGuiMCP::EndDisabled();
+    ImGuiMCP::SameLine();
+    if (ImGuiMCP::Button("Close")) {
+        open = false;
+    }
+
+    ImGuiMCP::End();
+    ImGuiMCP::PopStyleVar();
+    if (!open && close) {
+        close();
+    }
+}
+
 }  // namespace
 
 bool OfficialMenuFrameworkAdapter::renderLauncher() {
@@ -689,9 +837,14 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         renderCurrentSlots(workflow, thumbnails, close);
         return;
     }
+    if (workflow.screen() == SlotWorkflowScreen::preview ||
+        workflow.screen() == SlotWorkflowScreen::applying) {
+        renderPreview(workflow, model, thumbnails, close);
+        return;
+    }
 
     model.refresh();
-    thumbnails.synchronize(model.snapshot(), model.page());
+    thumbnails.synchronize(model.snapshot(), collectPickerTexturePaths(model.page()));
     thumbnails.pump();
     const auto thumbnailViews = thumbnails.views();
 
@@ -719,9 +872,9 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         workflow.backToSlots();
     }
     ImGuiMCP::SameLine();
-    ImGuiMCP::Text("Target: Player / %s / Slot %d",
-        slotAreaLabel(workflow.selectedArea()).data(),
-        workflow.targetSlot().value_or(-1));
+    const auto targetLabel = formatSlotTargetLabel(
+        workflow.selectedArea(), workflow.targetSlot().value_or(-1));
+    ImGuiMCP::Text("Target: %s", targetLabel.c_str());
 
     static bool filtersExpanded = false;
     if (ImGuiMCP::Button(filtersExpanded ? "Hide filters" : "Filters")) {
@@ -866,7 +1019,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                 static_cast<int>(columnCount),
                 tableFlags,
                 {0.0F, gridLayout.gridHeight})) {
-            for (std::size_t index = 0; index < page.entries.size(); ++index) {
+            for (std::size_t index = 0; index < pickerVisibleCardCount(page); ++index) {
                 const auto gridPosition = catalogCardGridPosition(index, columnCount);
                 if (gridPosition.column == 0) {
                     ImGuiMCP::TableNextRow(0, gridLayout.rowHeight);
@@ -880,7 +1033,8 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                     ? &thumbnailViews[*thumbnailIndex]
                     : nullptr;
 
-                const auto thumbnailWidgetId = catalogCardWidgetId("Thumbnail", index);
+                const auto thumbnailWidgetId = catalogCardWidgetId(
+                    "Thumbnail", tattoo.sourceId, tattoo.sourceIndex);
 
                 ImGuiMCP::PushStyleColor(
                     ImGuiMCP::ImGuiCol_ChildBg,
@@ -954,6 +1108,9 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                 ImGuiMCP::PopStyleColor();
                 if (ImGuiMCP::IsItemHovered()) {
                     ImGuiMCP::SetTooltip("%s", tattoo.name.c_str());
+                }
+                if (ImGuiMCP::IsItemClicked()) {
+                    workflow.selectTattoo(tattoo);
                 }
             }
             ImGuiMCP::EndTable();

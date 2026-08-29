@@ -167,11 +167,12 @@ void thumbnailGridGroupsTwoCardsIntoEachRow() {
 }
 
 void thumbnailCardWidgetsHaveStableUniqueIds() {
-    expect(stui::native::catalogCardWidgetId("Thumbnail", 0) == "Thumbnail##0",
-        "expected the first thumbnail widget to include its card index");
-    expect(stui::native::catalogCardWidgetId("Thumbnail", 0) !=
-               stui::native::catalogCardWidgetId("Thumbnail", 1),
-        "expected every thumbnail widget to have a unique ImGui ID");
+    expect(stui::native::catalogCardWidgetId("Thumbnail", "source-a.json", 7) ==
+               "Thumbnail##source-a.json:7",
+        "expected thumbnail ID derived from stable catalog identity");
+    expect(stui::native::catalogCardWidgetId("Thumbnail", "source-a.json", 7) !=
+               stui::native::catalogCardWidgetId("Thumbnail", "source-b.json", 7),
+        "expected equal source indices from different files to remain unique");
 }
 
 void browserGridUsesRemainingHeightWithoutVerticalScrolling() {
@@ -384,6 +385,50 @@ void visibleSlotPathsIncludeOnlyOwnedCardsOnTheCurrentPage() {
         "expected slot path collection to follow the selected page");
 }
 
+void pickerAndPreviewHelpersExposeExactTargetIntent() {
+    expect(stui::native::formatSlotTargetLabel(
+               stui::core::TattooArea::body, 2) == "Player / BODY / Slot 2",
+        "expected exact Player BODY target label");
+    expect(stui::native::previewApplyButtonLabel(2) == "Apply to Slot 2",
+        "expected Apply action to name the target slot");
+    expect(stui::native::previewApplyButtonLabel(2, true) == "Retry Slot 2",
+        "expected failed Apply action to identify a retry");
+    expect(stui::native::isPreviewApplyEnabled(
+               stui::native::SlotWorkflowScreen::preview, true, true),
+        "expected complete Preview target to enable Apply");
+    expect(!stui::native::isPreviewApplyEnabled(
+               stui::native::SlotWorkflowScreen::applying, true, true),
+        "expected Applying state to suppress duplicate Apply");
+    expect(!stui::native::isPreviewApplyEnabled(
+               stui::native::SlotWorkflowScreen::preview, false, true),
+        "expected missing slot target to disable Apply");
+}
+
+void pickerVisiblePathsFollowOnlyTheSixRenderedCards() {
+    const stui::repository::TattooPage page{
+        .entries = {
+            {.texturePath = "picker/a.dds"},
+            {.texturePath = "picker/b.dds"},
+            {.texturePath = ""},
+            {.texturePath = "picker/d.dds"},
+            {.texturePath = "picker/e.dds"},
+            {.texturePath = "picker/f.dds"},
+            {.texturePath = "picker/not-visible.dds"},
+        },
+    };
+
+    const auto paths = stui::native::collectPickerTexturePaths(page);
+    expect(stui::native::pickerVisibleCardCount(page) == 6,
+        "expected renderer and thumbnail collector to share a six-card bound");
+    expect(paths == std::vector<std::string>{
+                        "picker/a.dds",
+                        "picker/b.dds",
+                        "picker/d.dds",
+                        "picker/e.dds",
+                        "picker/f.dds"},
+        "expected thumbnail work only for non-empty paths in six visible Picker cards");
+}
+
 void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
     stui::native::NativeCatalogBrowserModel model([] { return nullptr; });
     model.refresh();
@@ -447,6 +492,10 @@ int main() {
         std::cout << "PASS slot area labels match SlaveTats areas\n";
         visibleSlotPathsIncludeOnlyOwnedCardsOnTheCurrentPage();
         std::cout << "PASS visible slot paths include only owned cards\n";
+        pickerAndPreviewHelpersExposeExactTargetIntent();
+        std::cout << "PASS picker and Preview helpers expose exact target intent\n";
+        pickerVisiblePathsFollowOnlyTheSixRenderedCards();
+        std::cout << "PASS Picker visible paths follow six rendered cards\n";
         nullSnapshotModelHasSafeEmptyPageWithoutImGui();
         std::cout << "PASS null snapshot model has safe empty page without ImGui\n";
     } catch (const std::exception& error) {

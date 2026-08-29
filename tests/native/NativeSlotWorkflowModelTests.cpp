@@ -261,6 +261,9 @@ void applySuccessReturnsToSlotsAndRefreshesArea() {
     expect(refresh && refresh->area == TattooArea::body,
         "expected success to refresh selected area");
     expect(catalog.filter().search == filterBefore.search &&
+            catalog.filter().sourceId == filterBefore.sourceId &&
+            catalog.filter().section == filterBefore.section &&
+            catalog.filter().area == filterBefore.area &&
             catalog.page().pageIndex == pageBefore,
         "expected Apply success to preserve picker state");
 }

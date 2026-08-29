@@ -16,6 +16,7 @@ namespace stui::native {
 class NativeThumbnailRuntime;
 class NativeSlotWorkflowModel;
 class NativeSlotWorkflowRuntime;
+enum class SlotWorkflowScreen;
 enum class NativeThumbnailStatus;
 struct NativeThumbnailView;
 
@@ -79,6 +80,20 @@ struct SlotPageRange {
     const core::TattooSlots& slots,
     std::size_t pageIndex,
     std::size_t pageSize);
+[[nodiscard]] std::string formatSlotTargetLabel(
+    core::TattooArea area,
+    std::int32_t slot);
+[[nodiscard]] std::string previewApplyButtonLabel(
+    std::int32_t slot,
+    bool retry = false);
+[[nodiscard]] bool isPreviewApplyEnabled(
+    SlotWorkflowScreen screen,
+    bool hasTarget,
+    bool hasTattoo) noexcept;
+[[nodiscard]] std::vector<std::string> collectPickerTexturePaths(
+    const repository::TattooPage& page);
+[[nodiscard]] std::size_t pickerVisibleCardCount(
+    const repository::TattooPage& page) noexcept;
 
 struct CatalogCardGridPosition {
     std::size_t row{};
@@ -91,7 +106,8 @@ struct CatalogCardGridPosition {
 
 [[nodiscard]] std::string catalogCardWidgetId(
     std::string_view role,
-    std::size_t index);
+    std::string_view sourceId,
+    std::size_t sourceIndex);
 
 struct CatalogBrowserGridLayout {
     float gridHeight{};
