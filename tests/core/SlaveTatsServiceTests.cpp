@@ -3,6 +3,7 @@
 
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -12,11 +13,17 @@
 namespace {
 
 using stui::core::ITattooRuntime;
+using stui::core::ApplyTattooRequest;
+using stui::core::ApplyTattooResult;
 using stui::core::ServiceError;
 using stui::core::ServiceErrorCode;
 using stui::core::SlaveTatsService;
+using stui::core::SlotOccupancy;
+using stui::core::TattooArea;
 using stui::core::TattooEntry;
 using stui::core::TattooQueryResult;
+using stui::core::TattooSlots;
+using stui::core::TattooSlotsResult;
 
 class FakeTattooRuntime final : public ITattooRuntime {
 public:
@@ -34,11 +41,46 @@ public:
         return queryResult;
     }
 
+    TattooSlotsResult querySlots(std::uint32_t actorFormId, TattooArea area) override {
+        queriedActor = actorFormId;
+        queriedArea = area;
+        ++slotQueryCount;
+        return slotQueryResult;
+    }
+
+    ApplyTattooResult applyToSlot(const ApplyTattooRequest& request) override {
+        appliedRequest = request;
+        ++applyCount;
+        return applyResult;
+    }
+
     bool apiAvailableValue{true};
     bool jContainersReadyValue{true};
     int queryCount{0};
     std::string requestedDomain;
     TattooQueryResult queryResult{std::vector<TattooEntry>{}};
+    std::uint32_t queriedActor{0};
+    TattooArea queriedArea{TattooArea::body};
+    int slotQueryCount{0};
+    TattooSlotsResult slotQueryResult{TattooSlots{}};
+    ApplyTattooRequest appliedRequest;
+    int applyCount{0};
+    ApplyTattooResult applyResult{stui::core::ApplyTattooSuccess{}};
+};
+
+class FallbackTattooRuntime final : public ITattooRuntime {
+public:
+    [[nodiscard]] bool apiAvailable() const noexcept override {
+        return true;
+    }
+
+    [[nodiscard]] bool jContainersReady() const noexcept override {
+        return true;
+    }
+
+    TattooQueryResult queryAvailable(std::string_view) override {
+        return std::vector<TattooEntry>{};
+    }
 };
 
 void expect(bool condition, std::string_view message) {
@@ -47,10 +89,24 @@ void expect(bool condition, std::string_view message) {
     }
 }
 
-void expectError(const TattooQueryResult& result, ServiceErrorCode code, std::string_view message) {
-    expect(!result.has_value(), "expected query to fail");
+template <class Value>
+void expectError(const std::expected<Value, ServiceError>& result, ServiceErrorCode code, std::string_view message) {
+    expect(!result.has_value(), "expected operation to fail");
     expect(result.error().code == code, "unexpected service error code");
     expect(result.error().message == message, "unexpected service error message");
+}
+
+ApplyTattooRequest validApplyRequest() {
+    return ApplyTattooRequest{
+        .actorFormId = 0x14,
+        .area = TattooArea::body,
+        .slot = 2,
+        .domain = "default",
+        .section = "LewdMarks",
+        .name = "Corruption",
+        .color = 0xFF00FF,
+        .alpha = 0.75F,
+    };
 }
 
 void unavailableApiStopsBeforeRuntimeQuery() {
@@ -112,6 +168,259 @@ void runtimeFailureIsReturnedUnchanged() {
     expectError(result, ServiceErrorCode::queryAvailableFailed, "query_available_tattoos failed");
 }
 
+void unavailableApiStopsSlotQuery() {
+    FakeTattooRuntime runtime;
+    runtime.apiAvailableValue = false;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.querySlots(0x14, TattooArea::body);
+
+    expectError(result, ServiceErrorCode::slaveTatsUnavailable, "SlaveTatsNG not available");
+    expect(runtime.slotQueryCount == 0, "slot runtime must not run without the SlaveTats API");
+}
+
+void unavailableJContainersStopsSlotQuery() {
+    FakeTattooRuntime runtime;
+    runtime.jContainersReadyValue = false;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.querySlots(0x14, TattooArea::body);
+
+    expectError(result, ServiceErrorCode::jContainersUnavailable, "JContainers not ready");
+    expect(runtime.slotQueryCount == 0, "slot runtime must not run before JContainers is ready");
+}
+
+void invalidSlotQueryActorIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.querySlots(0, TattooArea::body);
+
+    expectError(result, ServiceErrorCode::actorNotFound, "Actor not found");
+    expect(runtime.slotQueryCount == 0, "invalid actor must not reach the slot runtime");
+}
+
+void invalidSlotQueryAreaIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.querySlots(0x14, static_cast<TattooArea>(99));
+
+    expectError(result, ServiceErrorCode::invalidArea, "Invalid tattoo area");
+    expect(runtime.slotQueryCount == 0, "invalid area must not reach the slot runtime");
+}
+
+void validSlotQueryIsForwardedExactlyOnce() {
+    FakeTattooRuntime runtime;
+    runtime.slotQueryResult = TattooSlots{
+        .actorFormId = 0x14,
+        .area = TattooArea::hands,
+        .configuredCount = 3,
+        .slots = {{.index = 0, .occupancy = SlotOccupancy::empty}},
+    };
+    SlaveTatsService service(runtime);
+
+    const auto result = service.querySlots(0x14, TattooArea::hands);
+
+    expect(result.has_value(), "expected slot query success");
+    expect(runtime.slotQueryCount == 1, "expected exactly one slot runtime query");
+    expect(runtime.queriedActor == 0x14, "expected Player actor forwarded unchanged");
+    expect(runtime.queriedArea == TattooArea::hands, "expected tattoo area forwarded unchanged");
+    expect(result->configuredCount == 3 && result->slots.size() == 1,
+        "expected runtime slot result returned unchanged");
+}
+
+void slotQueryRuntimeFailureIsReturnedUnchanged() {
+    FakeTattooRuntime runtime;
+    runtime.slotQueryResult = std::unexpected(ServiceError{
+        ServiceErrorCode::slotQueryFailed,
+        "query slots failed",
+    });
+    SlaveTatsService service(runtime);
+
+    const auto result = service.querySlots(0x14, TattooArea::feet);
+
+    expectError(result, ServiceErrorCode::slotQueryFailed, "query slots failed");
+    expect(runtime.slotQueryCount == 1, "expected one failed slot runtime query");
+}
+
+void unavailableApiStopsApply() {
+    FakeTattooRuntime runtime;
+    runtime.apiAvailableValue = false;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.applyToSlot(validApplyRequest());
+
+    expectError(result, ServiceErrorCode::slaveTatsUnavailable, "SlaveTatsNG not available");
+    expect(runtime.applyCount == 0, "apply runtime must not run without the SlaveTats API");
+}
+
+void unavailableJContainersStopsApply() {
+    FakeTattooRuntime runtime;
+    runtime.jContainersReadyValue = false;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.applyToSlot(validApplyRequest());
+
+    expectError(result, ServiceErrorCode::jContainersUnavailable, "JContainers not ready");
+    expect(runtime.applyCount == 0, "apply runtime must not run before JContainers is ready");
+}
+
+void invalidApplyActorIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validApplyRequest();
+    request.actorFormId = 0;
+
+    const auto result = service.applyToSlot(request);
+
+    expectError(result, ServiceErrorCode::actorNotFound, "Actor not found");
+    expect(runtime.applyCount == 0, "invalid actor must not reach the apply runtime");
+}
+
+void invalidApplyAreaIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validApplyRequest();
+    request.area = static_cast<TattooArea>(99);
+
+    const auto result = service.applyToSlot(request);
+
+    expectError(result, ServiceErrorCode::invalidArea, "Invalid tattoo area");
+    expect(runtime.applyCount == 0, "invalid area must not reach the apply runtime");
+}
+
+void negativeApplySlotIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validApplyRequest();
+    request.slot = -1;
+
+    const auto result = service.applyToSlot(request);
+
+    expectError(result, ServiceErrorCode::invalidSlot, "Invalid tattoo slot");
+    expect(runtime.applyCount == 0, "negative slot must not reach the apply runtime");
+}
+
+void emptyApplySectionIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validApplyRequest();
+    request.section.clear();
+
+    const auto result = service.applyToSlot(request);
+
+    expectError(result, ServiceErrorCode::tattooNotFound, "Tattoo section and name are required");
+    expect(runtime.applyCount == 0, "empty section must not reach the apply runtime");
+}
+
+void emptyApplyNameIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validApplyRequest();
+    request.name.clear();
+
+    const auto result = service.applyToSlot(request);
+
+    expectError(result, ServiceErrorCode::tattooNotFound, "Tattoo section and name are required");
+    expect(runtime.applyCount == 0, "empty name must not reach the apply runtime");
+}
+
+void outOfRangeApplyAlphaIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto belowRange = validApplyRequest();
+    belowRange.alpha = -0.01F;
+    auto aboveRange = validApplyRequest();
+    aboveRange.alpha = 1.01F;
+    auto notANumber = validApplyRequest();
+    notANumber.alpha = std::numeric_limits<float>::quiet_NaN();
+
+    const auto belowResult = service.applyToSlot(belowRange);
+    const auto aboveResult = service.applyToSlot(aboveRange);
+    const auto nanResult = service.applyToSlot(notANumber);
+
+    expectError(belowResult, ServiceErrorCode::applyFailed, "Tattoo alpha must be between 0 and 1");
+    expectError(aboveResult, ServiceErrorCode::applyFailed, "Tattoo alpha must be between 0 and 1");
+    expectError(nanResult, ServiceErrorCode::applyFailed, "Tattoo alpha must be between 0 and 1");
+    expect(runtime.applyCount == 0, "invalid alpha must not reach the apply runtime");
+}
+
+void boundaryApplyAlphaIsForwarded() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validApplyRequest();
+    request.alpha = 0.0F;
+
+    const auto zeroResult = service.applyToSlot(request);
+    request.alpha = 1.0F;
+    const auto oneResult = service.applyToSlot(request);
+
+    expect(zeroResult.has_value() && oneResult.has_value(), "expected inclusive alpha boundaries accepted");
+    expect(runtime.applyCount == 2, "expected both boundary requests forwarded");
+    expect(runtime.appliedRequest.alpha == 1.0F, "expected upper alpha boundary forwarded unchanged");
+}
+
+void validApplyRequestIsForwardedExactlyOnce() {
+    FakeTattooRuntime runtime;
+    runtime.applyResult = stui::core::ApplyTattooSuccess{
+        .actorFormId = 0x14,
+        .area = TattooArea::body,
+        .slot = 2,
+        .section = "LewdMarks",
+        .name = "Corruption",
+    };
+    SlaveTatsService service(runtime);
+    const auto request = validApplyRequest();
+
+    const auto result = service.applyToSlot(request);
+
+    expect(result.has_value(), "expected apply success");
+    expect(runtime.applyCount == 1, "expected exactly one apply runtime call");
+    expect(runtime.appliedRequest.actorFormId == 0x14 && runtime.appliedRequest.area == TattooArea::body,
+        "expected apply target forwarded unchanged");
+    expect(runtime.appliedRequest.slot == 2 && runtime.appliedRequest.domain == "default",
+        "expected apply slot and domain forwarded unchanged");
+    expect(runtime.appliedRequest.section == "LewdMarks" && runtime.appliedRequest.name == "Corruption",
+        "expected tattoo identity forwarded unchanged");
+    expect(runtime.appliedRequest.color == 0xFF00FF && runtime.appliedRequest.alpha == 0.75F,
+        "expected tattoo appearance forwarded unchanged");
+    expect(result->slot == 2 && result->name == "Corruption",
+        "expected runtime apply result returned unchanged");
+}
+
+void applyRuntimeFailureIsReturnedUnchanged() {
+    FakeTattooRuntime runtime;
+    runtime.applyResult = std::unexpected(ServiceError{
+        ServiceErrorCode::externalSlot,
+        "slot is occupied by an external overlay",
+    });
+    SlaveTatsService service(runtime);
+
+    const auto result = service.applyToSlot(validApplyRequest());
+
+    expectError(result, ServiceErrorCode::externalSlot, "slot is occupied by an external overlay");
+    expect(runtime.applyCount == 1, "expected one failed apply runtime call");
+}
+
+void missingSlotRuntimeUsesTypedFallback() {
+    FallbackTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.querySlots(0x14, TattooArea::body);
+
+    expectError(result, ServiceErrorCode::slotQueryFailed, "Slot queries are not implemented");
+}
+
+void missingApplyRuntimeUsesTypedFallback() {
+    FallbackTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+
+    const auto result = service.applyToSlot(validApplyRequest());
+
+    expectError(result, ServiceErrorCode::applyFailed, "Tattoo apply is not implemented");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -132,5 +441,24 @@ int main() {
     failures += run("unavailable JContainers stops before runtime query", unavailableJContainersStopsBeforeRuntimeQuery);
     failures += run("successful query returns entries and preserves domain", successfulQueryReturnsCopiedEntriesAndPreservesDomain);
     failures += run("runtime failure is returned unchanged", runtimeFailureIsReturnedUnchanged);
+    failures += run("unavailable API stops slot query", unavailableApiStopsSlotQuery);
+    failures += run("unavailable JContainers stops slot query", unavailableJContainersStopsSlotQuery);
+    failures += run("invalid slot query actor is rejected", invalidSlotQueryActorIsRejected);
+    failures += run("invalid slot query area is rejected", invalidSlotQueryAreaIsRejected);
+    failures += run("valid slot query is forwarded exactly once", validSlotQueryIsForwardedExactlyOnce);
+    failures += run("slot query runtime failure is returned unchanged", slotQueryRuntimeFailureIsReturnedUnchanged);
+    failures += run("unavailable API stops apply", unavailableApiStopsApply);
+    failures += run("unavailable JContainers stops apply", unavailableJContainersStopsApply);
+    failures += run("invalid apply actor is rejected", invalidApplyActorIsRejected);
+    failures += run("invalid apply area is rejected", invalidApplyAreaIsRejected);
+    failures += run("negative apply slot is rejected", negativeApplySlotIsRejected);
+    failures += run("empty apply section is rejected", emptyApplySectionIsRejected);
+    failures += run("empty apply name is rejected", emptyApplyNameIsRejected);
+    failures += run("out-of-range apply alpha is rejected", outOfRangeApplyAlphaIsRejected);
+    failures += run("boundary apply alpha is forwarded", boundaryApplyAlphaIsForwarded);
+    failures += run("valid apply request is forwarded exactly once", validApplyRequestIsForwardedExactlyOnce);
+    failures += run("apply runtime failure is returned unchanged", applyRuntimeFailureIsReturnedUnchanged);
+    failures += run("missing slot runtime uses typed fallback", missingSlotRuntimeUsesTypedFallback);
+    failures += run("missing apply runtime uses typed fallback", missingApplyRuntimeUsesTypedFallback);
     return failures == 0 ? 0 : 1;
 }

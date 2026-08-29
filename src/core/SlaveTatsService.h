@@ -11,6 +11,8 @@ public:
     explicit SlaveTatsService(ITattooRuntime& runtime) noexcept;
 
     TattooQueryResult queryAvailable(std::string_view domain);
+    TattooSlotsResult querySlots(std::uint32_t actorFormId, TattooArea area);
+    ApplyTattooResult applyToSlot(const ApplyTattooRequest& request);
 
 private:
     ITattooRuntime& m_runtime;
