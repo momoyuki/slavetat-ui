@@ -24,6 +24,7 @@ set(headers
     src/native/NativeMenu.h
     src/native/OfficialMenuFrameworkAdapter.h
     src/native/NativeCatalogBrowserModel.h
+    src/native/NativeSlotWorkflowModel.h
     src/native/NativeThumbnailController.h
     src/native/NativeThumbnailRuntime.h
     src/native/D3D11NativeThumbnailSource.h
@@ -53,6 +54,7 @@ set(sources
     src/native/NativeMenu.cpp
     src/native/OfficialMenuFrameworkAdapter.cpp
     src/native/NativeCatalogBrowserModel.cpp
+    src/native/NativeSlotWorkflowModel.cpp
     src/native/NativeThumbnailController.cpp
     src/native/NativeThumbnailRuntime.cpp
     src/native/D3D11NativeThumbnailSource.cpp
@@ -131,6 +133,16 @@ if(BUILD_TESTING)
     )
     target_include_directories(NativeCatalogBrowserModelTests PRIVATE src)
     add_test(NAME NativeCatalogBrowserModelTests COMMAND NativeCatalogBrowserModelTests)
+
+    add_executable(NativeSlotWorkflowModelTests
+        src/native/NativeSlotWorkflowModel.cpp
+        src/native/NativeCatalogBrowserModel.cpp
+        src/repository/TattooRepository.cpp
+        tests/native/NativeSlotWorkflowModelTests.cpp
+    )
+    target_include_directories(NativeSlotWorkflowModelTests PRIVATE src)
+    add_test(NAME NativeSlotWorkflowModelTests COMMAND NativeSlotWorkflowModelTests)
+
     add_executable(NativeMenuTests
         src/native/NativeMenu.cpp
         tests/native/NativeMenuTests.cpp
