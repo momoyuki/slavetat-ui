@@ -2,6 +2,7 @@
 
 #include "native/NativeCatalogBrowserModel.h"
 #include "native/MenuFrameworkPort.h"
+#include "core/TattooModels.h"
 
 #include <cstddef>
 #include <functional>
@@ -13,6 +14,8 @@
 namespace stui::native {
 
 class NativeThumbnailRuntime;
+class NativeSlotWorkflowModel;
+class NativeSlotWorkflowRuntime;
 enum class NativeThumbnailStatus;
 struct NativeThumbnailView;
 
@@ -51,6 +54,31 @@ struct CatalogThumbnailFit {
     float width{};
     float height{};
 };
+
+enum class SlotCardTreatment {
+    add,
+    replace,
+    disabled,
+};
+
+struct SlotPageRange {
+    std::size_t pageIndex{};
+    std::size_t pageCount{};
+    std::size_t begin{};
+    std::size_t end{};
+};
+
+[[nodiscard]] SlotCardTreatment slotCardTreatment(
+    core::SlotOccupancy occupancy) noexcept;
+[[nodiscard]] SlotPageRange calculateSlotPage(
+    std::size_t slotCount,
+    std::size_t requestedPage,
+    std::size_t pageSize) noexcept;
+[[nodiscard]] std::string_view slotAreaLabel(core::TattooArea area) noexcept;
+[[nodiscard]] std::vector<std::string> collectVisibleSlotTexturePaths(
+    const core::TattooSlots& slots,
+    std::size_t pageIndex,
+    std::size_t pageSize);
 
 struct CatalogCardGridPosition {
     std::size_t row{};
@@ -170,7 +198,9 @@ public:
         MenuPosition viewportPosition, MenuSize viewportSize) noexcept;
     [[nodiscard]] static bool renderLauncher();
     static void renderFoundation(
-        NativeCatalogBrowserModel& model,
+        NativeSlotWorkflowModel& workflow,
+        NativeSlotWorkflowRuntime& slotRuntime,
+        NativeCatalogBrowserModel& catalog,
         NativeThumbnailRuntime& thumbnails,
         const std::function<void()>& close);
 

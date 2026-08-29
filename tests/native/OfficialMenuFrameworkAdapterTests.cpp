@@ -1,6 +1,9 @@
 #include "native/OfficialMenuFrameworkAdapter.h"
 #include "native/NativeCatalogBrowserModel.h"
 #include "native/NativeThumbnailController.h"
+#include "native/NativeSlotWorkflowModel.h"
+#include "native/NativeSlotWorkflowRuntime.h"
+#include "core/TattooModels.h"
 
 #include <functional>
 #include <iostream>
@@ -306,6 +309,81 @@ void sourceOptionsDistinguishDuplicatePackNamesAndPreserveIds() {
            "expected selection payloads to preserve exact source IDs");
 }
 
+void slotCardsExposeAddReplaceAndDisabledTreatments() {
+    expect(stui::native::slotCardTreatment(stui::core::SlotOccupancy::empty) ==
+               stui::native::SlotCardTreatment::add,
+        "expected empty slot Add treatment");
+    expect(stui::native::slotCardTreatment(stui::core::SlotOccupancy::slaveTats) ==
+               stui::native::SlotCardTreatment::replace,
+        "expected SlaveTats slot Replace treatment");
+    expect(stui::native::slotCardTreatment(stui::core::SlotOccupancy::external) ==
+               stui::native::SlotCardTreatment::disabled,
+        "expected external slot disabled treatment");
+}
+
+void slotPaginationClampsToSixCardPages() {
+    const auto first = stui::native::calculateSlotPage(12, 0, 6);
+    expect(first.pageIndex == 0 && first.pageCount == 2 && first.begin == 0 &&
+            first.end == 6,
+        "expected first BODY page to contain six slots");
+
+    const auto clamped = stui::native::calculateSlotPage(13, 9, 6);
+    expect(clamped.pageIndex == 2 && clamped.pageCount == 3 &&
+            clamped.begin == 12 && clamped.end == 13,
+        "expected requested page clamped to the final partial page");
+
+    const auto empty = stui::native::calculateSlotPage(0, 3, 6);
+    expect(empty.pageIndex == 0 && empty.pageCount == 0 && empty.begin == 0 &&
+            empty.end == 0,
+        "expected empty slot collection to have safe zero bounds");
+}
+
+void slotAreaLabelsMatchSlaveTatsAreaNames() {
+    expect(stui::native::slotAreaLabel(stui::core::TattooArea::body) == "BODY",
+        "expected BODY tab label");
+    expect(stui::native::slotAreaLabel(stui::core::TattooArea::face) == "FACE",
+        "expected FACE tab label");
+    expect(stui::native::slotAreaLabel(stui::core::TattooArea::hands) == "HANDS",
+        "expected HANDS tab label");
+    expect(stui::native::slotAreaLabel(stui::core::TattooArea::feet) == "FEET",
+        "expected FEET tab label");
+}
+
+void visibleSlotPathsIncludeOnlyOwnedCardsOnTheCurrentPage() {
+    const stui::core::TattooSlots slots{
+        .actorFormId = 0x14,
+        .area = stui::core::TattooArea::body,
+        .configuredCount = 8,
+        .slots = {
+            {.index = 0, .occupancy = stui::core::SlotOccupancy::empty},
+            {.index = 1, .occupancy = stui::core::SlotOccupancy::external},
+            {.index = 2,
+                .occupancy = stui::core::SlotOccupancy::slaveTats,
+                .tattoo = stui::core::TattooEntry{.texturePath = "owned/a.dds"}},
+            {.index = 3,
+                .occupancy = stui::core::SlotOccupancy::slaveTats,
+                .tattoo = stui::core::TattooEntry{.texturePath = ""}},
+            {.index = 4,
+                .occupancy = stui::core::SlotOccupancy::slaveTats,
+                .tattoo = stui::core::TattooEntry{.texturePath = "owned/b.dds"}},
+            {.index = 5, .occupancy = stui::core::SlotOccupancy::empty},
+            {.index = 6,
+                .occupancy = stui::core::SlotOccupancy::slaveTats,
+                .tattoo = stui::core::TattooEntry{.texturePath = "next/c.dds"}},
+            {.index = 7,
+                .occupancy = stui::core::SlotOccupancy::slaveTats,
+                .tattoo = stui::core::TattooEntry{.texturePath = "next/d.dds"}},
+        },
+    };
+
+    const auto firstPage = stui::native::collectVisibleSlotTexturePaths(slots, 0, 6);
+    expect(firstPage == std::vector<std::string>{"owned/a.dds", "owned/b.dds"},
+        "expected only owned non-empty paths from the visible slot page");
+    const auto secondPage = stui::native::collectVisibleSlotTexturePaths(slots, 1, 6);
+    expect(secondPage == std::vector<std::string>{"next/c.dds", "next/d.dds"},
+        "expected slot path collection to follow the selected page");
+}
+
 void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
     stui::native::NativeCatalogBrowserModel model([] { return nullptr; });
     model.refresh();
@@ -318,6 +396,8 @@ void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
            "expected safe six-item empty page metadata");
 
     void (*render)(
+        stui::native::NativeSlotWorkflowModel&,
+        stui::native::NativeSlotWorkflowRuntime&,
         stui::native::NativeCatalogBrowserModel&,
         stui::native::NativeThumbnailRuntime&,
         const std::function<void()>&) =
@@ -359,6 +439,14 @@ int main() {
         std::cout << "PASS classifies empty catalog separately from no matches\n";
         sourceOptionsDistinguishDuplicatePackNamesAndPreserveIds();
         std::cout << "PASS source options distinguish duplicate pack names\n";
+        slotCardsExposeAddReplaceAndDisabledTreatments();
+        std::cout << "PASS slot cards expose intended treatments\n";
+        slotPaginationClampsToSixCardPages();
+        std::cout << "PASS slot pagination clamps to six-card pages\n";
+        slotAreaLabelsMatchSlaveTatsAreaNames();
+        std::cout << "PASS slot area labels match SlaveTats areas\n";
+        visibleSlotPathsIncludeOnlyOwnedCardsOnTheCurrentPage();
+        std::cout << "PASS visible slot paths include only owned cards\n";
         nullSnapshotModelHasSafeEmptyPageWithoutImGui();
         std::cout << "PASS null snapshot model has safe empty page without ImGui\n";
     } catch (const std::exception& error) {

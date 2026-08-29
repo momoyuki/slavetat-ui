@@ -165,6 +165,8 @@ if(BUILD_TESTING)
     add_executable(OfficialMenuFrameworkAdapterTests
         src/native/OfficialMenuFrameworkAdapter.cpp
         src/native/NativeCatalogBrowserModel.cpp
+        src/native/NativeSlotWorkflowModel.cpp
+        src/native/NativeSlotWorkflowRuntime.cpp
         src/native/NativeThumbnailController.cpp
         src/native/NativeThumbnailRuntime.cpp
         src/repository/TattooRepository.cpp

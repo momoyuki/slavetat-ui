@@ -3,6 +3,8 @@
 #include <RE/Skyrim.h>
 
 #include "native/NativeThumbnailRuntime.h"
+#include "native/NativeSlotWorkflowModel.h"
+#include "native/NativeSlotWorkflowRuntime.h"
 
 #include <algorithm>
 #include <array>
@@ -69,6 +71,69 @@ OfficialMenuFrameworkAdapter::OfficialMenuFrameworkAdapter()
 
 OfficialMenuFrameworkAdapter::OfficialMenuFrameworkAdapter(MenuFrameworkBindings bindings)
     : bindings_(std::move(bindings)) {}
+
+SlotCardTreatment slotCardTreatment(core::SlotOccupancy occupancy) noexcept {
+    switch (occupancy) {
+    case core::SlotOccupancy::empty:
+        return SlotCardTreatment::add;
+    case core::SlotOccupancy::slaveTats:
+        return SlotCardTreatment::replace;
+    case core::SlotOccupancy::external:
+        return SlotCardTreatment::disabled;
+    }
+    return SlotCardTreatment::disabled;
+}
+
+SlotPageRange calculateSlotPage(
+    std::size_t slotCount,
+    std::size_t requestedPage,
+    std::size_t pageSize) noexcept {
+    if (slotCount == 0 || pageSize == 0) {
+        return {};
+    }
+
+    const std::size_t pageCount = slotCount / pageSize +
+        (slotCount % pageSize != 0 ? 1 : 0);
+    const std::size_t pageIndex = std::min(requestedPage, pageCount - 1);
+    const std::size_t begin = pageIndex * pageSize;
+    return {
+        .pageIndex = pageIndex,
+        .pageCount = pageCount,
+        .begin = begin,
+        .end = std::min(slotCount, begin + pageSize),
+    };
+}
+
+std::string_view slotAreaLabel(core::TattooArea area) noexcept {
+    switch (area) {
+    case core::TattooArea::body:
+        return "BODY";
+    case core::TattooArea::face:
+        return "FACE";
+    case core::TattooArea::hands:
+        return "HANDS";
+    case core::TattooArea::feet:
+        return "FEET";
+    }
+    return "BODY";
+}
+
+std::vector<std::string> collectVisibleSlotTexturePaths(
+    const core::TattooSlots& slots,
+    std::size_t pageIndex,
+    std::size_t pageSize) {
+    const auto page = calculateSlotPage(slots.slots.size(), pageIndex, pageSize);
+    std::vector<std::string> paths;
+    paths.reserve(page.end - page.begin);
+    for (std::size_t index = page.begin; index < page.end; ++index) {
+        const auto& slot = slots.slots[index];
+        if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo &&
+            !slot.tattoo->texturePath.empty()) {
+            paths.push_back(slot.tattoo->texturePath);
+        }
+    }
+    return paths;
+}
 
 bool OfficialMenuFrameworkAdapter::available() const noexcept {
     return bindings_.getVersion && bindings_.addSectionItem && bindings_.addWindow &&
@@ -342,15 +407,289 @@ std::vector<CatalogBrowserSourceOption> buildCatalogBrowserSourceOptions(
     return options;
 }
 
+namespace {
+
+NativeThumbnailEpoch slotThumbnailEpoch(core::TattooArea area) {
+    static const std::array<NativeThumbnailEpoch, 4> epochs{
+        std::make_shared<int>(0),
+        std::make_shared<int>(1),
+        std::make_shared<int>(2),
+        std::make_shared<int>(3),
+    };
+    switch (area) {
+    case core::TattooArea::body:
+        return epochs[0];
+    case core::TattooArea::face:
+        return epochs[1];
+    case core::TattooArea::hands:
+        return epochs[2];
+    case core::TattooArea::feet:
+        return epochs[3];
+    }
+    return epochs[0];
+}
+
+void renderSlotImage(
+    const core::TattooSlot& slot,
+    const std::vector<NativeThumbnailView>& thumbnailViews,
+    ImGuiMCP::ImVec2 region) {
+    if (slot.occupancy == core::SlotOccupancy::empty) {
+        ImGuiMCP::TextUnformatted("Add");
+        return;
+    }
+    if (slot.occupancy == core::SlotOccupancy::external) {
+        ImGuiMCP::TextUnformatted("External - Locked");
+        return;
+    }
+    if (!slot.tattoo || slot.tattoo->texturePath.empty()) {
+        ImGuiMCP::TextUnformatted("No thumbnail");
+        return;
+    }
+
+    const auto thumbnailIndex = findCatalogThumbnailViewIndex(
+        slot.tattoo->texturePath,
+        thumbnailViews);
+    const NativeThumbnailView* thumbnail = thumbnailIndex
+        ? &thumbnailViews[*thumbnailIndex]
+        : nullptr;
+    if (thumbnail && thumbnail->status == NativeThumbnailStatus::ready &&
+        thumbnail->texture && thumbnail->texture->shaderResourceView) {
+        const auto fit = fitCatalogThumbnail(
+            thumbnail->texture->width,
+            thumbnail->texture->height,
+            region.x,
+            region.y);
+        const auto origin = ImGuiMCP::GetCursorPos();
+        ImGuiMCP::SetCursorPos({
+            origin.x + (region.x - fit.width) / 2.0F,
+            origin.y + (region.y - fit.height) / 2.0F,
+        });
+        ImGuiMCP::Image(
+            static_cast<ImGuiMCP::ImTextureID>(
+                thumbnail->texture->shaderResourceView.get()),
+            {fit.width, fit.height});
+        return;
+    }
+    if (thumbnail) {
+        const auto label = catalogThumbnailStatusLabel(thumbnail->status);
+        if (!label.empty()) {
+            ImGuiMCP::TextUnformatted(label.data());
+        }
+    }
+}
+
+void renderCurrentSlots(
+    NativeSlotWorkflowModel& workflow,
+    NativeThumbnailRuntime& thumbnails,
+    const std::function<void()>& close) {
+    const auto* slots = workflow.slots();
+    const auto paths = slots
+        ? collectVisibleSlotTexturePaths(
+              *slots,
+              workflow.slotPageIndex(),
+              NativeSlotWorkflowModel::kPageSize)
+        : std::vector<std::string>{};
+    thumbnails.synchronize(slotThumbnailEpoch(workflow.selectedArea()), paths);
+    thumbnails.pump();
+    const auto thumbnailViews = thumbnails.views();
+
+    const auto* viewport = ImGuiMCP::GetMainViewport();
+    if (!viewport) {
+        return;
+    }
+    const auto layout = OfficialMenuFrameworkAdapter::calculateFoundationLayout(
+        {viewport->Pos.x, viewport->Pos.y},
+        {viewport->Size.x, viewport->Size.y});
+    ImGuiMCP::SetNextWindowPos(
+        {layout.position.x, layout.position.y}, ImGuiMCP::ImGuiCond_Appearing, {0.0F, 0.0F});
+    ImGuiMCP::SetNextWindowSize(
+        {layout.size.width, layout.size.height}, ImGuiMCP::ImGuiCond_Appearing);
+    bool open = true;
+    ImGuiMCP::PushStyleVar(ImGuiMCP::ImGuiStyleVar_WindowBorderSize, 0.0F);
+    ImGuiMCP::Begin(
+        "Tattoo Browser##SlaveTatsUI",
+        &open,
+        ImGuiMCP::ImGuiWindowFlags_NoCollapse |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse);
+
+    ImGuiMCP::TextUnformatted("Current Tattoos - Player");
+    ImGuiMCP::SameLine();
+    if (ImGuiMCP::Button("Refresh")) {
+        workflow.refreshSelectedArea();
+    }
+
+    constexpr std::array<core::TattooArea, 4> areas{
+        core::TattooArea::body,
+        core::TattooArea::face,
+        core::TattooArea::hands,
+        core::TattooArea::feet,
+    };
+    for (std::size_t index = 0; index < areas.size(); ++index) {
+        if (index != 0) {
+            ImGuiMCP::SameLine();
+        }
+        const auto label = std::string(slotAreaLabel(areas[index])) + "##SlotArea" +
+            std::to_string(index);
+        ImGuiMCP::BeginDisabled(areas[index] == workflow.selectedArea());
+        if (ImGuiMCP::Button(label.c_str())) {
+            workflow.selectArea(areas[index]);
+        }
+        ImGuiMCP::EndDisabled();
+    }
+
+    if (const auto* error = workflow.error()) {
+        ImGuiMCP::TextUnformatted(error->message.c_str());
+    }
+
+    const auto* style = ImGuiMCP::GetStyle();
+    const float footerHeight = ImGuiMCP::GetFrameHeightWithSpacing();
+    const auto gridLayout = calculateCatalogBrowserGridLayout(
+        ImGuiMCP::GetContentRegionAvail().y,
+        footerHeight,
+        0.0F,
+        3);
+    const auto page = slots
+        ? calculateSlotPage(
+              slots->slots.size(),
+              workflow.slotPageIndex(),
+              NativeSlotWorkflowModel::kPageSize)
+        : SlotPageRange{};
+
+    if (!slots) {
+        if (ImGuiMCP::BeginChild(
+                "SlotLoadingState",
+                {0.0F, gridLayout.gridHeight},
+                ImGuiMCP::ImGuiChildFlags_None,
+                ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+                    ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
+            ImGuiMCP::TextUnformatted("Loading Player tattoo slots...");
+        }
+        ImGuiMCP::EndChild();
+    } else if (ImGuiMCP::BeginTable(
+                   "CurrentSlotCards",
+                   2,
+                   ImGuiMCP::ImGuiTableFlags_SizingStretchSame |
+                       ImGuiMCP::ImGuiTableFlags_BordersInner |
+                       ImGuiMCP::ImGuiTableFlags_NoPadOuterX |
+                       ImGuiMCP::ImGuiTableFlags_NoPadInnerX,
+                   {0.0F, gridLayout.gridHeight})) {
+        for (std::size_t index = page.begin; index < page.end; ++index) {
+            const auto gridPosition = catalogCardGridPosition(index - page.begin, 2);
+            if (gridPosition.column == 0) {
+                ImGuiMCP::TableNextRow(0, gridLayout.rowHeight);
+            }
+            ImGuiMCP::TableSetColumnIndex(static_cast<int>(gridPosition.column));
+            const auto& slot = slots->slots[index];
+            const auto widgetId = std::string("SlotCard##") + std::to_string(slot.index);
+            const bool disabled = slotCardTreatment(slot.occupancy) ==
+                SlotCardTreatment::disabled;
+            ImGuiMCP::BeginDisabled(disabled);
+            ImGuiMCP::PushStyleColor(
+                ImGuiMCP::ImGuiCol_ChildBg,
+                ImGuiMCP::ImVec4(0.08F, 0.08F, 0.08F, 1.0F));
+            if (ImGuiMCP::BeginChild(
+                    widgetId.c_str(),
+                    {0.0F, std::max(1.0F, gridLayout.rowHeight)},
+                    ImGuiMCP::ImGuiChildFlags_Border,
+                    ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+                        ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
+                renderSlotImage(slot, thumbnailViews, ImGuiMCP::GetContentRegionAvail());
+            }
+            ImGuiMCP::EndChild();
+            ImGuiMCP::PopStyleColor();
+            ImGuiMCP::EndDisabled();
+            if (!disabled && ImGuiMCP::IsItemClicked()) {
+                (void)workflow.selectSlot(slot.index);
+            }
+            if (ImGuiMCP::IsItemHovered()) {
+                if (slot.tattoo) {
+                    ImGuiMCP::SetTooltip("Slot %d - %s", slot.index, slot.tattoo->name.c_str());
+                } else if (disabled) {
+                    ImGuiMCP::SetTooltip("Slot %d is managed by another overlay mod", slot.index);
+                } else {
+                    ImGuiMCP::SetTooltip("Add a tattoo to Slot %d", slot.index);
+                }
+            }
+        }
+        ImGuiMCP::EndTable();
+    }
+
+    const float closeButtonWidth = ImGuiMCP::CalcTextSize("Close").x +
+        (style ? style->FramePadding.x * 2.0F : 16.0F);
+    if (ImGuiMCP::BeginTable(
+            "SlotFooter",
+            2,
+            ImGuiMCP::ImGuiTableFlags_SizingStretchProp |
+                ImGuiMCP::ImGuiTableFlags_NoPadOuterX)) {
+        ImGuiMCP::TableSetupColumn("SlotPagination", ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
+        ImGuiMCP::TableSetupColumn(
+            "SlotCloseAction", ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, closeButtonWidth);
+        ImGuiMCP::TableNextRow();
+        ImGuiMCP::TableSetColumnIndex(0);
+        ImGuiMCP::BeginDisabled(page.pageCount == 0 || page.pageIndex == 0);
+        if (ImGuiMCP::Button("Prev##Slots")) {
+            workflow.previousSlotPage();
+        }
+        ImGuiMCP::EndDisabled();
+        ImGuiMCP::SameLine();
+        ImGuiMCP::TextUnformatted("Page");
+        ImGuiMCP::SameLine();
+        static CatalogBrowserPageInputState slotPageInputState;
+        slotPageInputState.synchronize(page.pageIndex, page.pageCount);
+        ImGuiMCP::SetNextItemWidth(56.0F);
+        ImGuiMCP::InputInt(
+            "##SlotPageNumber",
+            &slotPageInputState.pendingPageNumber(),
+            0,
+            0);
+        if (const auto requestedPage = slotPageInputState.finishFrame(
+                ImGuiMCP::IsItemActive(),
+                false,
+                ImGuiMCP::IsItemDeactivatedAfterEdit())) {
+            workflow.setSlotPageNumber(*requestedPage);
+        }
+        ImGuiMCP::SameLine();
+        ImGuiMCP::Text("/ %zu", page.pageCount);
+        ImGuiMCP::SameLine();
+        ImGuiMCP::BeginDisabled(page.pageCount == 0 || page.pageIndex + 1 >= page.pageCount);
+        if (ImGuiMCP::Button("Next##Slots")) {
+            workflow.nextSlotPage();
+        }
+        ImGuiMCP::EndDisabled();
+
+        ImGuiMCP::TableSetColumnIndex(1);
+        if (ImGuiMCP::Button("Close")) {
+            open = false;
+        }
+        ImGuiMCP::EndTable();
+    }
+    ImGuiMCP::End();
+    ImGuiMCP::PopStyleVar();
+    if (!open && close) {
+        close();
+    }
+}
+
+}  // namespace
+
 bool OfficialMenuFrameworkAdapter::renderLauncher() {
     ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
     return ImGuiMCP::Button("Open Tattoo Browser");
 }
 
 void OfficialMenuFrameworkAdapter::renderFoundation(
+    NativeSlotWorkflowModel& workflow,
+    NativeSlotWorkflowRuntime& slotRuntime,
     NativeCatalogBrowserModel& model,
     NativeThumbnailRuntime& thumbnails,
     const std::function<void()>& close) {
+    slotRuntime.pump();
+    if (workflow.screen() == SlotWorkflowScreen::currentSlots) {
+        renderCurrentSlots(workflow, thumbnails, close);
+        return;
+    }
+
     model.refresh();
     thumbnails.synchronize(model.snapshot(), model.page());
     thumbnails.pump();
@@ -375,6 +714,14 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::ImGuiWindowFlags_NoCollapse |
             ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
             ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse);
+
+    if (ImGuiMCP::Button("Back to Current Tattoos")) {
+        workflow.backToSlots();
+    }
+    ImGuiMCP::SameLine();
+    ImGuiMCP::Text("Target: Player / %s / Slot %d",
+        slotAreaLabel(workflow.selectedArea()).data(),
+        workflow.targetSlot().value_or(-1));
 
     static bool filtersExpanded = false;
     if (ImGuiMCP::Button(filtersExpanded ? "Hide filters" : "Filters")) {
