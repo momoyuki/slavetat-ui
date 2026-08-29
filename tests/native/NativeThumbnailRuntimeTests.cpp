@@ -18,6 +18,7 @@ namespace {
 using namespace std::chrono_literals;
 using stui::native::NativeThumbnailCancellationCheck;
 using stui::native::NativeThumbnailFailure;
+using stui::native::NativeThumbnailEpoch;
 using stui::native::NativeThumbnailLoadResult;
 using stui::native::NativeThumbnailRuntime;
 using stui::native::NativeThumbnailStatus;
@@ -150,6 +151,23 @@ struct RuntimeFixture {
     bool schedulerThrows{};
     std::unique_ptr<NativeThumbnailRuntime> runtime;
 };
+
+void synchronizesPresentationNeutralVisiblePaths() {
+    RuntimeFixture fixture;
+    const NativeThumbnailEpoch epoch = std::make_shared<int>(1);
+    const std::vector<std::string> paths{
+        "slot/a.dds", "slot/b.dds", "slot/c.dds", "slot/d.dds",
+        "slot/e.dds", "slot/f.dds", "slot/ignored.dds"};
+
+    fixture.runtime->synchronize(epoch, paths);
+
+    const auto views = fixture.runtime->views();
+    expect(views.size() == 6 && views.front().texturePath == "slot/a.dds" &&
+            views.back().texturePath == "slot/f.dds",
+        "expected generic runtime synchronization limited to six visible paths");
+    expect(fixture.source->findPaths.size() == 6,
+        "expected generic runtime to share the existing texture source");
+}
 
 void schedulesOnlyOneRequestAtATime() {
     RuntimeFixture fixture;
@@ -308,6 +326,7 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("synchronizes presentation-neutral visible paths", synchronizesPresentationNeutralVisiblePaths);
     failures += run("schedules only one request at a time", schedulesOnlyOneRequestAtATime);
     failures += run("does not schedule cache hits", doesNotScheduleCacheHits);
     failures += run("prunes at most once per second", prunesAtMostOncePerSecond);

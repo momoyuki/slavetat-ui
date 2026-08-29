@@ -47,6 +47,25 @@ void NativeThumbnailController::synchronize(
         }
     }
 
+    synchronize(std::move(snapshot), texturePaths, lookup);
+}
+
+void NativeThumbnailController::synchronize(
+    NativeThumbnailEpoch epoch,
+    std::span<const std::string> visibleTexturePaths,
+    const NativeThumbnailCacheLookup& lookup) {
+    std::vector<std::string> texturePaths;
+    texturePaths.reserve(kMaximumVisiblePaths);
+    for (const auto& path : visibleTexturePaths) {
+        if (texturePaths.size() == kMaximumVisiblePaths) {
+            break;
+        }
+        const auto texturePath = canonicalizeTexturePath(path);
+        if (std::ranges::find(texturePaths, texturePath) == texturePaths.end()) {
+            texturePaths.push_back(texturePath);
+        }
+    }
+
     std::uint64_t synchronizationRevision{};
     {
         std::scoped_lock lock(m_mutex);
@@ -55,24 +74,24 @@ void NativeThumbnailController::synchronize(
                 [](const NativeThumbnailView& view) -> const std::string& {
                     return view.texturePath;
                 });
-        if (m_snapshot == snapshot && samePage) {
-            if (m_lookupPending && (m_pendingSnapshot != snapshot ||
+        if (m_epoch == epoch && samePage) {
+            if (m_lookupPending && (m_pendingEpoch != epoch ||
                     m_pendingPaths != texturePaths)) {
                 ++m_synchronizationRevision;
                 m_lookupPending = false;
-                m_pendingSnapshot.reset();
+                m_pendingEpoch.reset();
                 m_pendingPaths.clear();
             }
             return;
         }
-        if (m_lookupPending && m_pendingSnapshot == snapshot &&
+        if (m_lookupPending && m_pendingEpoch == epoch &&
             m_pendingPaths == texturePaths) {
             return;
         }
 
         synchronizationRevision = ++m_synchronizationRevision;
         m_lookupPending = true;
-        m_pendingSnapshot = snapshot;
+        m_pendingEpoch = epoch;
         m_pendingPaths = texturePaths;
     }
 
@@ -86,7 +105,7 @@ void NativeThumbnailController::synchronize(
         std::scoped_lock lock(m_mutex);
         if (synchronizationRevision == m_synchronizationRevision) {
             m_lookupPending = false;
-            m_pendingSnapshot.reset();
+            m_pendingEpoch.reset();
             m_pendingPaths.clear();
         }
         throw;
@@ -97,11 +116,11 @@ void NativeThumbnailController::synchronize(
         return;
     }
     m_lookupPending = false;
-    m_pendingSnapshot.reset();
+    m_pendingEpoch.reset();
     m_pendingPaths.clear();
 
-    if (m_snapshot != snapshot) {
-        m_snapshot = std::move(snapshot);
+    if (m_epoch != epoch) {
+        m_epoch = std::move(epoch);
         m_negativeFailures.clear();
         m_deviceUnavailablePaths.clear();
     }
@@ -229,11 +248,11 @@ std::vector<NativeThumbnailView> NativeThumbnailController::views() const {
 
 void NativeThumbnailController::clear() {
     std::scoped_lock lock(m_mutex);
-    m_snapshot.reset();
+    m_epoch.reset();
     ++m_generation;
     ++m_synchronizationRevision;
     m_lookupPending = false;
-    m_pendingSnapshot.reset();
+    m_pendingEpoch.reset();
     m_pendingPaths.clear();
     m_views.clear();
     m_queuedPaths.clear();

@@ -22,6 +22,7 @@ namespace {
 using stui::native::NativeThumbnailCacheLookup;
 using stui::native::NativeThumbnailController;
 using stui::native::NativeThumbnailFailure;
+using stui::native::NativeThumbnailEpoch;
 using stui::native::NativeThumbnailStatus;
 using stui::repository::TattooCatalog;
 using stui::repository::TattooCatalogSnapshot;
@@ -71,6 +72,19 @@ void expect(bool condition, std::string_view message) {
 const NativeThumbnailCacheLookup noCacheHit = [](std::string_view) {
     return std::shared_ptr<stui::textures::D3D11Texture>{};
 };
+
+void acceptsPresentationNeutralVisiblePaths() {
+    NativeThumbnailController controller;
+    const NativeThumbnailEpoch epoch = std::make_shared<int>(1);
+    const std::vector<std::string> paths{"slot/a.dds", "slot/b.dds"};
+
+    controller.synchronize(epoch, paths, noCacheHit);
+
+    const auto views = controller.views();
+    expect(views.size() == 2 && views[0].texturePath == "slot/a.dds" &&
+            views[1].texturePath == "slot/b.dds",
+        "expected slot texture paths accepted without repository entries");
+}
 
 void hidesStaleCompletionAfterPageTransition() {
     auto firstPage = page("first-");
@@ -432,6 +446,7 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("accepts presentation-neutral visible paths", acceptsPresentationNeutralVisiblePaths);
     failures += run("hides stale completion after page transition", hidesStaleCompletionAfterPageTransition);
     failures += run("limits views to six unique paths in source order", limitsViewsToSixUniquePathsInSourceOrder);
     failures += run("keeps in-flight request current for same page", keepsInFlightRequestCurrentForSamePage);

@@ -18,11 +18,22 @@ NativeThumbnailRuntime::NativeThumbnailRuntime(
 void NativeThumbnailRuntime::synchronize(
     repository::TattooCatalogSnapshot snapshot,
     const repository::TattooPage& page) {
+    std::vector<std::string> texturePaths;
+    texturePaths.reserve(page.entries.size());
+    for (const auto& entry : page.entries) {
+        texturePaths.push_back(entry.texturePath);
+    }
+    synchronize(std::move(snapshot), texturePaths);
+}
+
+void NativeThumbnailRuntime::synchronize(
+    NativeThumbnailEpoch epoch,
+    std::span<const std::string> texturePaths) {
     const auto currentTime = m_now();
     const bool sourceAvailable = m_source->available();
     m_controller.synchronize(
-        std::move(snapshot),
-        page.entries,
+        std::move(epoch),
+        texturePaths,
         [this, currentTime, sourceAvailable](std::string_view texturePath) {
             return sourceAvailable ? m_source->find(texturePath, currentTime) : nullptr;
         });

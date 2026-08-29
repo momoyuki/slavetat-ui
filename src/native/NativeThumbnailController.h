@@ -50,9 +50,14 @@ struct NativeThumbnailView {
 
 using NativeThumbnailCacheLookup =
     std::function<std::shared_ptr<textures::D3D11Texture>(std::string_view)>;
+using NativeThumbnailEpoch = std::shared_ptr<const void>;
 
 class NativeThumbnailController {
 public:
+    void synchronize(
+        NativeThumbnailEpoch epoch,
+        std::span<const std::string> texturePaths,
+        const NativeThumbnailCacheLookup& lookup);
     void synchronize(
         repository::TattooCatalogSnapshot snapshot,
         std::span<const repository::TattooDefinition> entries,
@@ -71,10 +76,10 @@ private:
     void queueIfEligibleLocked(std::string_view texturePath);
 
     mutable std::mutex m_mutex;
-    repository::TattooCatalogSnapshot m_snapshot;
+    NativeThumbnailEpoch m_epoch;
     std::uint64_t m_generation{};
     std::uint64_t m_synchronizationRevision{};
-    repository::TattooCatalogSnapshot m_pendingSnapshot;
+    NativeThumbnailEpoch m_pendingEpoch;
     std::vector<std::string> m_pendingPaths;
     bool m_lookupPending{};
     std::vector<NativeThumbnailView> m_views;
