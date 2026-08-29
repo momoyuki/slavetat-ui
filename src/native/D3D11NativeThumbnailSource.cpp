@@ -24,11 +24,13 @@ D3D11NativeThumbnailSource::D3D11NativeThumbnailSource(
     ID3D11Device* device,
     std::size_t capacity,
     textures::TextureCacheDuration idleTtl,
-    textures::TextureArchiveReader archiveReader)
+    textures::TextureArchiveReader archiveReader,
+    NativeThumbnailFailureObserver failureObserver)
     : m_available(device != nullptr),
       m_resolver(std::move(looseRoot)),
       m_manager(device, capacity, idleTtl),
-      m_archiveReader(std::move(archiveReader)) {}
+      m_archiveReader(std::move(archiveReader)),
+      m_failureObserver(std::move(failureObserver)) {}
 
 std::shared_ptr<textures::D3D11Texture> D3D11NativeThumbnailSource::find(
     std::string_view texturePath,
@@ -59,9 +61,15 @@ NativeThumbnailLoadResult D3D11NativeThumbnailSource::load(
     try {
         resolved = m_resolver.resolve(texturePath, m_archiveReader);
     } catch (...) {
+        if (m_failureObserver) {
+            m_failureObserver(texturePath, NativeThumbnailFailureStage::exception);
+        }
         return std::unexpected(NativeThumbnailFailure::broken);
     }
     if (!resolved) {
+        if (m_failureObserver) {
+            m_failureObserver(texturePath, NativeThumbnailFailureStage::resolve);
+        }
         return std::unexpected(mapResolveError(resolved.error()));
     }
     if (isCurrent && !isCurrent()) {
@@ -75,10 +83,16 @@ NativeThumbnailLoadResult D3D11NativeThumbnailSource::load(
     try {
         auto loaded = m_manager.getOrLoad(resolved->normalizedPath, resolved->bytes, now);
         if (!loaded) {
+            if (m_failureObserver) {
+                m_failureObserver(texturePath, NativeThumbnailFailureStage::upload);
+            }
             return std::unexpected(NativeThumbnailFailure::broken);
         }
         return std::move(*loaded);
     } catch (...) {
+        if (m_failureObserver) {
+            m_failureObserver(texturePath, NativeThumbnailFailureStage::exception);
+        }
         return std::unexpected(NativeThumbnailFailure::broken);
     }
 }

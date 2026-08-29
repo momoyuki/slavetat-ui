@@ -6,9 +6,19 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 
 namespace stui::native {
+
+enum class NativeThumbnailFailureStage {
+    resolve,
+    upload,
+    exception,
+};
+
+using NativeThumbnailFailureObserver =
+    std::function<void(std::string_view, NativeThumbnailFailureStage)>;
 
 class D3D11NativeThumbnailSource final : public NativeThumbnailTextureSource {
 public:
@@ -17,7 +27,8 @@ public:
         ID3D11Device* device,
         std::size_t capacity,
         textures::TextureCacheDuration idleTtl,
-        textures::TextureArchiveReader archiveReader);
+        textures::TextureArchiveReader archiveReader,
+        NativeThumbnailFailureObserver failureObserver = {});
 
     [[nodiscard]] std::shared_ptr<textures::D3D11Texture> find(
         std::string_view texturePath,
@@ -35,6 +46,7 @@ private:
     textures::TextureResolver m_resolver;
     textures::D3D11TextureManager m_manager;
     textures::TextureArchiveReader m_archiveReader;
+    NativeThumbnailFailureObserver m_failureObserver;
     mutable std::mutex m_mutex;
 };
 

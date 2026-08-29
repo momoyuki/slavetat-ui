@@ -24,6 +24,7 @@ namespace fs = std::filesystem;
 using namespace std::chrono_literals;
 using stui::native::D3D11NativeThumbnailSource;
 using stui::native::NativeThumbnailFailure;
+using stui::native::NativeThumbnailFailureStage;
 using stui::textures::TextureBytesResult;
 using stui::textures::TextureResolveError;
 
@@ -170,6 +171,34 @@ void malformedDdsMapsToBroken() {
         "expected malformed DDS to map to broken");
 }
 
+void uploadFailureReportsItsStageAndTexturePath() {
+    TemporaryDirectory directory;
+    const auto device = createDevice();
+    std::string reportedPath;
+    NativeThumbnailFailureStage reportedStage{};
+    auto source = std::make_unique<D3D11NativeThumbnailSource>(
+        directory.path(),
+        device.Get(),
+        12,
+        2min,
+        [](std::string_view) {
+            return TextureBytesResult(std::vector<std::uint8_t>{1, 2, 3});
+        },
+        [&](std::string_view path, NativeThumbnailFailureStage stage) {
+            reportedPath = path;
+            reportedStage = stage;
+        });
+
+    const auto loaded = source->load("Pack/broken.dds", [] { return true; }, {});
+
+    expect(!loaded && loaded.error() == NativeThumbnailFailure::broken,
+        "expected malformed DDS to remain broken");
+    expect(reportedPath == "Pack/broken.dds",
+        "expected failure report to retain the requested texture path");
+    expect(reportedStage == NativeThumbnailFailureStage::upload,
+        "expected malformed DDS to report the upload stage");
+}
+
 void cancellationAfterResolveAvoidsCacheEntry() {
     TemporaryDirectory directory;
     const auto device = createDevice();
@@ -223,6 +252,25 @@ void clearRemovesCacheEntries() {
     expect(!source->find("Pack/clear.dds", {}), "expected clear to remove cache entry");
 }
 
+void nullDeviceConstructsUnavailablePlaceholderSourceWithoutArchiveRead() {
+    TemporaryDirectory directory;
+    bool archiveRead{};
+    auto source = makeSource(directory.path(), nullptr, [&](std::string_view) {
+        archiveRead = true;
+        return TextureBytesResult(std::vector<std::uint8_t>{1, 2, 3});
+    });
+
+    expect(!source->available(), "expected null device source to remain unavailable");
+    const auto loaded = source->load("Pack/unavailable.dds", [] { return true; }, {});
+    expect(!loaded && loaded.error() == NativeThumbnailFailure::deviceUnavailable,
+        "expected unavailable source load failure without a crash");
+    source->pruneExpired({});
+    source->clear();
+    expect(!source->find("Pack/unavailable.dds", {}),
+        "expected unavailable source to retain no cached texture");
+    expect(!archiveRead, "expected unavailable source to skip archive reads");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -244,8 +292,14 @@ int main() {
     failures += run("invalid path maps to broken", invalidPathMapsToBroken);
     failures += run("missing sources map to missing", missingSourcesMapToMissing);
     failures += run("malformed DDS maps to broken", malformedDdsMapsToBroken);
+    failures += run(
+        "upload failure reports stage and texture path",
+        uploadFailureReportsItsStageAndTexturePath);
     failures += run("cancellation after resolve avoids cache entry", cancellationAfterResolveAvoidsCacheEntry);
     failures += run("cache hit reuses texture without second archive read", cacheHitReusesTextureWithoutSecondArchiveRead);
     failures += run("clear removes cache entries", clearRemovesCacheEntries);
+    failures += run(
+        "null device constructs unavailable placeholder source without archive read",
+        nullDeviceConstructsUnavailablePlaceholderSourceWithoutArchiveRead);
     return failures == 0 ? 0 : 1;
 }

@@ -4,9 +4,14 @@
 #include "repository/TattooCatalogStore.h"
 #include "native/NativeMenu.h"
 #include "native/NativeCatalogBrowserModel.h"
+#include "native/D3D11NativeThumbnailSource.h"
+#include "native/NativeThumbnailRuntime.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
+#include "textures/ExactStreamReader.h"
 
 #include <array>
+#include <chrono>
+#include <memory>
 
 using namespace stui;
 
@@ -16,6 +21,24 @@ namespace {
 repository::TattooCatalogStore g_tattooCatalogStore;
 native::NativeCatalogBrowserModel g_nativeCatalogBrowser(
     [] { return g_tattooCatalogStore.snapshot(); });
+
+std::unique_ptr<native::NativeThumbnailRuntime> makeUnavailableNativeThumbnailRuntime(
+    std::filesystem::path textureRoot = {}) {
+    auto source = std::make_unique<native::D3D11NativeThumbnailSource>(
+        std::move(textureRoot),
+        nullptr,
+        12,
+        std::chrono::minutes(2),
+        textures::TextureArchiveReader{});
+    return std::make_unique<native::NativeThumbnailRuntime>(
+        std::move(source),
+        [](native::NativeThumbnailTask) {},
+        [] { return textures::TextureCacheClock::now(); });
+}
+
+std::unique_ptr<native::NativeThumbnailRuntime> g_nativeThumbnailRuntime =
+    makeUnavailableNativeThumbnailRuntime();
+bool g_nativeThumbnailRuntimeUnavailableLogged{};
 
 }  // namespace
 
@@ -149,6 +172,67 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                     error.what());
             }
         }
+        {
+            std::array<wchar_t, 32768> executablePath{};
+            const DWORD pathLength = GetModuleFileNameW(
+                nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
+            const auto textureRoot = pathLength == 0 || pathLength >= executablePath.size()
+                ? std::filesystem::path{}
+                : std::filesystem::path(
+                      executablePath.data(), executablePath.data() + pathLength).parent_path() /
+                      L"Data" / L"textures" / L"actors" / L"character" / L"slavetats";
+            auto* renderer = RE::BSGraphics::Renderer::GetSingleton();
+            auto* taskInterface = SKSE::GetTaskInterface();
+
+            if (textureRoot.empty() || !renderer || !renderer->data.forwarder || !taskInterface) {
+                g_nativeThumbnailRuntime = makeUnavailableNativeThumbnailRuntime(textureRoot);
+                if (!g_nativeThumbnailRuntimeUnavailableLogged) {
+                    logger::warn(
+                        "SlaveTatsUI: native thumbnail runtime unavailable; rendering placeholders only");
+                    g_nativeThumbnailRuntimeUnavailableLogged = true;
+                }
+            } else {
+                auto source = std::make_unique<native::D3D11NativeThumbnailSource>(
+                    textureRoot,
+                    renderer->data.forwarder,
+                    12,
+                    std::chrono::minutes(2),
+                    [](std::string_view resourcePath) {
+                        const std::string path(resourcePath);
+                        RE::BSResourceNiBinaryStream stream(path.c_str());
+                        if (!stream.good()) {
+                            return textures::TextureBytesResult(
+                                std::unexpected(textures::TextureResolveError::notFound));
+                        }
+                        auto bytes = textures::readExactBytes(stream, stream.stream->totalSize);
+                        if (!bytes) {
+                            return textures::TextureBytesResult(
+                                std::unexpected(textures::TextureResolveError::readFailed));
+                        }
+                        return textures::TextureBytesResult(std::move(*bytes));
+                    },
+                    [](std::string_view texturePath, native::NativeThumbnailFailureStage stage) {
+                        std::string_view stageName = "exception";
+                        if (stage == native::NativeThumbnailFailureStage::resolve) {
+                            stageName = "resolve";
+                        } else if (stage == native::NativeThumbnailFailureStage::upload) {
+                            stageName = "upload";
+                        }
+                        logger::warn(
+                            "SlaveTatsUI: native thumbnail failed: path='{}', stage={}",
+                            texturePath,
+                            stageName);
+                    });
+                g_nativeThumbnailRuntime = std::make_unique<native::NativeThumbnailRuntime>(
+                    std::move(source),
+                    [taskInterface](native::NativeThumbnailTask task) {
+                        taskInterface->AddTask(std::move(task));
+                    },
+                    [] { return textures::TextureCacheClock::now(); });
+                logger::info(
+                    "SlaveTatsUI: native thumbnail runtime initialized (capacity=12, ttl=2m)");
+            }
+        }
         Bridge::get()->onDataLoaded();
         break;
     }
@@ -222,7 +306,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
     static native::OfficialMenuFrameworkAdapter menuFrameworkAdapter;
     static native::NativeMenu nativeMenu([](native::NativeMenu& menu) {
         native::OfficialMenuFrameworkAdapter::renderFoundation(
-            g_nativeCatalogBrowser, [&menu] { menu.close(); });
+            g_nativeCatalogBrowser, *g_nativeThumbnailRuntime, [&menu] { menu.close(); });
     }, &native::OfficialMenuFrameworkAdapter::renderLauncher);
     if (const auto result = nativeMenu.registerMenu(menuFrameworkAdapter); !result) {
         logger::warn(

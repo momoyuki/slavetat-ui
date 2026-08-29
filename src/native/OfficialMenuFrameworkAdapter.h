@@ -3,6 +3,7 @@
 #include "native/NativeCatalogBrowserModel.h"
 #include "native/MenuFrameworkPort.h"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -10,6 +11,10 @@
 #include <vector>
 
 namespace stui::native {
+
+class NativeThumbnailRuntime;
+enum class NativeThumbnailStatus;
+struct NativeThumbnailView;
 
 struct MenuFrameworkBindings {
     using GetVersionFunction = float (*)();
@@ -41,6 +46,74 @@ struct FoundationLayout {
     MenuPosition position;
     MenuSize size;
 };
+
+struct CatalogThumbnailFit {
+    float width{};
+    float height{};
+};
+
+struct CatalogCardGridPosition {
+    std::size_t row{};
+    std::size_t column{};
+};
+
+[[nodiscard]] CatalogCardGridPosition catalogCardGridPosition(
+    std::size_t index,
+    std::size_t columnCount) noexcept;
+
+[[nodiscard]] std::string catalogCardWidgetId(
+    std::string_view role,
+    std::size_t index);
+
+struct CatalogBrowserGridLayout {
+    float gridHeight{};
+    float rowHeight{};
+    float thumbnailHeight{};
+};
+
+struct CatalogAreaBadgeLayout {
+    float x{};
+    float y{};
+    float width{};
+    float height{};
+    float textX{};
+    float textY{};
+};
+
+[[nodiscard]] CatalogAreaBadgeLayout calculateCatalogAreaBadgeLayout(
+    float containerWidth,
+    float textWidth,
+    float textHeight,
+    float horizontalPadding,
+    float verticalPadding,
+    float margin) noexcept;
+
+[[nodiscard]] float calculateCatalogCardMetadataHeight(
+    float textLineHeight,
+    float itemSpacing) noexcept;
+
+[[nodiscard]] float calculateRightAlignedControlX(
+    float availableWidth,
+    float controlWidth) noexcept;
+
+[[nodiscard]] CatalogBrowserGridLayout calculateCatalogBrowserGridLayout(
+    float availableHeight,
+    float footerHeight,
+    float metadataHeight,
+    std::size_t rowCount) noexcept;
+
+[[nodiscard]] CatalogThumbnailFit fitCatalogThumbnail(
+    std::size_t textureWidth,
+    std::size_t textureHeight,
+    float maximumWidth,
+    float maximumHeight) noexcept;
+
+[[nodiscard]] std::string_view catalogThumbnailStatusLabel(
+    NativeThumbnailStatus status) noexcept;
+
+[[nodiscard]] std::optional<std::size_t> findCatalogThumbnailViewIndex(
+    std::string_view texturePath,
+    const std::vector<NativeThumbnailView>& thumbnailViews) noexcept;
 
 class CatalogBrowserPageInputState {
 public:
@@ -98,6 +171,7 @@ public:
     [[nodiscard]] static bool renderLauncher();
     static void renderFoundation(
         NativeCatalogBrowserModel& model,
+        NativeThumbnailRuntime& thumbnails,
         const std::function<void()>& close);
 
 private:

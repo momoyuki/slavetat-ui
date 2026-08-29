@@ -1,5 +1,6 @@
 #include "native/OfficialMenuFrameworkAdapter.h"
 #include "native/NativeCatalogBrowserModel.h"
+#include "native/NativeThumbnailController.h"
 
 #include <functional>
 #include <iostream>
@@ -106,6 +107,122 @@ void foundationLayoutAnchorsFortyPercentPanelToRightEdge() {
            "expected forty-percent full-height side panel");
 }
 
+void thumbnailPresentationFitsWithoutStretchingAndLabelsFailures() {
+    const auto wide = stui::native::fitCatalogThumbnail(400, 200, 180.0F, 140.0F);
+    expect(wide.width == 180.0F && wide.height == 90.0F,
+           "expected wide texture fitted without stretching");
+
+    const auto tall = stui::native::fitCatalogThumbnail(100, 400, 180.0F, 140.0F);
+    expect(tall.width == 35.0F && tall.height == 140.0F,
+           "expected tall texture fitted without stretching");
+
+    expect(stui::native::catalogThumbnailStatusLabel(
+               stui::native::NativeThumbnailStatus::loading) == "Loading",
+           "expected explicit loading label");
+    expect(stui::native::catalogThumbnailStatusLabel(
+               stui::native::NativeThumbnailStatus::missing) == "Missing",
+           "expected explicit missing label");
+    expect(stui::native::catalogThumbnailStatusLabel(
+               stui::native::NativeThumbnailStatus::broken) == "Broken",
+           "expected explicit broken label");
+    expect(stui::native::catalogThumbnailStatusLabel(
+               stui::native::NativeThumbnailStatus::ready).empty(),
+           "expected ready texture without a status label");
+    expect(stui::native::catalogThumbnailStatusLabel(
+               stui::native::NativeThumbnailStatus::placeholder).empty(),
+           "expected placeholder without a status label");
+}
+
+void thumbnailViewLookupMapsDuplicatePathVariantsToOneView() {
+    const std::vector<stui::native::NativeThumbnailView> views{
+        {.texturePath = "textures/actors/character/slavetats/a.dds"},
+        {.texturePath = "textures/actors/character/slavetats/b.dds"},
+    };
+
+    expect(stui::native::findCatalogThumbnailViewIndex(
+               "textures/actors/character/slavetats/a.dds", views) == 0,
+           "expected first entry to map to the first thumbnail view");
+    expect(stui::native::findCatalogThumbnailViewIndex(
+               "TEXTURES\\ACTORS\\CHARACTER\\SLAVETATS\\A.DDS", views) == 0,
+           "expected slash and case variant to reuse the first thumbnail view");
+    expect(stui::native::findCatalogThumbnailViewIndex(
+               "textures/actors/character/slavetats/b.dds", views) == 1,
+           "expected third entry to map to the second unique thumbnail view");
+}
+
+void thumbnailGridGroupsTwoCardsIntoEachRow() {
+    const auto first = stui::native::catalogCardGridPosition(0, 2);
+    const auto second = stui::native::catalogCardGridPosition(1, 2);
+    const auto third = stui::native::catalogCardGridPosition(2, 2);
+
+    expect(first.row == 0 && first.column == 0,
+        "expected first card in row zero column zero");
+    expect(second.row == 0 && second.column == 1,
+        "expected second card beside first card in row zero");
+    expect(third.row == 1 && third.column == 0,
+        "expected third card at the start of row one");
+}
+
+void thumbnailCardWidgetsHaveStableUniqueIds() {
+    expect(stui::native::catalogCardWidgetId("Thumbnail", 0) == "Thumbnail##0",
+        "expected the first thumbnail widget to include its card index");
+    expect(stui::native::catalogCardWidgetId("Thumbnail", 0) !=
+               stui::native::catalogCardWidgetId("Thumbnail", 1),
+        "expected every thumbnail widget to have a unique ImGui ID");
+}
+
+void browserGridUsesRemainingHeightWithoutVerticalScrolling() {
+    const auto collapsed = stui::native::calculateCatalogBrowserGridLayout(
+        700.0F, 40.0F, 60.0F, 3);
+    expect(collapsed.gridHeight == 660.0F,
+        "expected footer height reserved below the collapsed-filter grid");
+    expect(collapsed.rowHeight == 220.0F && collapsed.thumbnailHeight == 160.0F,
+        "expected three equal image-first rows with collapsed filters");
+
+    const auto expanded = stui::native::calculateCatalogBrowserGridLayout(
+        520.0F, 40.0F, 60.0F, 3);
+    expect(expanded.gridHeight == 480.0F,
+        "expected expanded filters to leave a smaller bounded grid");
+    expect(expanded.rowHeight == 160.0F && expanded.thumbnailHeight == 100.0F,
+        "expected all three rows to remain visible with expanded filters");
+
+    const auto constrained = stui::native::calculateCatalogBrowserGridLayout(
+        80.0F, 40.0F, 60.0F, 3);
+    expect(constrained.thumbnailHeight == 0.0F,
+        "expected small windows to clamp thumbnail height instead of going negative");
+}
+
+void areaBadgeAnchorsInsideThumbnailTopRightCorner() {
+    const auto badge = stui::native::calculateCatalogAreaBadgeLayout(
+        200.0F, 40.0F, 16.0F, 6.0F, 3.0F, 4.0F);
+
+    expect(badge.x == 144.0F && badge.y == 4.0F,
+        "expected area badge anchored four pixels from the thumbnail top-right");
+    expect(badge.width == 52.0F && badge.height == 22.0F,
+        "expected area badge padding around its text");
+    expect(badge.textX == 150.0F && badge.textY == 7.0F,
+        "expected area text inset inside the badge background");
+}
+
+void thumbnailCardsReserveNoPersistentMetadataRow() {
+    const float metadataHeight =
+        stui::native::calculateCatalogCardMetadataHeight(24.0F, 4.0F);
+    expect(metadataHeight == 0.0F,
+        "expected thumbnail cards to reserve no persistent name row");
+
+    const auto layout = stui::native::calculateCatalogBrowserGridLayout(
+        700.0F, 40.0F, metadataHeight, 3);
+    expect(layout.thumbnailHeight == 220.0F,
+        "expected each thumbnail to use the full available row height");
+}
+
+void footerControlAlignsToRightContentEdge() {
+    expect(stui::native::calculateRightAlignedControlX(300.0F, 64.0F) == 236.0F,
+        "expected close button aligned to the footer right edge");
+    expect(stui::native::calculateRightAlignedControlX(40.0F, 64.0F) == 0.0F,
+        "expected constrained footer alignment clamped inside its cell");
+}
+
 void pageInputKeepsPendingEditsUntilEnterOrFocusLoss() {
     stui::native::CatalogBrowserPageInputState state;
     state.synchronize(1, 5);
@@ -200,7 +317,10 @@ void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
     expect(page.pageCount == 0 && page.pageSize == 6,
            "expected safe six-item empty page metadata");
 
-    void (*render)(stui::native::NativeCatalogBrowserModel&, const std::function<void()>&) =
+    void (*render)(
+        stui::native::NativeCatalogBrowserModel&,
+        stui::native::NativeThumbnailRuntime&,
+        const std::function<void()>&) =
         &stui::native::OfficialMenuFrameworkAdapter::renderFoundation;
     (void)render;
 }
@@ -217,6 +337,22 @@ int main() {
         std::cout << "PASS default adapter is unavailable without loaded framework\n";
         foundationLayoutAnchorsFortyPercentPanelToRightEdge();
         std::cout << "PASS foundation layout anchors panel to right edge\n";
+        thumbnailPresentationFitsWithoutStretchingAndLabelsFailures();
+        std::cout << "PASS thumbnail presentation fits and labels failures\n";
+        thumbnailViewLookupMapsDuplicatePathVariantsToOneView();
+        std::cout << "PASS thumbnail view lookup maps duplicate path variants\n";
+        thumbnailGridGroupsTwoCardsIntoEachRow();
+        std::cout << "PASS thumbnail grid groups two cards into each row\n";
+        thumbnailCardWidgetsHaveStableUniqueIds();
+        std::cout << "PASS thumbnail card widgets have stable unique IDs\n";
+        browserGridUsesRemainingHeightWithoutVerticalScrolling();
+        std::cout << "PASS browser grid uses remaining height without scrolling\n";
+        areaBadgeAnchorsInsideThumbnailTopRightCorner();
+        std::cout << "PASS area badge anchors inside thumbnail top-right\n";
+        thumbnailCardsReserveNoPersistentMetadataRow();
+        std::cout << "PASS thumbnail cards reserve no persistent metadata row\n";
+        footerControlAlignsToRightContentEdge();
+        std::cout << "PASS footer control aligns to right content edge\n";
         pageInputKeepsPendingEditsUntilEnterOrFocusLoss();
         std::cout << "PASS page input keeps pending edits until commit\n";
         classifiesEmptyCatalogSeparatelyFromNoMatches();
