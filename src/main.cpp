@@ -32,6 +32,9 @@ native::NativeSlotWorkflowRuntime g_nativeSlotWorkflowRuntime(
     [](const core::ApplyTattooRequest& request) {
         return Bridge::get()->tattooService().applyToSlot(request);
     },
+    [](const core::RemoveTattooRequest& request) {
+        return Bridge::get()->tattooService().removeFromSlot(request);
+    },
     [](native::NativeSlotTask task) {
         auto* taskInterface = SKSE::GetTaskInterface();
         if (!taskInterface) {

@@ -125,4 +125,43 @@ ApplyTattooResult SlaveTatsService::applyToSlot(const ApplyTattooRequest& reques
     return m_runtime.applyToSlot(request);
 }
 
+RemoveTattooResult SlaveTatsService::removeFromSlot(const RemoveTattooRequest& request) {
+    if (!m_runtime.apiAvailable()) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::slaveTatsUnavailable,
+            "SlaveTatsNG not available",
+        });
+    }
+
+    if (!m_runtime.jContainersReady()) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::jContainersUnavailable,
+            "JContainers not ready",
+        });
+    }
+
+    if (request.actorFormId == 0) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::actorNotFound,
+            "Actor not found",
+        });
+    }
+
+    if (!isValidArea(request.area)) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::invalidArea,
+            "Invalid tattoo area",
+        });
+    }
+
+    if (request.slot < 0) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::invalidSlot,
+            "Invalid tattoo slot",
+        });
+    }
+
+    return m_runtime.removeFromSlot(request);
+}
+
 }  // namespace stui::core

@@ -15,6 +15,9 @@ namespace {
 using stui::core::ITattooRuntime;
 using stui::core::ApplyTattooRequest;
 using stui::core::ApplyTattooResult;
+using stui::core::RemoveTattooRequest;
+using stui::core::RemoveTattooResult;
+using stui::core::RemoveTattooMode;
 using stui::core::ServiceError;
 using stui::core::ServiceErrorCode;
 using stui::core::SlaveTatsService;
@@ -54,6 +57,12 @@ public:
         return applyResult;
     }
 
+    RemoveTattooResult removeFromSlot(const RemoveTattooRequest& request) override {
+        removedRequest = request;
+        ++removeCount;
+        return removeResult;
+    }
+
     bool apiAvailableValue{true};
     bool jContainersReadyValue{true};
     int queryCount{0};
@@ -66,6 +75,9 @@ public:
     ApplyTattooRequest appliedRequest;
     int applyCount{0};
     ApplyTattooResult applyResult{stui::core::ApplyTattooSuccess{}};
+    RemoveTattooRequest removedRequest;
+    int removeCount{0};
+    RemoveTattooResult removeResult{stui::core::RemoveTattooSuccess{}};
 };
 
 void expect(bool condition, std::string_view message) {
@@ -91,6 +103,15 @@ ApplyTattooRequest validApplyRequest() {
         .name = "Corruption",
         .color = 0xFF00FF,
         .alpha = 0.75F,
+    };
+}
+
+RemoveTattooRequest validRemoveRequest() {
+    return RemoveTattooRequest{
+        .actorFormId = 0x14,
+        .area = TattooArea::body,
+        .slot = 2,
+        .mode = RemoveTattooMode::removeAndSynchronize,
     };
 }
 
@@ -388,6 +409,74 @@ void applyRuntimeFailureIsReturnedUnchanged() {
     expect(runtime.applyCount == 1, "expected one failed apply runtime call");
 }
 
+void unavailableDependenciesStopRemove() {
+    FakeTattooRuntime unavailableApi;
+    unavailableApi.apiAvailableValue = false;
+    SlaveTatsService apiService(unavailableApi);
+    FakeTattooRuntime unavailableJContainers;
+    unavailableJContainers.jContainersReadyValue = false;
+    SlaveTatsService jContainersService(unavailableJContainers);
+
+    const auto apiResult = apiService.removeFromSlot(validRemoveRequest());
+    const auto jContainersResult = jContainersService.removeFromSlot(validRemoveRequest());
+
+    expectError(apiResult, ServiceErrorCode::slaveTatsUnavailable, "SlaveTatsNG not available");
+    expectError(jContainersResult, ServiceErrorCode::jContainersUnavailable, "JContainers not ready");
+    expect(unavailableApi.removeCount == 0 && unavailableJContainers.removeCount == 0,
+        "remove runtime must not run before dependencies are ready");
+}
+
+void invalidRemoveTargetIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto invalidActor = validRemoveRequest();
+    invalidActor.actorFormId = 0;
+    auto invalidArea = validRemoveRequest();
+    invalidArea.area = static_cast<TattooArea>(99);
+    auto invalidSlot = validRemoveRequest();
+    invalidSlot.slot = -1;
+
+    expectError(service.removeFromSlot(invalidActor), ServiceErrorCode::actorNotFound, "Actor not found");
+    expectError(service.removeFromSlot(invalidArea), ServiceErrorCode::invalidArea, "Invalid tattoo area");
+    expectError(service.removeFromSlot(invalidSlot), ServiceErrorCode::invalidSlot, "Invalid tattoo slot");
+    expect(runtime.removeCount == 0, "invalid remove targets must not reach the runtime");
+}
+
+void validRemoveRequestIsForwardedExactlyOnce() {
+    FakeTattooRuntime runtime;
+    runtime.removeResult = stui::core::RemoveTattooSuccess{
+        .actorFormId = 0x14,
+        .area = TattooArea::body,
+        .slot = 2,
+    };
+    SlaveTatsService service(runtime);
+
+    const auto result = service.removeFromSlot(validRemoveRequest());
+
+    expect(result.has_value(), "expected remove success");
+    expect(runtime.removeCount == 1, "expected exactly one remove runtime call");
+    expect(runtime.removedRequest.actorFormId == 0x14 &&
+            runtime.removedRequest.area == TattooArea::body &&
+            runtime.removedRequest.slot == 2 &&
+            runtime.removedRequest.mode == RemoveTattooMode::removeAndSynchronize,
+        "expected remove target forwarded unchanged");
+    expect(result->slot == 2, "expected runtime remove result returned unchanged");
+}
+
+void removeRuntimeFailureIsReturnedUnchanged() {
+    FakeTattooRuntime runtime;
+    runtime.removeResult = std::unexpected(ServiceError{
+        ServiceErrorCode::externalSlot,
+        "Slot is occupied by an external overlay",
+    });
+    SlaveTatsService service(runtime);
+
+    const auto result = service.removeFromSlot(validRemoveRequest());
+
+    expectError(result, ServiceErrorCode::externalSlot, "Slot is occupied by an external overlay");
+    expect(runtime.removeCount == 1, "expected one failed remove runtime call");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -425,5 +514,9 @@ int main() {
     failures += run("boundary apply alpha is forwarded", boundaryApplyAlphaIsForwarded);
     failures += run("valid apply request is forwarded exactly once", validApplyRequestIsForwardedExactlyOnce);
     failures += run("apply runtime failure is returned unchanged", applyRuntimeFailureIsReturnedUnchanged);
+    failures += run("unavailable dependencies stop remove", unavailableDependenciesStopRemove);
+    failures += run("invalid remove target is rejected", invalidRemoveTargetIsRejected);
+    failures += run("valid remove request is forwarded exactly once", validRemoveRequestIsForwardedExactlyOnce);
+    failures += run("remove runtime failure is returned unchanged", removeRuntimeFailureIsReturnedUnchanged);
     return failures == 0 ? 0 : 1;
 }

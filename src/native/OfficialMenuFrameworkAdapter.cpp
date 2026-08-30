@@ -152,6 +152,24 @@ bool isPreviewApplyEnabled(
     return screen == SlotWorkflowScreen::preview && hasTarget && hasTattoo;
 }
 
+std::string removeButtonLabel(std::int32_t slot, RemoveButtonState state) {
+    switch (state) {
+    case RemoveButtonState::initial:
+        return "Remove from Slot " + std::to_string(slot);
+    case RemoveButtonState::retryRemove:
+        return "Retry Remove Slot " + std::to_string(slot);
+    case RemoveButtonState::retrySynchronization:
+        return "Retry Sync Slot " + std::to_string(slot);
+    }
+    return "Remove from Slot " + std::to_string(slot);
+}
+
+bool isRemoveConfirmationEnabled(
+    SlotWorkflowScreen screen,
+    bool hasTarget) noexcept {
+    return screen == SlotWorkflowScreen::removeConfirmation && hasTarget;
+}
+
 std::vector<std::string> collectPickerTexturePaths(
     const repository::TattooPage& page) {
     const std::size_t visibleCount = pickerVisibleCardCount(page);
@@ -708,6 +726,142 @@ void renderCurrentSlots(
     }
 }
 
+const core::TattooSlot* selectedWorkflowSlot(
+    const NativeSlotWorkflowModel& workflow) noexcept {
+    const auto target = workflow.targetSlot();
+    const auto* slots = workflow.slots();
+    if (!target || !slots) {
+        return nullptr;
+    }
+
+    const auto found = std::ranges::find_if(
+        slots->slots,
+        [target](const core::TattooSlot& slot) { return slot.index == *target; });
+    return found == slots->slots.end() ? nullptr : &*found;
+}
+
+void renderSlotActions(
+    NativeSlotWorkflowModel& workflow,
+    NativeThumbnailRuntime& thumbnails,
+    const std::function<void()>& close) {
+    const auto target = workflow.targetSlot();
+    const auto* slot = selectedWorkflowSlot(workflow);
+    std::vector<std::string> paths;
+    if (slot && slot->tattoo && !slot->tattoo->texturePath.empty()) {
+        paths.push_back(slot->tattoo->texturePath);
+    }
+    thumbnails.synchronize(slotThumbnailEpoch(workflow.selectedArea()), paths);
+    thumbnails.pump();
+    const auto thumbnailViews = thumbnails.views();
+
+    const auto* viewport = ImGuiMCP::GetMainViewport();
+    if (!viewport) {
+        return;
+    }
+    const auto layout = OfficialMenuFrameworkAdapter::calculateFoundationLayout(
+        {viewport->Pos.x, viewport->Pos.y},
+        {viewport->Size.x, viewport->Size.y});
+    ImGuiMCP::SetNextWindowPos(
+        {layout.position.x, layout.position.y}, ImGuiMCP::ImGuiCond_Appearing, {0.0F, 0.0F});
+    ImGuiMCP::SetNextWindowSize(
+        {layout.size.width, layout.size.height}, ImGuiMCP::ImGuiCond_Appearing);
+    bool open = true;
+    ImGuiMCP::PushStyleVar(ImGuiMCP::ImGuiStyleVar_WindowBorderSize, 0.0F);
+    ImGuiMCP::Begin(
+        "Tattoo Browser##SlaveTatsUI",
+        &open,
+        ImGuiMCP::ImGuiWindowFlags_NoCollapse |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse);
+
+    const bool confirming =
+        workflow.screen() == SlotWorkflowScreen::removeConfirmation;
+    const bool removing = workflow.screen() == SlotWorkflowScreen::removing;
+    ImGuiMCP::TextUnformatted(
+        confirming || removing ? "Remove Tattoo?" : "Tattoo Slot Actions");
+    if (target) {
+        const auto targetLabel = formatSlotTargetLabel(workflow.selectedArea(), *target);
+        ImGuiMCP::TextUnformatted(targetLabel.c_str());
+    }
+    if (slot && slot->tattoo) {
+        ImGuiMCP::Text("%s / %s",
+            slot->tattoo->section.c_str(),
+            slot->tattoo->name.c_str());
+    }
+    if (const auto* error = workflow.error()) {
+        ImGuiMCP::TextUnformatted(error->message.c_str());
+    } else if (removing) {
+        ImGuiMCP::TextUnformatted("Removing tattoo...");
+    } else if (confirming) {
+        ImGuiMCP::TextUnformatted("This will clear the selected SlaveTats slot.");
+    }
+
+    const float footerHeight = ImGuiMCP::GetFrameHeightWithSpacing();
+    const float imageHeight = std::max(
+        1.0F,
+        ImGuiMCP::GetContentRegionAvail().y - footerHeight);
+    ImGuiMCP::PushStyleColor(
+        ImGuiMCP::ImGuiCol_ChildBg,
+        ImGuiMCP::ImVec4(0.08F, 0.08F, 0.08F, 1.0F));
+    if (ImGuiMCP::BeginChild(
+            "SlotActionImage",
+            {0.0F, imageHeight},
+            ImGuiMCP::ImGuiChildFlags_Border,
+            ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+                ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
+        if (slot) {
+            renderSlotImage(*slot, thumbnailViews, ImGuiMCP::GetContentRegionAvail());
+        }
+    }
+    ImGuiMCP::EndChild();
+    ImGuiMCP::PopStyleColor();
+
+    if (confirming || removing) {
+        ImGuiMCP::BeginDisabled(removing);
+        if (ImGuiMCP::Button("Cancel")) {
+            workflow.cancelRemove();
+        }
+        ImGuiMCP::EndDisabled();
+        ImGuiMCP::SameLine();
+        const bool canRemove = isRemoveConfirmationEnabled(
+            workflow.screen(), target.has_value());
+        RemoveButtonState buttonState = RemoveButtonState::initial;
+        if (const auto* error = workflow.error()) {
+            buttonState = error->code == core::ServiceErrorCode::synchronizeFailed
+                ? RemoveButtonState::retrySynchronization
+                : RemoveButtonState::retryRemove;
+        }
+        const auto removeLabel = removeButtonLabel(target.value_or(-1), buttonState);
+        ImGuiMCP::BeginDisabled(!canRemove);
+        if (ImGuiMCP::Button(removeLabel.c_str())) {
+            (void)workflow.confirmRemove();
+        }
+        ImGuiMCP::EndDisabled();
+    } else {
+        if (ImGuiMCP::Button("Back")) {
+            workflow.backToSlots();
+        }
+        ImGuiMCP::SameLine();
+        if (ImGuiMCP::Button("Replace")) {
+            (void)workflow.replaceSelectedSlot();
+        }
+        ImGuiMCP::SameLine();
+        if (ImGuiMCP::Button("Remove")) {
+            (void)workflow.requestRemove();
+        }
+    }
+    ImGuiMCP::SameLine();
+    if (ImGuiMCP::Button("Close")) {
+        open = false;
+    }
+
+    ImGuiMCP::End();
+    ImGuiMCP::PopStyleVar();
+    if (!open && close) {
+        close();
+    }
+}
+
 void renderPreview(
     NativeSlotWorkflowModel& workflow,
     NativeCatalogBrowserModel& catalog,
@@ -835,6 +989,12 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     slotRuntime.pump();
     if (workflow.screen() == SlotWorkflowScreen::currentSlots) {
         renderCurrentSlots(workflow, thumbnails, close);
+        return;
+    }
+    if (workflow.screen() == SlotWorkflowScreen::slotActions ||
+        workflow.screen() == SlotWorkflowScreen::removeConfirmation ||
+        workflow.screen() == SlotWorkflowScreen::removing) {
+        renderSlotActions(workflow, thumbnails, close);
         return;
     }
     if (workflow.screen() == SlotWorkflowScreen::preview ||

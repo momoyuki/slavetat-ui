@@ -12,9 +12,12 @@ namespace stui::native {
 
 enum class SlotWorkflowScreen {
     currentSlots,
+    slotActions,
     picker,
     preview,
     applying,
+    removeConfirmation,
+    removing,
 };
 
 struct SlotQueryTicket {
@@ -26,6 +29,11 @@ struct SlotQueryTicket {
 struct SlotApplyTicket {
     std::uint64_t generation{};
     core::ApplyTattooRequest request;
+};
+
+struct SlotRemoveTicket {
+    std::uint64_t generation{};
+    core::RemoveTattooRequest request;
 };
 
 class NativeSlotWorkflowModel {
@@ -41,6 +49,10 @@ public:
     void nextSlotPage();
     void setSlotPageNumber(std::size_t oneBasedPage);
     [[nodiscard]] bool selectSlot(std::int32_t slot);
+    [[nodiscard]] bool replaceSelectedSlot();
+    [[nodiscard]] bool requestRemove();
+    void cancelRemove();
+    [[nodiscard]] bool confirmRemove();
     void backToSlots();
     void selectTattoo(const repository::TattooDefinition& tattoo);
     void cancelPreview();
@@ -48,8 +60,10 @@ public:
 
     [[nodiscard]] std::optional<SlotQueryTicket> takeSlotQuery();
     [[nodiscard]] std::optional<SlotApplyTicket> takeApplyRequest();
+    [[nodiscard]] std::optional<SlotRemoveTicket> takeRemoveRequest();
     void completeSlotQuery(std::uint64_t generation, core::TattooSlotsResult result);
     void completeApply(std::uint64_t generation, core::ApplyTattooResult result);
+    void completeRemove(std::uint64_t generation, core::RemoveTattooResult result);
 
     [[nodiscard]] SlotWorkflowScreen screen() const noexcept;
     [[nodiscard]] core::TattooArea selectedArea() const noexcept;
@@ -72,6 +86,7 @@ private:
     [[nodiscard]] std::uint64_t nextGeneration() noexcept;
     void scheduleSlotQuery(core::TattooArea area);
     void clampSelectedPage() noexcept;
+    void openPicker();
 
     NativeCatalogBrowserModel& m_catalog;
     std::array<AreaState, 4> m_areaStates;
@@ -82,8 +97,10 @@ private:
     std::optional<core::ServiceError> m_error;
     std::optional<SlotQueryTicket> m_pendingSlotQuery;
     std::optional<SlotApplyTicket> m_pendingApply;
+    std::optional<SlotRemoveTicket> m_pendingRemove;
     std::optional<std::uint64_t> m_activeSlotQueryGeneration;
     std::optional<std::uint64_t> m_activeApplyGeneration;
+    std::optional<std::uint64_t> m_activeRemoveGeneration;
     std::uint64_t m_generation{};
     bool m_started{false};
 };

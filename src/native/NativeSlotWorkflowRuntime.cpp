@@ -30,10 +30,12 @@ NativeSlotWorkflowRuntime::NativeSlotWorkflowRuntime(
     NativeSlotWorkflowModel& model,
     SlotQueryOperation query,
     SlotApplyOperation apply,
+    SlotRemoveOperation remove,
     NativeSlotScheduler scheduler)
     : m_model(model),
       m_query(std::move(query)),
       m_apply(std::move(apply)),
+      m_remove(std::move(remove)),
       m_scheduler(std::move(scheduler)) {}
 
 void NativeSlotWorkflowRuntime::pump() {
@@ -48,6 +50,10 @@ void NativeSlotWorkflowRuntime::pump() {
     }
     if (auto apply = m_model.takeApplyRequest()) {
         scheduleApply(std::move(*apply));
+        return;
+    }
+    if (auto remove = m_model.takeRemoveRequest()) {
+        scheduleRemove(std::move(*remove));
         return;
     }
 
@@ -101,6 +107,32 @@ void NativeSlotWorkflowRuntime::scheduleApply(SlotApplyTicket ticket) {
             std::unexpected(operationError(
                 core::ServiceErrorCode::applyFailed,
                 "Failed to schedule tattoo apply.")));
+        m_inFlight.store(false);
+    }
+}
+
+void NativeSlotWorkflowRuntime::scheduleRemove(SlotRemoveTicket ticket) {
+    const std::uint64_t generation = ticket.generation;
+    NativeSlotTask task = [this, ticket = std::move(ticket)] {
+        InFlightGuard guard(m_inFlight);
+        core::RemoveTattooResult result = std::unexpected(operationError(
+            core::ServiceErrorCode::removeFailed,
+            "Tattoo remove failed."));
+        try {
+            result = m_remove(ticket.request);
+        } catch (...) {
+        }
+        m_model.completeRemove(ticket.generation, std::move(result));
+    };
+
+    try {
+        m_scheduler(std::move(task));
+    } catch (...) {
+        m_model.completeRemove(
+            generation,
+            std::unexpected(operationError(
+                core::ServiceErrorCode::removeFailed,
+                "Failed to schedule tattoo remove.")));
         m_inFlight.store(false);
     }
 }

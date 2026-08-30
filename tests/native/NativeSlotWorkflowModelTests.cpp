@@ -12,6 +12,8 @@
 namespace {
 
 using stui::core::ApplyTattooSuccess;
+using stui::core::RemoveTattooSuccess;
+using stui::core::RemoveTattooMode;
 using stui::core::ServiceError;
 using stui::core::ServiceErrorCode;
 using stui::core::SlotOccupancy;
@@ -141,7 +143,7 @@ void clampsSlotPagination() {
     expect(model.slotPageIndex() == 0, "expected zero page input clamped to first slot page");
 }
 
-void externalSlotsAreRejectedButMutableSlotsOpenPicker() {
+void externalSlotsAreRejectedAndOwnedSlotsOpenActions() {
     TattooCatalogSnapshot snapshot = catalogWithEntries(1);
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
     catalog.refresh();
@@ -161,13 +163,104 @@ void externalSlotsAreRejectedButMutableSlotsOpenPicker() {
     expect(model.screen() == SlotWorkflowScreen::currentSlots,
         "expected external slot to remain on Current Slots");
     expect(model.selectSlot(1), "expected owned slot replace target accepted");
-    expect(model.screen() == SlotWorkflowScreen::picker && model.targetSlot() == 1,
-        "expected owned slot to open Picker");
+    expect(model.screen() == SlotWorkflowScreen::slotActions && model.targetSlot() == 1,
+        "expected owned slot to open Slot Actions");
+    expect(model.replaceSelectedSlot(), "expected Replace action accepted");
+    expect(model.screen() == SlotWorkflowScreen::picker,
+        "expected Replace action to open Picker");
 
     model.backToSlots();
     expect(model.selectSlot(2), "expected empty slot target accepted");
     expect(model.screen() == SlotWorkflowScreen::picker && model.targetSlot() == 2,
         "expected empty slot to open Picker");
+}
+
+void removeRequiresConfirmationAndCreatesOneRequest() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    auto bodySlots = slots(TattooArea::body, 3);
+    bodySlots.slots[1].occupancy = SlotOccupancy::slaveTats;
+    bodySlots.slots[1].tattoo = TattooEntry{
+        .section = "Existing",
+        .name = "Owned",
+        .area = "BODY",
+        .slot = 1,
+    };
+    completeInitialQuery(model, std::move(bodySlots));
+    expect(model.selectSlot(1), "expected owned slot selected");
+
+    expect(model.requestRemove(), "expected Remove action accepted");
+    expect(model.screen() == SlotWorkflowScreen::removeConfirmation,
+        "expected explicit Remove confirmation screen");
+    expect(!model.takeRemoveRequest(), "expected no mutation before confirmation");
+    model.cancelRemove();
+    expect(model.screen() == SlotWorkflowScreen::slotActions && model.targetSlot() == 1,
+        "expected Cancel to return to Slot Actions");
+
+    expect(model.requestRemove(), "expected Remove action accepted again");
+    expect(model.confirmRemove(), "expected first Remove confirmation accepted");
+    expect(!model.confirmRemove(), "expected duplicate Remove confirmation rejected");
+    const auto ticket = model.takeRemoveRequest();
+
+    expect(ticket.has_value(), "expected one remove ticket");
+    expect(ticket->request.actorFormId == 0x14 &&
+            ticket->request.area == TattooArea::body &&
+            ticket->request.slot == 1 &&
+            ticket->request.mode == RemoveTattooMode::removeAndSynchronize,
+        "expected exact Player BODY slot remove target");
+    expect(model.screen() == SlotWorkflowScreen::removing,
+        "expected Removing state after confirmation");
+    expect(!model.takeRemoveRequest(), "expected remove ticket consumed once");
+}
+
+void removeCompletionRefreshesOrRetainsConfirmationForRetry() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    auto bodySlots = slots(TattooArea::body, 3);
+    bodySlots.slots[1].occupancy = SlotOccupancy::slaveTats;
+    bodySlots.slots[1].tattoo = TattooEntry{
+        .section = "Existing",
+        .name = "Owned",
+        .area = "BODY",
+        .slot = 1,
+    };
+    completeInitialQuery(model, std::move(bodySlots));
+    expect(model.selectSlot(1) && model.requestRemove() && model.confirmRemove(),
+        "expected confirmed Remove flow");
+    const auto failed = model.takeRemoveRequest();
+
+    model.completeRemove(failed->generation, std::unexpected(ServiceError{
+        ServiceErrorCode::synchronizeFailed,
+        "remove sync failed",
+    }));
+
+    expect(model.screen() == SlotWorkflowScreen::removeConfirmation &&
+            model.targetSlot() == 1,
+        "expected failed Remove to retain target and confirmation");
+    expect(model.error() && model.error()->message == "remove sync failed",
+        "expected Remove failure exposed");
+    expect(model.confirmRemove(), "expected failed Remove retry accepted");
+    const auto retry = model.takeRemoveRequest();
+    expect(retry && retry->generation > failed->generation,
+        "expected retry to use a newer generation");
+    expect(retry->request.mode == RemoveTattooMode::synchronizeOnly,
+        "expected post-mutation failure to retry synchronization without removing again");
+
+    model.completeRemove(retry->generation, RemoveTattooSuccess{
+        .actorFormId = 0x14,
+        .area = TattooArea::body,
+        .slot = 1,
+    });
+
+    expect(model.screen() == SlotWorkflowScreen::currentSlots && !model.targetSlot(),
+        "expected successful Remove to return to Current Slots");
+    const auto refresh = model.takeSlotQuery();
+    expect(refresh && refresh->area == TattooArea::body,
+        "expected successful Remove to refresh selected area");
 }
 
 void previewDoesNotApplyAndCancelPreservesPickerState() {
@@ -361,7 +454,9 @@ int main() {
     failures += run("start schedules one Player BODY query", startSchedulesOnePlayerBodyQuery);
     failures += run("caches area results and preserves per-area pages", cachesAreaResultsAndPreservesPerAreaPages);
     failures += run("clamps slot pagination", clampsSlotPagination);
-    failures += run("external slots are rejected but mutable slots open Picker", externalSlotsAreRejectedButMutableSlotsOpenPicker);
+    failures += run("external slots are rejected and owned slots open Actions", externalSlotsAreRejectedAndOwnedSlotsOpenActions);
+    failures += run("remove requires confirmation and creates one request", removeRequiresConfirmationAndCreatesOneRequest);
+    failures += run("remove completion refreshes or retains confirmation", removeCompletionRefreshesOrRetainsConfirmationForRetry);
     failures += run("preview does not apply and Cancel preserves picker state", previewDoesNotApplyAndCancelPreservesPickerState);
     failures += run("explicit confirmation creates one fixed-policy request", explicitConfirmationCreatesOneFixedPolicyRequest);
     failures += run("apply success returns to slots and refreshes area", applySuccessReturnsToSlotsAndRefreshesArea);

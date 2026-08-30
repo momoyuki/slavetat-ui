@@ -124,12 +124,74 @@ bool NativeSlotWorkflowModel::selectSlot(std::int32_t slot) {
     m_targetSlot = slot;
     m_previewTattoo.reset();
     m_error.reset();
+    if (found->occupancy == core::SlotOccupancy::slaveTats) {
+        m_screen = SlotWorkflowScreen::slotActions;
+        return true;
+    }
+
+    openPicker();
+    return true;
+}
+
+bool NativeSlotWorkflowModel::replaceSelectedSlot() {
+    if (m_screen != SlotWorkflowScreen::slotActions || !m_targetSlot) {
+        return false;
+    }
+
+    openPicker();
+    return true;
+}
+
+bool NativeSlotWorkflowModel::requestRemove() {
+    if (m_screen != SlotWorkflowScreen::slotActions || !m_targetSlot) {
+        return false;
+    }
+
+    m_error.reset();
+    m_screen = SlotWorkflowScreen::removeConfirmation;
+    return true;
+}
+
+void NativeSlotWorkflowModel::cancelRemove() {
+    if (m_screen != SlotWorkflowScreen::removeConfirmation) {
+        return;
+    }
+
+    m_error.reset();
+    m_screen = SlotWorkflowScreen::slotActions;
+}
+
+bool NativeSlotWorkflowModel::confirmRemove() {
+    if (m_screen != SlotWorkflowScreen::removeConfirmation || !m_targetSlot) {
+        return false;
+    }
+
+    const auto mode = m_error &&
+            m_error->code == core::ServiceErrorCode::synchronizeFailed
+        ? core::RemoveTattooMode::synchronizeOnly
+        : core::RemoveTattooMode::removeAndSynchronize;
+    const std::uint64_t generation = nextGeneration();
+    m_pendingRemove = SlotRemoveTicket{
+        .generation = generation,
+        .request = core::RemoveTattooRequest{
+            .actorFormId = kPlayerFormId,
+            .area = m_selectedArea,
+            .slot = *m_targetSlot,
+            .mode = mode,
+        },
+    };
+    m_activeRemoveGeneration = generation;
+    m_error.reset();
+    m_screen = SlotWorkflowScreen::removing;
+    return true;
+}
+
+void NativeSlotWorkflowModel::openPicker() {
     const auto targetArea = areaName(m_selectedArea);
     if (!equalsFoldedASCII(m_catalog.filter().area, targetArea)) {
         m_catalog.setArea(std::string(targetArea));
     }
     m_screen = SlotWorkflowScreen::picker;
-    return true;
 }
 
 void NativeSlotWorkflowModel::backToSlots() {
@@ -196,6 +258,12 @@ std::optional<SlotApplyTicket> NativeSlotWorkflowModel::takeApplyRequest() {
     return ticket;
 }
 
+std::optional<SlotRemoveTicket> NativeSlotWorkflowModel::takeRemoveRequest() {
+    auto ticket = std::move(m_pendingRemove);
+    m_pendingRemove.reset();
+    return ticket;
+}
+
 void NativeSlotWorkflowModel::completeSlotQuery(
     std::uint64_t generation,
     core::TattooSlotsResult result) {
@@ -231,6 +299,26 @@ void NativeSlotWorkflowModel::completeApply(
 
     m_error.reset();
     m_previewTattoo.reset();
+    m_targetSlot.reset();
+    m_screen = SlotWorkflowScreen::currentSlots;
+    scheduleSlotQuery(m_selectedArea);
+}
+
+void NativeSlotWorkflowModel::completeRemove(
+    std::uint64_t generation,
+    core::RemoveTattooResult result) {
+    if (!m_activeRemoveGeneration || generation != *m_activeRemoveGeneration) {
+        return;
+    }
+
+    m_activeRemoveGeneration.reset();
+    if (!result) {
+        m_error = std::move(result.error());
+        m_screen = SlotWorkflowScreen::removeConfirmation;
+        return;
+    }
+
+    m_error.reset();
     m_targetSlot.reset();
     m_screen = SlotWorkflowScreen::currentSlots;
     scheduleSlotQuery(m_selectedArea);

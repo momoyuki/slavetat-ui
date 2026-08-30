@@ -14,6 +14,7 @@ constexpr const char* kQueryAvailablePool = "SlaveTatsUI-queryAvailable";
 constexpr const char* kQuerySlotsExternalPool = "SlaveTatsUI-querySlotsExternal";
 constexpr const char* kApplyExternalPool = "SlaveTatsUI-applyExternal";
 constexpr const char* kApplyAvailablePool = "SlaveTatsUI-applyAvailable";
+constexpr const char* kRemoveExternalPool = "SlaveTatsUI-removeExternal";
 
 class JContainerPoolGuard {
 public:
@@ -336,6 +337,68 @@ core::ApplyTattooResult SlaveTatsRuntime::applyToSlot(const core::ApplyTattooReq
         .slot = request.slot,
         .section = request.section,
         .name = request.name,
+    };
+}
+
+core::RemoveTattooResult SlaveTatsRuntime::removeFromSlot(
+    const core::RemoveTattooRequest& request) {
+    auto* actor = RE::TESForm::LookupByID<RE::Actor>(request.actorFormId);
+    if (!actor) {
+        return std::unexpected(core::ServiceError{
+            core::ServiceErrorCode::actorNotFound,
+            "Actor not found",
+        });
+    }
+
+    const char* areaString = areaName(request.area);
+    if (!areaString) {
+        return std::unexpected(core::ServiceError{
+            core::ServiceErrorCode::invalidArea,
+            "Invalid tattoo area",
+        });
+    }
+
+    if (request.mode == core::RemoveTattooMode::removeAndSynchronize) {
+        const auto externalSlots = queryExternalSlots(
+            *m_api,
+            actor,
+            areaString,
+            kRemoveExternalPool);
+        if (!externalSlots) {
+            return std::unexpected(externalSlots.error());
+        }
+        if (externalSlots->contains(request.slot)) {
+            return std::unexpected(core::ServiceError{
+                core::ServiceErrorCode::externalSlot,
+                "Slot is occupied by an external overlay",
+            });
+        }
+
+        if (m_api->remove_tattoo_from_slot(
+                actor,
+                RE::BSFixedString(areaString),
+                request.slot,
+                false,
+                false)) {
+            return std::unexpected(core::ServiceError{
+                core::ServiceErrorCode::removeFailed,
+                "Failed to remove tattoo from slot",
+            });
+        }
+    }
+
+    jcmini::JFormDB::setInt(actor, ".SlaveTats.updated", 1);
+    if (m_api->synchronize_tattoos(actor, false)) {
+        return std::unexpected(core::ServiceError{
+            core::ServiceErrorCode::synchronizeFailed,
+            "Tattoo removed but synchronization failed",
+        });
+    }
+
+    return core::RemoveTattooSuccess{
+        .actorFormId = request.actorFormId,
+        .area = request.area,
+        .slot = request.slot,
     };
 }
 

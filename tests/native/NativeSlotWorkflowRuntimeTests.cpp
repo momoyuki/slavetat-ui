@@ -12,6 +12,8 @@ namespace {
 
 using stui::core::ApplyTattooRequest;
 using stui::core::ApplyTattooSuccess;
+using stui::core::RemoveTattooRequest;
+using stui::core::RemoveTattooSuccess;
 using stui::core::ServiceErrorCode;
 using stui::core::SlotOccupancy;
 using stui::core::TattooArea;
@@ -43,6 +45,18 @@ TattooSlots bodySlots() {
     };
 }
 
+TattooSlots bodySlotsWithOwnedTattoo() {
+    auto result = bodySlots();
+    result.slots[1].occupancy = SlotOccupancy::slaveTats;
+    result.slots[1].tattoo = stui::core::TattooEntry{
+        .section = "Marks",
+        .name = "Existing",
+        .area = "BODY",
+        .slot = 1,
+    };
+    return result;
+}
+
 TattooDefinition tattoo() {
     return TattooDefinition{
         .sourceId = "fixture.json",
@@ -68,7 +82,8 @@ struct Fixture {
                   if (queryThrows) {
                       throw std::runtime_error("query failed");
                   }
-                  return stui::core::TattooSlotsResult(bodySlots());
+                  return stui::core::TattooSlotsResult(
+                      returnOwnedSlot ? bodySlotsWithOwnedTattoo() : bodySlots());
               },
               [this](const ApplyTattooRequest& request) {
                   ++applyCount;
@@ -82,6 +97,18 @@ struct Fixture {
                       .slot = request.slot,
                       .section = request.section,
                       .name = request.name,
+                  });
+              },
+              [this](const RemoveTattooRequest& request) {
+                  ++removeCount;
+                  removedRequest = request;
+                  if (removeThrows) {
+                      throw std::runtime_error("remove failed");
+                  }
+                  return stui::core::RemoveTattooResult(RemoveTattooSuccess{
+                      .actorFormId = request.actorFormId,
+                      .area = request.area,
+                      .slot = request.slot,
                   });
               },
               [this](NativeSlotTask task) {
@@ -102,11 +129,15 @@ struct Fixture {
     std::vector<NativeSlotTask> scheduled;
     std::size_t queryCount{};
     std::size_t applyCount{};
+    std::size_t removeCount{};
     std::uint32_t queriedActor{};
     TattooArea queriedArea{TattooArea::feet};
     ApplyTattooRequest appliedRequest;
+    RemoveTattooRequest removedRequest;
+    bool returnOwnedSlot{};
     bool queryThrows{};
     bool applyThrows{};
+    bool removeThrows{};
     bool schedulerThrows{};
     NativeSlotWorkflowRuntime runtime;
 };
@@ -154,6 +185,37 @@ void applySchedulesOnlyAfterExplicitConfirmation() {
     fixture.runtime.pump();
     expect(fixture.scheduled.size() == 3,
         "expected successful Apply to schedule a fresh slot query");
+}
+
+void removeSchedulesOnlyAfterExplicitConfirmation() {
+    Fixture fixture;
+    fixture.returnOwnedSlot = true;
+    fixture.model.start();
+    fixture.runtime.pump();
+    fixture.scheduled.front()();
+    expect(fixture.model.selectSlot(1), "expected owned slot selection");
+    expect(fixture.model.requestRemove(), "expected Remove action");
+
+    fixture.runtime.pump();
+    expect(fixture.scheduled.size() == 1,
+        "expected confirmation screen alone not to schedule Remove");
+    expect(fixture.model.confirmRemove(), "expected explicit Remove confirmation");
+    fixture.runtime.pump();
+    fixture.runtime.pump();
+    expect(fixture.scheduled.size() == 2,
+        "expected one Remove task after confirmation");
+
+    fixture.scheduled.back()();
+    expect(fixture.removeCount == 1 &&
+            fixture.removedRequest.actorFormId == 0x14 &&
+            fixture.removedRequest.area == TattooArea::body &&
+            fixture.removedRequest.slot == 1,
+        "expected confirmed Remove target forwarded once");
+    expect(fixture.model.screen() == SlotWorkflowScreen::currentSlots,
+        "expected successful Remove to return to Current Slots");
+    fixture.runtime.pump();
+    expect(fixture.scheduled.size() == 3,
+        "expected successful Remove to schedule a fresh slot query");
 }
 
 void convertsOperationAndSchedulerExceptionsToModelErrors() {
@@ -208,6 +270,26 @@ void convertsApplyAndApplySchedulerExceptionsToModelErrors() {
         "expected Apply scheduler exception converted to retryable error");
 }
 
+void convertsRemoveExceptionsToRetryableModelErrors() {
+    Fixture removeFailure;
+    removeFailure.returnOwnedSlot = true;
+    removeFailure.model.start();
+    removeFailure.runtime.pump();
+    removeFailure.scheduled.front()();
+    expect(removeFailure.model.selectSlot(1) &&
+            removeFailure.model.requestRemove() &&
+            removeFailure.model.confirmRemove(),
+        "expected confirmed Remove failure flow");
+    removeFailure.removeThrows = true;
+    removeFailure.runtime.pump();
+    removeFailure.scheduled.back()();
+
+    expect(removeFailure.model.screen() == SlotWorkflowScreen::removeConfirmation &&
+            removeFailure.model.error() &&
+            removeFailure.model.error()->code == ServiceErrorCode::removeFailed,
+        "expected Remove exception converted to retryable error");
+}
+
 void ignoresStaleCompletionAfterAReplacementQuery() {
     Fixture fixture;
     fixture.model.start();
@@ -241,8 +323,10 @@ int main() {
     int failures = 0;
     failures += run("schedules only one query and completes model", schedulesOnlyOneQueryAndCompletesModel);
     failures += run("apply schedules only after explicit confirmation", applySchedulesOnlyAfterExplicitConfirmation);
+    failures += run("remove schedules only after explicit confirmation", removeSchedulesOnlyAfterExplicitConfirmation);
     failures += run("converts operation and scheduler exceptions to model errors", convertsOperationAndSchedulerExceptionsToModelErrors);
     failures += run("converts Apply and scheduler exceptions to model errors", convertsApplyAndApplySchedulerExceptionsToModelErrors);
+    failures += run("converts Remove exceptions to retryable model errors", convertsRemoveExceptionsToRetryableModelErrors);
     failures += run("ignores stale completion after replacement query", ignoresStaleCompletionAfterAReplacementQuery);
     return failures == 0 ? 0 : 1;
 }

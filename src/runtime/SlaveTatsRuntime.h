@@ -23,6 +23,7 @@ public:
     core::TattooQueryResult queryAvailable(std::string_view domain) override;
     core::TattooSlotsResult querySlots(std::uint32_t actorFormId, core::TattooArea area) override;
     core::ApplyTattooResult applyToSlot(const core::ApplyTattooRequest& request) override;
+    core::RemoveTattooResult removeFromSlot(const core::RemoveTattooRequest& request) override;
 
 private:
     const slavetats::interface::Addresses* m_api{nullptr};

@@ -404,6 +404,28 @@ void pickerAndPreviewHelpersExposeExactTargetIntent() {
         "expected missing slot target to disable Apply");
 }
 
+void removeHelpersRequireExplicitTargetConfirmation() {
+    expect(stui::native::removeButtonLabel(
+               2, stui::native::RemoveButtonState::initial) == "Remove from Slot 2",
+        "expected Remove action to name the target slot");
+    expect(stui::native::removeButtonLabel(
+               2, stui::native::RemoveButtonState::retryRemove) == "Retry Remove Slot 2",
+        "expected failed Remove action to identify a retry");
+    expect(stui::native::removeButtonLabel(
+               2, stui::native::RemoveButtonState::retrySynchronization) ==
+               "Retry Sync Slot 2",
+        "expected post-mutation failure to retry synchronization only");
+    expect(stui::native::isRemoveConfirmationEnabled(
+               stui::native::SlotWorkflowScreen::removeConfirmation, true),
+        "expected complete Remove confirmation to enable mutation");
+    expect(!stui::native::isRemoveConfirmationEnabled(
+               stui::native::SlotWorkflowScreen::slotActions, true),
+        "expected Slot Actions alone not to enable Remove mutation");
+    expect(!stui::native::isRemoveConfirmationEnabled(
+               stui::native::SlotWorkflowScreen::removeConfirmation, false),
+        "expected missing slot target to disable Remove");
+}
+
 void pickerVisiblePathsFollowOnlyTheSixRenderedCards() {
     const stui::repository::TattooPage page{
         .entries = {
@@ -494,6 +516,8 @@ int main() {
         std::cout << "PASS visible slot paths include only owned cards\n";
         pickerAndPreviewHelpersExposeExactTargetIntent();
         std::cout << "PASS picker and Preview helpers expose exact target intent\n";
+        removeHelpersRequireExplicitTargetConfirmation();
+        std::cout << "PASS Remove helpers require explicit target confirmation\n";
         pickerVisiblePathsFollowOnlyTheSixRenderedCards();
         std::cout << "PASS Picker visible paths follow six rendered cards\n";
         nullSnapshotModelHasSafeEmptyPageWithoutImGui();

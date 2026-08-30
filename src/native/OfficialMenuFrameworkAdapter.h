@@ -90,6 +90,18 @@ struct SlotPageRange {
     SlotWorkflowScreen screen,
     bool hasTarget,
     bool hasTattoo) noexcept;
+enum class RemoveButtonState {
+    initial,
+    retryRemove,
+    retrySynchronization,
+};
+
+[[nodiscard]] std::string removeButtonLabel(
+    std::int32_t slot,
+    RemoveButtonState state);
+[[nodiscard]] bool isRemoveConfirmationEnabled(
+    SlotWorkflowScreen screen,
+    bool hasTarget) noexcept;
 [[nodiscard]] std::vector<std::string> collectPickerTexturePaths(
     const repository::TattooPage& page);
 [[nodiscard]] std::size_t pickerVisibleCardCount(
