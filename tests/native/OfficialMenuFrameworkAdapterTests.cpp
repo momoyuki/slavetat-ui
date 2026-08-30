@@ -227,6 +227,21 @@ void footerControlAlignsToRightContentEdge() {
         "expected constrained footer alignment clamped inside its cell");
 }
 
+void pickerFooterActionsStayRightAlignedInNavigationOrder() {
+    const auto layout = stui::native::calculatePickerFooterActionLayout(
+        200.0F,
+        60.0F,
+        50.0F,
+        8.0F);
+
+    expect(layout.groupWidth == 118.0F,
+        "expected Cancel and Close widths plus one spacing interval");
+    expect(layout.cancelX == 82.0F,
+        "expected footer action group aligned to the right edge");
+    expect(layout.closeX == 150.0F,
+        "expected Close after Cancel in navigation order");
+}
+
 void pageInputKeepsPendingEditsUntilEnterOrFocusLoss() {
     stui::native::CatalogBrowserPageInputState state;
     state.synchronize(1, 5);
@@ -500,6 +515,8 @@ int main() {
         std::cout << "PASS thumbnail cards reserve no persistent metadata row\n";
         footerControlAlignsToRightContentEdge();
         std::cout << "PASS footer control aligns to right content edge\n";
+        pickerFooterActionsStayRightAlignedInNavigationOrder();
+        std::cout << "PASS Picker footer actions stay right-aligned\n";
         pageInputKeepsPendingEditsUntilEnterOrFocusLoss();
         std::cout << "PASS page input keeps pending edits until commit\n";
         classifiesEmptyCatalogSeparatelyFromNoMatches();

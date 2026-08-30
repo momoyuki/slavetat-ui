@@ -152,6 +152,18 @@ struct CatalogAreaBadgeLayout {
     float availableWidth,
     float controlWidth) noexcept;
 
+struct PickerFooterActionLayout {
+    float groupWidth{};
+    float cancelX{};
+    float closeX{};
+};
+
+[[nodiscard]] PickerFooterActionLayout calculatePickerFooterActionLayout(
+    float availableWidth,
+    float cancelWidth,
+    float closeWidth,
+    float itemSpacing) noexcept;
+
 [[nodiscard]] CatalogBrowserGridLayout calculateCatalogBrowserGridLayout(
     float availableHeight,
     float footerHeight,

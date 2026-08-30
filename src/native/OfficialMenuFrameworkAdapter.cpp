@@ -339,6 +339,23 @@ float calculateRightAlignedControlX(
     return std::max(0.0F, availableWidth - controlWidth);
 }
 
+PickerFooterActionLayout calculatePickerFooterActionLayout(
+    float availableWidth,
+    float cancelWidth,
+    float closeWidth,
+    float itemSpacing) noexcept {
+    const float safeCancelWidth = std::max(0.0F, cancelWidth);
+    const float safeCloseWidth = std::max(0.0F, closeWidth);
+    const float safeItemSpacing = std::max(0.0F, itemSpacing);
+    const float groupWidth = safeCancelWidth + safeItemSpacing + safeCloseWidth;
+    const float cancelX = calculateRightAlignedControlX(availableWidth, groupWidth);
+    return PickerFooterActionLayout{
+        .groupWidth = groupWidth,
+        .cancelX = cancelX,
+        .closeX = cancelX + safeCancelWidth + safeItemSpacing,
+    };
+}
+
 namespace {
 
 char canonicalThumbnailPathCharacter(char character) noexcept {
@@ -1028,10 +1045,6 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
             ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
             ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse);
 
-    if (ImGuiMCP::Button("Back to Current Tattoos")) {
-        workflow.backToSlots();
-    }
-    ImGuiMCP::SameLine();
     const auto targetLabel = formatSlotTargetLabel(
         workflow.selectedArea(), workflow.targetSlot().value_or(-1));
     ImGuiMCP::Text("Target: %s", targetLabel.c_str());
@@ -1277,8 +1290,15 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         }
     }
 
-    const float closeButtonWidth = ImGuiMCP::CalcTextSize("Close").x +
-        (style ? style->FramePadding.x * 2.0F : 16.0F);
+    const float horizontalButtonPadding =
+        style ? style->FramePadding.x * 2.0F : 16.0F;
+    const float cancelButtonWidth =
+        ImGuiMCP::CalcTextSize("Cancel").x + horizontalButtonPadding;
+    const float closeButtonWidth =
+        ImGuiMCP::CalcTextSize("Close").x + horizontalButtonPadding;
+    const float actionSpacing = style ? style->ItemSpacing.x : 8.0F;
+    const float footerActionWidth =
+        cancelButtonWidth + actionSpacing + closeButtonWidth;
     if (ImGuiMCP::BeginTable(
             "CatalogFooter",
             2,
@@ -1287,9 +1307,9 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableSetupColumn(
             "Pagination", ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
         ImGuiMCP::TableSetupColumn(
-            "CloseAction",
+            "PickerActions",
             ImGuiMCP::ImGuiTableColumnFlags_WidthFixed,
-            closeButtonWidth);
+            footerActionWidth);
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
 
@@ -1327,10 +1347,18 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::EndDisabled();
 
         ImGuiMCP::TableSetColumnIndex(1);
-        const float closeOffset = calculateRightAlignedControlX(
+        const auto actionLayout = calculatePickerFooterActionLayout(
             ImGuiMCP::GetContentRegionAvail().x,
-            closeButtonWidth);
-        ImGuiMCP::SetCursorPosX(ImGuiMCP::GetCursorPosX() + closeOffset);
+            cancelButtonWidth,
+            closeButtonWidth,
+            actionSpacing);
+        const float actionOriginX = ImGuiMCP::GetCursorPosX();
+        ImGuiMCP::SetCursorPosX(actionOriginX + actionLayout.cancelX);
+        if (ImGuiMCP::Button("Cancel")) {
+            workflow.backToSlots();
+        }
+        ImGuiMCP::SameLine();
+        ImGuiMCP::SetCursorPosX(actionOriginX + actionLayout.closeX);
         if (ImGuiMCP::Button("Close")) {
             open = false;
         }
