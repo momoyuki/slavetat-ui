@@ -254,6 +254,41 @@ void tattooColorComponentsPreserveRgbChannelOrder() {
         "expected RGB picker components rounded into 0xRRGGBB");
 }
 
+void currentSlotColorSwatchUsesOwnedTattooColorAtBottomRight() {
+    const stui::core::TattooSlot owned{
+        .index = 2,
+        .occupancy = stui::core::SlotOccupancy::slaveTats,
+        .tattoo = stui::core::TattooEntry{.color = 0x123456},
+    };
+
+    const auto swatch = stui::native::calculateSlotColorSwatch(
+        owned, 200.0F, 120.0F, 16.0F, 6.0F);
+
+    expect(swatch.has_value(), "expected owned Current Slot to expose a color swatch");
+    expect(swatch->x == 178.0F && swatch->y == 98.0F && swatch->size == 16.0F,
+        "expected color swatch anchored inside the thumbnail bottom-right corner");
+    expect(swatch->fillColor == 0xFF563412U,
+        "expected 0xRRGGBB tattoo color packed for ImGui without swapped channels");
+    expect(swatch->borderColor == 0xFF202020U,
+        "expected a dark opaque outline around the color swatch");
+}
+
+void currentSlotColorSwatchSkipsEmptyAndExternalSlots() {
+    const stui::core::TattooSlot empty{};
+    const stui::core::TattooSlot external{
+        .index = 3,
+        .occupancy = stui::core::SlotOccupancy::external,
+        .tattoo = stui::core::TattooEntry{.color = 0xABCDEF},
+    };
+
+    expect(!stui::native::calculateSlotColorSwatch(
+                empty, 200.0F, 120.0F, 16.0F, 6.0F).has_value(),
+        "expected empty Current Slot to omit the color swatch");
+    expect(!stui::native::calculateSlotColorSwatch(
+                external, 200.0F, 120.0F, 16.0F, 6.0F).has_value(),
+        "expected external Current Slot to omit the color swatch");
+}
+
 void pageInputKeepsPendingEditsUntilEnterOrFocusLoss() {
     stui::native::CatalogBrowserPageInputState state;
     state.synchronize(1, 5);
@@ -531,6 +566,10 @@ int main() {
         std::cout << "PASS Picker footer actions stay right-aligned\n";
         tattooColorComponentsPreserveRgbChannelOrder();
         std::cout << "PASS tattoo color components preserve RGB channel order\n";
+        currentSlotColorSwatchUsesOwnedTattooColorAtBottomRight();
+        std::cout << "PASS Current Slot color swatch uses owned tattoo color\n";
+        currentSlotColorSwatchSkipsEmptyAndExternalSlots();
+        std::cout << "PASS Current Slot color swatch skips empty and external slots\n";
         pageInputKeepsPendingEditsUntilEnterOrFocusLoss();
         std::cout << "PASS page input keeps pending edits until commit\n";
         classifiesEmptyCatalogSeparatelyFromNoMatches();

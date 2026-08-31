@@ -378,6 +378,39 @@ std::int32_t tattooColorValue(TattooColorComponents components) noexcept {
         channel(components.blue));
 }
 
+std::optional<SlotColorSwatchPresentation> calculateSlotColorSwatch(
+    const core::TattooSlot& slot,
+    float containerWidth,
+    float containerHeight,
+    float size,
+    float margin) noexcept {
+    if (slot.occupancy != core::SlotOccupancy::slaveTats || !slot.tattoo) {
+        return std::nullopt;
+    }
+
+    const float safeWidth = std::max(0.0F, containerWidth);
+    const float safeHeight = std::max(0.0F, containerHeight);
+    const float safeMargin = std::max(0.0F, margin);
+    const float maximumSize = std::max(
+        0.0F,
+        std::min(safeWidth, safeHeight) - safeMargin * 2.0F);
+    const float safeSize = std::clamp(size, 0.0F, maximumSize);
+    const auto rgb = static_cast<std::uint32_t>(
+        std::clamp(slot.tattoo->color, 0, 0xFFFFFF));
+    const auto imGuiColor = 0xFF000000U |
+        ((rgb & 0x0000FFU) << 16U) |
+        (rgb & 0x00FF00U) |
+        ((rgb & 0xFF0000U) >> 16U);
+
+    return SlotColorSwatchPresentation{
+        .x = std::max(0.0F, safeWidth - safeMargin - safeSize),
+        .y = std::max(0.0F, safeHeight - safeMargin - safeSize),
+        .size = safeSize,
+        .fillColor = imGuiColor,
+        .borderColor = 0xFF202020U,
+    };
+}
+
 namespace {
 
 char canonicalThumbnailPathCharacter(char character) noexcept {
@@ -692,7 +725,36 @@ void renderCurrentSlots(
                     ImGuiMCP::ImGuiChildFlags_Border,
                     ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
                         ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
-                renderSlotImage(slot, thumbnailViews, ImGuiMCP::GetContentRegionAvail());
+                const auto imageRegion = ImGuiMCP::GetContentRegionAvail();
+                const auto imageScreenOrigin = ImGuiMCP::GetCursorScreenPos();
+                renderSlotImage(slot, thumbnailViews, imageRegion);
+                if (const auto swatch = calculateSlotColorSwatch(
+                        slot, imageRegion.x, imageRegion.y, 16.0F, 6.0F)) {
+                    auto* drawList = ImGuiMCP::GetWindowDrawList();
+                    const ImGuiMCP::ImVec2 minimum{
+                        imageScreenOrigin.x + swatch->x,
+                        imageScreenOrigin.y + swatch->y,
+                    };
+                    const ImGuiMCP::ImVec2 maximum{
+                        minimum.x + swatch->size,
+                        minimum.y + swatch->size,
+                    };
+                    ImGuiMCP::ImDrawListManager::AddRectFilled(
+                        drawList,
+                        minimum,
+                        maximum,
+                        swatch->fillColor,
+                        0.0F,
+                        0);
+                    ImGuiMCP::ImDrawListManager::AddRect(
+                        drawList,
+                        minimum,
+                        maximum,
+                        swatch->borderColor,
+                        0.0F,
+                        0,
+                        1.0F);
+                }
             }
             ImGuiMCP::EndChild();
             ImGuiMCP::PopStyleColor();

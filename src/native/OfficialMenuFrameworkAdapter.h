@@ -164,10 +164,25 @@ struct TattooColorComponents {
     float blue{};
 };
 
+struct SlotColorSwatchPresentation {
+    float x{};
+    float y{};
+    float size{};
+    std::uint32_t fillColor{};
+    std::uint32_t borderColor{};
+};
+
 [[nodiscard]] TattooColorComponents tattooColorComponents(
     std::int32_t color) noexcept;
 [[nodiscard]] std::int32_t tattooColorValue(
     TattooColorComponents components) noexcept;
+
+[[nodiscard]] std::optional<SlotColorSwatchPresentation> calculateSlotColorSwatch(
+    const core::TattooSlot& slot,
+    float containerWidth,
+    float containerHeight,
+    float size,
+    float margin) noexcept;
 
 [[nodiscard]] PickerFooterActionLayout calculatePickerFooterActionLayout(
     float availableWidth,
