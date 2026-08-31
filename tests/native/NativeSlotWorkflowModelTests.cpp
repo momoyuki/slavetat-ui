@@ -263,7 +263,57 @@ void removeCompletionRefreshesOrRetainsConfirmationForRetry() {
         "expected successful Remove to refresh selected area");
 }
 
-void previewDoesNotApplyAndCancelPreservesPickerState() {
+void emptyAndOwnedTargetsInitializeExpectedAppearance() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    auto bodySlots = slots(TattooArea::body, 3);
+    bodySlots.slots[1].occupancy = SlotOccupancy::slaveTats;
+    bodySlots.slots[1].tattoo = TattooEntry{
+        .section = "Existing",
+        .name = "Owned",
+        .area = "BODY",
+        .slot = 1,
+        .color = 0x2468AC,
+        .alpha = 0.42F,
+    };
+    completeInitialQuery(model, std::move(bodySlots));
+
+    expect(model.selectSlot(1) && model.replaceSelectedSlot(),
+        "expected owned slot Replace flow");
+    const auto* ownedAppearance = model.previewAppearance();
+    expect(ownedAppearance && ownedAppearance->color == 0x2468AC &&
+            ownedAppearance->alpha == 0.42F,
+        "expected Replace to preserve the occupied tattoo appearance");
+
+    model.backToSlots();
+    expect(model.selectSlot(2), "expected empty slot Add flow");
+    const auto* emptyAppearance = model.previewAppearance();
+    expect(emptyAppearance && emptyAppearance->color == 0xFFFFFF &&
+            emptyAppearance->alpha == 1.0F,
+        "expected empty slot to start white and opaque");
+}
+
+void editedAppearanceFlowsIntoApplyRequest() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    completeInitialQuery(model, slots(TattooArea::body, 3));
+    expect(model.selectSlot(2), "expected empty target selected");
+    model.selectTattoo(tattoo("Corruption", 7));
+
+    model.setPreviewAppearance(0x123456, 0.35F);
+    expect(model.confirmApply(), "expected Apply confirmation");
+    const auto ticket = model.takeApplyRequest();
+
+    expect(ticket && ticket->request.color == 0x123456 &&
+            ticket->request.alpha == 0.35F,
+        "expected edited color and alpha in the exact Apply request");
+}
+
+void previewDoesNotApplyAndCancelReturnsToSlots() {
     TattooCatalogSnapshot snapshot = catalogWithEntries(13);
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
     catalog.refresh();
@@ -288,14 +338,15 @@ void previewDoesNotApplyAndCancelPreservesPickerState() {
     expect(!model.takeApplyRequest(), "expected no mutation before explicit confirmation");
 
     model.cancelPreview();
-    expect(model.screen() == SlotWorkflowScreen::picker,
-        "expected Cancel to return to Picker");
+    expect(model.screen() == SlotWorkflowScreen::currentSlots &&
+            !model.targetSlot() && !model.previewAppearance(),
+        "expected Cancel to discard target appearance and return to Current Slots");
     expect(catalog.filter().search == filterBefore.search &&
             catalog.filter().sourceId == filterBefore.sourceId &&
             catalog.filter().section == filterBefore.section &&
             catalog.filter().area == filterBefore.area &&
             catalog.page().pageIndex == pageBefore,
-        "expected Cancel to preserve picker filters and page");
+        "expected Cancel to preserve picker filters and page for the next target");
 }
 
 void explicitConfirmationCreatesOneFixedPolicyRequest() {
@@ -457,7 +508,9 @@ int main() {
     failures += run("external slots are rejected and owned slots open Actions", externalSlotsAreRejectedAndOwnedSlotsOpenActions);
     failures += run("remove requires confirmation and creates one request", removeRequiresConfirmationAndCreatesOneRequest);
     failures += run("remove completion refreshes or retains confirmation", removeCompletionRefreshesOrRetainsConfirmationForRetry);
-    failures += run("preview does not apply and Cancel preserves picker state", previewDoesNotApplyAndCancelPreservesPickerState);
+    failures += run("empty and owned targets initialize expected appearance", emptyAndOwnedTargetsInitializeExpectedAppearance);
+    failures += run("edited appearance flows into Apply request", editedAppearanceFlowsIntoApplyRequest);
+    failures += run("preview does not apply and Cancel returns to Slots", previewDoesNotApplyAndCancelReturnsToSlots);
     failures += run("explicit confirmation creates one fixed-policy request", explicitConfirmationCreatesOneFixedPolicyRequest);
     failures += run("apply success returns to slots and refreshes area", applySuccessReturnsToSlotsAndRefreshesArea);
     failures += run("apply failure retains Preview for retry", applyFailureRetainsPreviewForRetry);

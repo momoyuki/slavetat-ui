@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <filesystem>
 #include <limits>
 #include <utility>
@@ -356,6 +357,27 @@ PickerFooterActionLayout calculatePickerFooterActionLayout(
     };
 }
 
+TattooColorComponents tattooColorComponents(std::int32_t color) noexcept {
+    const auto value = static_cast<std::uint32_t>(
+        std::clamp(color, 0, 0xFFFFFF));
+    return TattooColorComponents{
+        .red = static_cast<float>((value >> 16U) & 0xFFU) / 255.0F,
+        .green = static_cast<float>((value >> 8U) & 0xFFU) / 255.0F,
+        .blue = static_cast<float>(value & 0xFFU) / 255.0F,
+    };
+}
+
+std::int32_t tattooColorValue(TattooColorComponents components) noexcept {
+    const auto channel = [](float value) {
+        return static_cast<std::uint32_t>(
+            std::lround(std::clamp(value, 0.0F, 1.0F) * 255.0F));
+    };
+    return static_cast<std::int32_t>(
+        (channel(components.red) << 16U) |
+        (channel(components.green) << 8U) |
+        channel(components.blue));
+}
+
 namespace {
 
 char canonicalThumbnailPathCharacter(char character) noexcept {
@@ -504,7 +526,8 @@ NativeThumbnailEpoch slotThumbnailEpoch(core::TattooArea area) {
 void renderSlotImage(
     const core::TattooSlot& slot,
     const std::vector<NativeThumbnailView>& thumbnailViews,
-    ImGuiMCP::ImVec2 region) {
+    ImGuiMCP::ImVec2 region,
+    ImGuiMCP::ImVec4 tint = {1.0F, 1.0F, 1.0F, 1.0F}) {
     if (slot.occupancy == core::SlotOccupancy::empty) {
         ImGuiMCP::TextUnformatted("Add");
         return;
@@ -539,7 +562,10 @@ void renderSlotImage(
         ImGuiMCP::Image(
             static_cast<ImGuiMCP::ImTextureID>(
                 thumbnail->texture->shaderResourceView.get()),
-            {fit.width, fit.height});
+            {fit.width, fit.height},
+            {0.0F, 0.0F},
+            {1.0F, 1.0F},
+            tint);
         return;
     }
     if (thumbnail) {
@@ -885,6 +911,7 @@ void renderPreview(
     NativeThumbnailRuntime& thumbnails,
     const std::function<void()>& close) {
     const auto* preview = workflow.previewTattoo();
+    const auto* appearance = workflow.previewAppearance();
     const auto target = workflow.targetSlot();
     std::vector<std::string> paths;
     if (preview && !preview->texturePath.empty()) {
@@ -927,11 +954,38 @@ void renderPreview(
     if (preview) {
         ImGuiMCP::Text("%s / %s", preview->section.c_str(), preview->name.c_str());
     }
+    const bool applying = workflow.screen() == SlotWorkflowScreen::applying;
     if (const auto* error = workflow.error()) {
         ImGuiMCP::TextUnformatted(error->message.c_str());
-    } else if (workflow.screen() == SlotWorkflowScreen::applying) {
+    } else if (applying) {
         ImGuiMCP::TextUnformatted("Applying tattoo...");
     }
+
+    TattooColorComponents colorComponents =
+        tattooColorComponents(appearance ? appearance->color : 0xFFFFFF);
+    float pickerColor[3]{
+        colorComponents.red,
+        colorComponents.green,
+        colorComponents.blue,
+    };
+    float alpha = appearance ? appearance->alpha : 1.0F;
+    ImGuiMCP::BeginDisabled(applying || !appearance);
+    const bool colorChanged = ImGuiMCP::ColorEdit3(
+        "Color",
+        pickerColor,
+        ImGuiMCP::ImGuiColorEditFlags_DisplayHex |
+            ImGuiMCP::ImGuiColorEditFlags_Uint8);
+    const bool alphaChanged =
+        ImGuiMCP::SliderFloat("Alpha", &alpha, 0.0F, 1.0F, "%.2f");
+    if (colorChanged || alphaChanged) {
+        colorComponents = TattooColorComponents{
+            .red = pickerColor[0],
+            .green = pickerColor[1],
+            .blue = pickerColor[2],
+        };
+        workflow.setPreviewAppearance(tattooColorValue(colorComponents), alpha);
+    }
+    ImGuiMCP::EndDisabled();
 
     const float footerHeight = ImGuiMCP::GetFrameHeightWithSpacing();
     const float imageHeight = std::max(
@@ -956,13 +1010,23 @@ void renderPreview(
                     .texturePath = preview->texturePath,
                 },
             };
-            renderSlotImage(previewSlot, thumbnailViews, ImGuiMCP::GetContentRegionAvail());
+            const auto tintColor = tattooColorComponents(
+                appearance ? appearance->color : 0xFFFFFF);
+            renderSlotImage(
+                previewSlot,
+                thumbnailViews,
+                ImGuiMCP::GetContentRegionAvail(),
+                {
+                    tintColor.red,
+                    tintColor.green,
+                    tintColor.blue,
+                    appearance ? appearance->alpha : 1.0F,
+                });
         }
     }
     ImGuiMCP::EndChild();
     ImGuiMCP::PopStyleColor();
 
-    const bool applying = workflow.screen() == SlotWorkflowScreen::applying;
     ImGuiMCP::BeginDisabled(applying);
     if (ImGuiMCP::Button("Cancel")) {
         workflow.cancelPreview();

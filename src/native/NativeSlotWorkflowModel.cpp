@@ -67,6 +67,7 @@ void NativeSlotWorkflowModel::selectArea(core::TattooArea area) {
     m_screen = SlotWorkflowScreen::currentSlots;
     m_targetSlot.reset();
     m_previewTattoo.reset();
+    m_previewAppearance.reset();
     m_error.reset();
     clampSelectedPage();
     if (m_started && !selectedState().slots) {
@@ -123,6 +124,13 @@ bool NativeSlotWorkflowModel::selectSlot(std::int32_t slot) {
 
     m_targetSlot = slot;
     m_previewTattoo.reset();
+    m_previewAppearance = PreviewTattooAppearance{};
+    if (found->occupancy == core::SlotOccupancy::slaveTats && found->tattoo) {
+        m_previewAppearance = PreviewTattooAppearance{
+            .color = std::clamp(found->tattoo->color, 0, 0xFFFFFF),
+            .alpha = std::clamp(found->tattoo->alpha, 0.0F, 1.0F),
+        };
+    }
     m_error.reset();
     if (found->occupancy == core::SlotOccupancy::slaveTats) {
         m_screen = SlotWorkflowScreen::slotActions;
@@ -198,6 +206,7 @@ void NativeSlotWorkflowModel::backToSlots() {
     m_screen = SlotWorkflowScreen::currentSlots;
     m_targetSlot.reset();
     m_previewTattoo.reset();
+    m_previewAppearance.reset();
     m_error.reset();
 }
 
@@ -211,18 +220,28 @@ void NativeSlotWorkflowModel::selectTattoo(const repository::TattooDefinition& t
     m_screen = SlotWorkflowScreen::preview;
 }
 
+void NativeSlotWorkflowModel::setPreviewAppearance(
+    std::int32_t color,
+    float alpha) noexcept {
+    if (m_screen != SlotWorkflowScreen::preview || !m_previewAppearance) {
+        return;
+    }
+
+    m_previewAppearance->color = std::clamp(color, 0, 0xFFFFFF);
+    m_previewAppearance->alpha = std::clamp(alpha, 0.0F, 1.0F);
+}
+
 void NativeSlotWorkflowModel::cancelPreview() {
     if (m_screen != SlotWorkflowScreen::preview) {
         return;
     }
 
-    m_previewTattoo.reset();
-    m_error.reset();
-    m_screen = SlotWorkflowScreen::picker;
+    backToSlots();
 }
 
 bool NativeSlotWorkflowModel::confirmApply() {
-    if (m_screen != SlotWorkflowScreen::preview || !m_targetSlot || !m_previewTattoo) {
+    if (m_screen != SlotWorkflowScreen::preview || !m_targetSlot || !m_previewTattoo ||
+        !m_previewAppearance) {
         return false;
     }
 
@@ -236,8 +255,8 @@ bool NativeSlotWorkflowModel::confirmApply() {
             .domain = "default",
             .section = m_previewTattoo->section,
             .name = m_previewTattoo->name,
-            .color = 0xFFFFFF,
-            .alpha = 1.0F,
+            .color = m_previewAppearance->color,
+            .alpha = m_previewAppearance->alpha,
         },
     };
     m_activeApplyGeneration = generation;
@@ -299,6 +318,7 @@ void NativeSlotWorkflowModel::completeApply(
 
     m_error.reset();
     m_previewTattoo.reset();
+    m_previewAppearance.reset();
     m_targetSlot.reset();
     m_screen = SlotWorkflowScreen::currentSlots;
     scheduleSlotQuery(m_selectedArea);
@@ -356,6 +376,10 @@ std::optional<std::int32_t> NativeSlotWorkflowModel::targetSlot() const noexcept
 
 const repository::TattooDefinition* NativeSlotWorkflowModel::previewTattoo() const noexcept {
     return m_previewTattoo ? &*m_previewTattoo : nullptr;
+}
+
+const PreviewTattooAppearance* NativeSlotWorkflowModel::previewAppearance() const noexcept {
+    return m_previewAppearance ? &*m_previewAppearance : nullptr;
 }
 
 const core::ServiceError* NativeSlotWorkflowModel::error() const noexcept {

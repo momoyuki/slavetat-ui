@@ -158,6 +158,17 @@ struct PickerFooterActionLayout {
     float closeX{};
 };
 
+struct TattooColorComponents {
+    float red{};
+    float green{};
+    float blue{};
+};
+
+[[nodiscard]] TattooColorComponents tattooColorComponents(
+    std::int32_t color) noexcept;
+[[nodiscard]] std::int32_t tattooColorValue(
+    TattooColorComponents components) noexcept;
+
 [[nodiscard]] PickerFooterActionLayout calculatePickerFooterActionLayout(
     float availableWidth,
     float cancelWidth,

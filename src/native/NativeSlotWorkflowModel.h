@@ -36,6 +36,11 @@ struct SlotRemoveTicket {
     core::RemoveTattooRequest request;
 };
 
+struct PreviewTattooAppearance {
+    std::int32_t color{0xFFFFFF};
+    float alpha{1.0F};
+};
+
 class NativeSlotWorkflowModel {
 public:
     static constexpr std::size_t kPageSize = 6;
@@ -55,6 +60,7 @@ public:
     [[nodiscard]] bool confirmRemove();
     void backToSlots();
     void selectTattoo(const repository::TattooDefinition& tattoo);
+    void setPreviewAppearance(std::int32_t color, float alpha) noexcept;
     void cancelPreview();
     [[nodiscard]] bool confirmApply();
 
@@ -72,6 +78,7 @@ public:
     [[nodiscard]] std::size_t slotPageCount() const noexcept;
     [[nodiscard]] std::optional<std::int32_t> targetSlot() const noexcept;
     [[nodiscard]] const repository::TattooDefinition* previewTattoo() const noexcept;
+    [[nodiscard]] const PreviewTattooAppearance* previewAppearance() const noexcept;
     [[nodiscard]] const core::ServiceError* error() const noexcept;
 
 private:
@@ -94,6 +101,7 @@ private:
     core::TattooArea m_selectedArea{core::TattooArea::body};
     std::optional<std::int32_t> m_targetSlot;
     std::optional<repository::TattooDefinition> m_previewTattoo;
+    std::optional<PreviewTattooAppearance> m_previewAppearance;
     std::optional<core::ServiceError> m_error;
     std::optional<SlotQueryTicket> m_pendingSlotQuery;
     std::optional<SlotApplyTicket> m_pendingApply;

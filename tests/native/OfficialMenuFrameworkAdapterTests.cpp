@@ -242,6 +242,18 @@ void pickerFooterActionsStayRightAlignedInNavigationOrder() {
         "expected Close after Cancel in navigation order");
 }
 
+void tattooColorComponentsPreserveRgbChannelOrder() {
+    const auto components = stui::native::tattooColorComponents(0x804020);
+
+    expect(components.red == 128.0F / 255.0F &&
+            components.green == 64.0F / 255.0F &&
+            components.blue == 32.0F / 255.0F,
+        "expected 0xRRGGBB unpacked without swapping color channels");
+    expect(stui::native::tattooColorValue({1.0F, 128.0F / 255.0F, 0.0F}) ==
+            0xFF8000,
+        "expected RGB picker components rounded into 0xRRGGBB");
+}
+
 void pageInputKeepsPendingEditsUntilEnterOrFocusLoss() {
     stui::native::CatalogBrowserPageInputState state;
     state.synchronize(1, 5);
@@ -517,6 +529,8 @@ int main() {
         std::cout << "PASS footer control aligns to right content edge\n";
         pickerFooterActionsStayRightAlignedInNavigationOrder();
         std::cout << "PASS Picker footer actions stay right-aligned\n";
+        tattooColorComponentsPreserveRgbChannelOrder();
+        std::cout << "PASS tattoo color components preserve RGB channel order\n";
         pageInputKeepsPendingEditsUntilEnterOrFocusLoss();
         std::cout << "PASS page input keeps pending edits until commit\n";
         classifiesEmptyCatalogSeparatelyFromNoMatches();
