@@ -35,6 +35,7 @@ set(headers
     src/core/SlaveTatsService.h
     src/core/TattooModels.h
     src/runtime/OverlaySlotConfiguration.h
+    src/runtime/SlaveTatsAlpha.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooCatalogLoader.h
     src/repository/TattooCatalogStore.h
@@ -189,6 +190,12 @@ if(BUILD_TESTING)
     )
     target_include_directories(OverlaySlotConfigurationTests PRIVATE src)
     add_test(NAME OverlaySlotConfigurationTests COMMAND OverlaySlotConfigurationTests)
+
+    add_executable(SlaveTatsAlphaTests
+        tests/runtime/SlaveTatsAlphaTests.cpp
+    )
+    target_include_directories(SlaveTatsAlphaTests PRIVATE src)
+    add_test(NAME SlaveTatsAlphaTests COMMAND SlaveTatsAlphaTests)
 
     add_executable(PrismaTattooSerializerTests
         src/adapters/PrismaTattooSerializer.cpp

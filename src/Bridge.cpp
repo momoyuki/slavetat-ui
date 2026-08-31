@@ -3,6 +3,7 @@
 #include "adapters/PrismaSlotSerializer.h"
 #include "adapters/PrismaTattooSerializer.h"
 #include "jcontainers_mini.h"
+#include "runtime/SlaveTatsAlpha.h"
 #include "textures/ExactStreamReader.h"
 #include "textures/TextureResolver.h"
 #include "RE/R/Renderer.h"
@@ -496,7 +497,10 @@ void Bridge::handleUpdateTattoo(uint32_t actorId, int tattooHandle, int color, f
     logger::info("SlaveTatsUI: updateTattoo handle={} color=0x{:X} alpha={:.2f}", tattooHandle, color, alpha);
 
     jcmini::JMap::setInt(tattooHandle, "color", color);
-    jcmini::JMap::setFlt(tattooHandle, "alpha", alpha);
+    jcmini::JMap::setFlt(
+        tattooHandle,
+        "invertedAlpha",
+        runtime::toSlaveTatsInvertedAlpha(alpha));
 
     // Mark the actor's SlaveTats data as changed so synchronize_tattoos doesn't abort
     jcmini::JFormDB::setInt(actor, ".SlaveTats.updated", 1);
@@ -736,7 +740,8 @@ std::string Bridge::tattooToJSON(int tattoo) {
         jcmini::JMap::getInt(tattoo, "slot"),
         (rawColor == 0) ? 0xFFFFFF : rawColor,
         jcmini::JMap::getInt(tattoo, "locked"),
-        jcmini::JMap::getFlt(tattoo, "alpha", 1.0f));
+        runtime::fromSlaveTatsInvertedAlpha(
+            jcmini::JMap::getFlt(tattoo, "invertedAlpha", 0.0F)));
 }
 
 std::string Bridge::jArrayToJSON(int jarray) {

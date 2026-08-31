@@ -1,6 +1,7 @@
 #include "runtime/SlaveTatsRuntime.h"
 
 #include "jcontainers_mini.h"
+#include "runtime/SlaveTatsAlpha.h"
 
 #include <expected>
 #include <string>
@@ -70,14 +71,17 @@ public:
     TattooTemplateAppearanceGuard(int tattoo, int color, float alpha) :
         m_tattoo(tattoo),
         m_color(jcmini::JMap::getInt(tattoo, "color", 0)),
-        m_alpha(jcmini::JMap::getFlt(tattoo, "alpha", 1.0F)) {
+        m_invertedAlpha(jcmini::JMap::getFlt(tattoo, "invertedAlpha", 0.0F)) {
         jcmini::JMap::setInt(m_tattoo, "color", color);
-        jcmini::JMap::setFlt(m_tattoo, "alpha", alpha);
+        jcmini::JMap::setFlt(
+            m_tattoo,
+            "invertedAlpha",
+            toSlaveTatsInvertedAlpha(alpha));
     }
 
     ~TattooTemplateAppearanceGuard() {
         jcmini::JMap::setInt(m_tattoo, "color", m_color);
-        jcmini::JMap::setFlt(m_tattoo, "alpha", m_alpha);
+        jcmini::JMap::setFlt(m_tattoo, "invertedAlpha", m_invertedAlpha);
     }
 
     TattooTemplateAppearanceGuard(const TattooTemplateAppearanceGuard&) = delete;
@@ -86,7 +90,7 @@ public:
 private:
     int m_tattoo;
     int m_color;
-    float m_alpha;
+    float m_invertedAlpha;
 };
 
 }  // namespace
@@ -152,7 +156,8 @@ core::TattooQueryResult SlaveTatsRuntime::queryAvailable(std::string_view domain
             .slot = jcmini::JMap::getInt(handle, "slot"),
             .color = rawColor == 0 ? 0xFFFFFF : rawColor,
             .locked = jcmini::JMap::getInt(handle, "locked") != 0,
-            .alpha = jcmini::JMap::getFlt(handle, "alpha", 1.0F),
+            .alpha = fromSlaveTatsInvertedAlpha(
+                jcmini::JMap::getFlt(handle, "invertedAlpha", 0.0F)),
         });
     }
 
@@ -217,7 +222,8 @@ core::TattooSlotsResult SlaveTatsRuntime::querySlots(
                     .slot = slot,
                     .color = rawColor == 0 ? 0xFFFFFF : rawColor,
                     .locked = jcmini::JMap::getInt(tattoo, "locked") != 0,
-                    .alpha = jcmini::JMap::getFlt(tattoo, "alpha", 1.0F),
+                    .alpha = fromSlaveTatsInvertedAlpha(
+                        jcmini::JMap::getFlt(tattoo, "invertedAlpha", 0.0F)),
                 },
             });
         } else if (externalSlots->contains(slot)) {
