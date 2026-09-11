@@ -2,8 +2,10 @@
 
 #include "jcontainers_mini.h"
 #include "runtime/SlaveTatsAlpha.h"
+#include "runtime/UpdateTattooAppearanceOrchestration.h"
 
 #include <expected>
+#include <limits>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -16,6 +18,7 @@ constexpr const char* kQuerySlotsExternalPool = "SlaveTatsUI-querySlotsExternal"
 constexpr const char* kApplyExternalPool = "SlaveTatsUI-applyExternal";
 constexpr const char* kApplyAvailablePool = "SlaveTatsUI-applyAvailable";
 constexpr const char* kRemoveExternalPool = "SlaveTatsUI-removeExternal";
+constexpr const char* kUpdateAppearancePool = "SlaveTatsUI-updateAppearance";
 
 class JContainerPoolGuard {
 public:
@@ -91,6 +94,113 @@ private:
     int m_tattoo;
     int m_color;
     float m_invertedAlpha;
+};
+
+class SlaveTatsAppearanceBackend final : public IUpdateTattooAppearanceBackend {
+public:
+    SlaveTatsAppearanceBackend(
+        const slavetats::interface::Addresses* api,
+        const SlaveTatsAppearanceBindings* bindings) noexcept :
+        m_api(api), m_bindings(bindings) {}
+
+    ActorHandle resolveActor(std::uint32_t actorFormId) override {
+        if (m_bindings) {
+            return m_bindings->resolveActor ? m_bindings->resolveActor(actorFormId) : nullptr;
+        }
+        return RE::TESForm::LookupByID<RE::Actor>(actorFormId);
+    }
+
+    std::expected<std::vector<std::int32_t>, core::ServiceError>
+    queryAppliedTattooHandles(ActorHandle actorHandle) override {
+        if (m_bindings) {
+            if (!m_bindings->queryAppliedTattooHandles) {
+                return std::unexpected(core::ServiceError{
+                    core::ServiceErrorCode::updateFailed,
+                    "Applied tattoo query binding is unavailable",
+                });
+            }
+            return m_bindings->queryAppliedTattooHandles(actorHandle);
+        }
+        auto* actor = static_cast<RE::Actor*>(actorHandle);
+        const int matches = jcmini::JValue::addToPool(
+            jcmini::JArray::object(),
+            kUpdateAppearancePool);
+        const JContainerPoolGuard poolGuard(kUpdateAppearancePool);
+        if (m_api->query_applied_tattoos(
+                actor,
+                0,
+                matches,
+                RE::BSFixedString(""),
+                -1)) {
+            return std::unexpected(core::ServiceError{
+                core::ServiceErrorCode::updateFailed,
+                "query_applied_tattoos failed",
+            });
+        }
+
+        std::vector<std::int32_t> appliedHandles;
+        const int count = jcmini::JArray::count(matches);
+        appliedHandles.reserve(static_cast<std::size_t>(count));
+        for (int index = 0; index < count; ++index) {
+            appliedHandles.push_back(jcmini::JArray::getObj(matches, index));
+        }
+        return appliedHandles;
+    }
+
+    bool writeAppearance(
+        std::int32_t runtimeHandle,
+        std::int32_t color,
+        float invertedAlpha) override {
+        if (m_bindings) {
+            if (!m_bindings->setTattooInt || !m_bindings->getTattooInt ||
+                !m_bindings->setTattooFloat || !m_bindings->getTattooFloat ||
+                runtimeHandle == 0) {
+                return false;
+            }
+            m_bindings->setTattooInt(runtimeHandle, "color", color);
+            constexpr auto missingInt = std::numeric_limits<std::int32_t>::min();
+            if (m_bindings->getTattooInt(runtimeHandle, "color", missingInt) != color) {
+                return false;
+            }
+            m_bindings->setTattooFloat(runtimeHandle, "invertedAlpha", invertedAlpha);
+            const float missingFloat = std::numeric_limits<float>::quiet_NaN();
+            return m_bindings->getTattooFloat(
+                runtimeHandle, "invertedAlpha", missingFloat) == invertedAlpha;
+        }
+        if (!jcmini::JMap::setIntAndVerify(runtimeHandle, "color", color)) {
+            return false;
+        }
+        return jcmini::JMap::setFltAndVerify(
+            runtimeHandle,
+            "invertedAlpha",
+            invertedAlpha);
+    }
+
+    bool markActorUpdated(ActorHandle actorHandle) override {
+        if (m_bindings) {
+            if (!m_bindings->setActorInt || !m_bindings->getActorInt || !actorHandle) {
+                return false;
+            }
+            m_bindings->setActorInt(actorHandle, ".SlaveTats.updated", 1);
+            constexpr auto missing = std::numeric_limits<std::int32_t>::min();
+            return m_bindings->getActorInt(
+                actorHandle, ".SlaveTats.updated", missing) == 1;
+        }
+        return jcmini::JFormDB::setIntAndVerify(
+            static_cast<RE::Actor*>(actorHandle), ".SlaveTats.updated", 1);
+    }
+
+    bool synchronize(ActorHandle actorHandle) override {
+        if (m_bindings) {
+            return m_bindings->synchronizeTattoos &&
+                !m_bindings->synchronizeTattoos(actorHandle, false);
+        }
+        return !m_api->synchronize_tattoos(static_cast<RE::Actor*>(actorHandle), false);
+    }
+
+private:
+    const slavetats::interface::Addresses* m_api;
+    const SlaveTatsAppearanceBindings* m_bindings;
 };
 
 }  // namespace
@@ -406,6 +516,14 @@ core::RemoveTattooResult SlaveTatsRuntime::removeFromSlot(
         .area = request.area,
         .slot = request.slot,
     };
+}
+
+core::UpdateTattooAppearanceResult SlaveTatsRuntime::updateAppearance(
+    const core::UpdateTattooAppearanceRequest& request) {
+    SlaveTatsAppearanceBackend backend(
+        m_api,
+        m_appearanceBindings ? &*m_appearanceBindings : nullptr);
+    return updateTattooAppearance(request, backend);
 }
 
 }  // namespace stui::runtime

@@ -254,6 +254,154 @@ void tattooColorComponentsPreserveRgbChannelOrder() {
         "expected RGB picker components rounded into 0xRRGGBB");
 }
 
+void editAppearanceUsesSessionStateForSaveAndThumbnailPresentation() {
+    const stui::native::AppearanceEditSession unchangedSession{
+        .texturePath = "textures/tattoos/unchanged.dds",
+        .original = {.color = 0x123456, .alpha = 0.25F},
+        .edited = {.color = 0x123456, .alpha = 0.25F},
+    };
+    const stui::native::AppearanceEditSession changedSession{
+        .texturePath = "textures/tattoos/edited.dds",
+        .original = {.color = 0x123456, .alpha = 0.25F},
+        .edited = {.color = 0x804020, .alpha = 0.75F},
+    };
+
+    expect(!stui::native::isAppearanceSaveEnabled(
+               stui::native::SlotWorkflowScreen::editAppearance,
+               &unchangedSession),
+        "unchanged appearance must disable Save");
+    expect(stui::native::isAppearanceSaveEnabled(
+               stui::native::SlotWorkflowScreen::editAppearance,
+               &changedSession),
+        "changed appearance must enable Save");
+    expect(!stui::native::isAppearanceSaveEnabled(
+               stui::native::SlotWorkflowScreen::savingAppearance,
+               &changedSession),
+        "saving appearance must disable duplicate Save");
+
+    const auto thumbnail = stui::native::editAppearanceThumbnailPresentation(&changedSession);
+    expect(thumbnail && thumbnail->color.red == 128.0F / 255.0F &&
+               thumbnail->color.green == 64.0F / 255.0F &&
+               thumbnail->color.blue == 32.0F / 255.0F,
+        "expected edit thumbnail tint to use the session edited RGB color");
+    expect(thumbnail->alpha == 0.75F,
+        "expected edit thumbnail tint to use the session edited alpha");
+    expect(thumbnail->texturePath == "textures/tattoos/edited.dds",
+        "expected edit thumbnail to use the session texture path");
+
+    expect(!stui::native::editAppearanceThumbnailPresentation(nullptr),
+        "expected cancelled edit sessions to stop thumbnail presentation safely");
+
+    auto currentFrameSession = changedSession;
+    currentFrameSession.edited = {.color = 0x204080, .alpha = 0.5F};
+    const auto currentFrameThumbnail =
+        stui::native::editAppearanceThumbnailPresentation(&currentFrameSession);
+    expect(currentFrameThumbnail &&
+               currentFrameThumbnail->color.red == 32.0F / 255.0F &&
+               currentFrameThumbnail->color.green == 64.0F / 255.0F &&
+               currentFrameThumbnail->color.blue == 128.0F / 255.0F &&
+               currentFrameThumbnail->alpha == 0.5F,
+        "expected thumbnail presentation to refresh from the current frame edit values");
+
+    const auto save = stui::native::appearanceSavePresentation(
+        stui::native::SlotWorkflowScreen::editAppearance,
+        &changedSession);
+    expect(save.label == "Save" && save.enabled,
+        "expected full-update edits to present an enabled Save action");
+    expect(stui::native::isAppearanceEditingEnabled(
+               stui::native::SlotWorkflowScreen::editAppearance,
+               &changedSession),
+        "expected full-update appearance controls to remain enabled");
+
+    auto retrySession = changedSession;
+    retrySession.mode = stui::core::UpdateTattooAppearanceMode::synchronizeOnly;
+    const auto retry = stui::native::appearanceSavePresentation(
+        stui::native::SlotWorkflowScreen::editAppearance,
+        &retrySession);
+    expect(retry.label == "Retry Sync" && retry.enabled,
+        "expected synchronize-only retries to replace Save with Retry Sync");
+    expect(!stui::native::isAppearanceEditingEnabled(
+               stui::native::SlotWorkflowScreen::editAppearance,
+               &retrySession),
+        "expected synchronize-only retry to disable color and alpha controls");
+
+    const auto savingRetry = stui::native::appearanceSavePresentation(
+        stui::native::SlotWorkflowScreen::savingAppearance,
+        &retrySession);
+    expect(savingRetry.label == "Retry Sync" && !savingRetry.enabled,
+        "expected saving appearance to disable the Retry Sync submission");
+}
+
+void editAppearanceRendererOrchestrationOrdersInputAndCancel() {
+    stui::native::NativeCatalogBrowserModel catalog([] { return nullptr; });
+    stui::native::NativeSlotWorkflowModel workflow(catalog);
+    workflow.start();
+    const auto query = workflow.takeSlotQuery();
+    expect(query.has_value(), "expected initial slot query for renderer fixture");
+    workflow.completeSlotQuery(query->generation, stui::core::TattooSlots{
+        .actorFormId = 0x14,
+        .area = stui::core::TattooArea::body,
+        .configuredCount = 1,
+        .slots = {{
+            .index = 0,
+            .occupancy = stui::core::SlotOccupancy::slaveTats,
+            .tattoo = stui::core::TattooEntry{
+                .runtimeHandle = 73,
+                .texturePath = "textures/tattoos/current-frame.dds",
+                .slot = 0,
+                .color = 0x123456,
+                .alpha = 0.25F,
+            },
+        }},
+    });
+    expect(workflow.selectSlot(0) && workflow.beginEditAppearance(),
+        "expected renderer fixture to open an edit session");
+
+    std::vector<std::string> events;
+    std::optional<stui::native::AppearanceThumbnailPresentation> thumbnail;
+    stui::native::orchestrateEditAppearanceFrame(
+        workflow,
+        {
+            .appearanceChanged = true,
+            .color = 0x204080,
+            .alpha = 0.5F,
+        },
+        [&events] { events.emplace_back("teardown"); },
+        [&events, &thumbnail](const auto& presentation) {
+            events.emplace_back("thumbnail");
+            thumbnail = presentation;
+        });
+
+    expect(events == std::vector<std::string>{"thumbnail"},
+        "expected an active edit frame to continue into thumbnail presentation");
+    expect(thumbnail &&
+               thumbnail->texturePath == "textures/tattoos/current-frame.dds" &&
+               thumbnail->color.red == 32.0F / 255.0F &&
+               thumbnail->color.green == 64.0F / 255.0F &&
+               thumbnail->color.blue == 128.0F / 255.0F &&
+               thumbnail->alpha == 0.5F,
+        "expected current-frame input applied before thumbnail presentation query");
+
+    events.clear();
+    thumbnail.reset();
+    bool sessionResetBeforeTeardown = false;
+    stui::native::orchestrateEditAppearanceFrame(
+        workflow,
+        {.cancelRequested = true},
+        [&workflow, &events, &sessionResetBeforeTeardown] {
+            sessionResetBeforeTeardown = workflow.editAppearance() == nullptr;
+            events.emplace_back("teardown");
+        },
+        [&events](const auto&) { events.emplace_back("continuation"); });
+
+    expect(workflow.screen() == stui::native::SlotWorkflowScreen::slotActions &&
+               !workflow.editAppearance(),
+        "expected Cancel to reset the edit session and return to Slot Actions");
+    expect(sessionResetBeforeTeardown &&
+               events == std::vector<std::string>{"teardown"},
+        "expected teardown before any post-Cancel renderer continuation");
+}
+
 void currentSlotColorSwatchUsesOwnedTattooColorAtBottomRight() {
     const stui::core::TattooSlot owned{
         .index = 2,
@@ -574,6 +722,10 @@ int main() {
         std::cout << "PASS Picker footer actions stay right-aligned\n";
         tattooColorComponentsPreserveRgbChannelOrder();
         std::cout << "PASS tattoo color components preserve RGB channel order\n";
+        editAppearanceUsesSessionStateForSaveAndThumbnailPresentation();
+        std::cout << "PASS Edit Appearance uses session save and thumbnail state\n";
+        editAppearanceRendererOrchestrationOrdersInputAndCancel();
+        std::cout << "PASS Edit Appearance renderer orders input and Cancel\n";
         currentSlotColorSwatchUsesOwnedTattooColorAtBottomRight();
         std::cout << "PASS Current Slot color swatch uses owned tattoo color\n";
         currentSlotColorSwatchSkipsEmptyAndExternalSlots();

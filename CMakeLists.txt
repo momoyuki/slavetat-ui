@@ -35,7 +35,9 @@ set(headers
     src/core/SlaveTatsService.h
     src/core/TattooModels.h
     src/runtime/OverlaySlotConfiguration.h
+    src/runtime/AppliedTattooHandleMembership.h
     src/runtime/SlaveTatsAlpha.h
+    src/runtime/UpdateTattooAppearanceOrchestration.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooCatalogLoader.h
     src/repository/TattooCatalogStore.h
@@ -65,6 +67,7 @@ set(sources
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/OverlaySlotConfiguration.cpp
+    src/runtime/UpdateTattooAppearanceOrchestration.cpp
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
     src/repository/TattooCatalogStore.cpp
@@ -196,6 +199,44 @@ if(BUILD_TESTING)
     )
     target_include_directories(SlaveTatsAlphaTests PRIVATE src)
     add_test(NAME SlaveTatsAlphaTests COMMAND SlaveTatsAlphaTests)
+
+    add_executable(AppliedTattooHandleMembershipTests
+        tests/runtime/AppliedTattooHandleMembershipTests.cpp
+    )
+    target_include_directories(AppliedTattooHandleMembershipTests PRIVATE src)
+    add_test(
+        NAME AppliedTattooHandleMembershipTests
+        COMMAND AppliedTattooHandleMembershipTests
+    )
+
+    add_executable(UpdateTattooAppearanceOrchestrationTests
+        src/runtime/UpdateTattooAppearanceOrchestration.cpp
+        tests/runtime/UpdateTattooAppearanceOrchestrationTests.cpp
+    )
+    target_include_directories(UpdateTattooAppearanceOrchestrationTests PRIVATE src)
+    add_test(
+        NAME UpdateTattooAppearanceOrchestrationTests
+        COMMAND UpdateTattooAppearanceOrchestrationTests
+    )
+
+    add_executable(SlaveTatsRuntimeAppearanceTests
+        src/runtime/OverlaySlotConfiguration.cpp
+        src/runtime/SlaveTatsRuntime.cpp
+        src/runtime/UpdateTattooAppearanceOrchestration.cpp
+        tests/runtime/SlaveTatsRuntimeAppearanceTests.cpp
+    )
+    target_include_directories(SlaveTatsRuntimeAppearanceTests PRIVATE src include)
+    target_link_libraries(SlaveTatsRuntimeAppearanceTests PRIVATE CommonLibSSE::CommonLibSSE)
+    add_test(
+        NAME SlaveTatsRuntimeAppearanceTests
+        COMMAND SlaveTatsRuntimeAppearanceTests
+    )
+
+    add_executable(JContainersMiniTests
+        tests/runtime/JContainersMiniTests.cpp
+    )
+    target_include_directories(JContainersMiniTests PRIVATE tests/support include)
+    add_test(NAME JContainersMiniTests COMMAND JContainersMiniTests)
 
     add_executable(PrismaTattooSerializerTests
         src/adapters/PrismaTattooSerializer.cpp

@@ -27,6 +27,9 @@ using stui::core::TattooEntry;
 using stui::core::TattooQueryResult;
 using stui::core::TattooSlots;
 using stui::core::TattooSlotsResult;
+using stui::core::UpdateTattooAppearanceMode;
+using stui::core::UpdateTattooAppearanceRequest;
+using stui::core::UpdateTattooAppearanceResult;
 
 class FakeTattooRuntime final : public ITattooRuntime {
 public:
@@ -63,6 +66,16 @@ public:
         return removeResult;
     }
 
+    UpdateTattooAppearanceResult updateAppearance(
+        const UpdateTattooAppearanceRequest& request) override {
+        ++updateCount;
+        updatedRequest = request;
+        return stui::core::UpdateTattooAppearanceSuccess{
+            .actorFormId = request.actorFormId,
+            .runtimeHandle = request.runtimeHandle,
+        };
+    }
+
     bool apiAvailableValue{true};
     bool jContainersReadyValue{true};
     int queryCount{0};
@@ -78,6 +91,8 @@ public:
     RemoveTattooRequest removedRequest;
     int removeCount{0};
     RemoveTattooResult removeResult{stui::core::RemoveTattooSuccess{}};
+    UpdateTattooAppearanceRequest updatedRequest;
+    int updateCount{0};
 };
 
 void expect(bool condition, std::string_view message) {
@@ -112,6 +127,16 @@ RemoveTattooRequest validRemoveRequest() {
         .area = TattooArea::body,
         .slot = 2,
         .mode = RemoveTattooMode::removeAndSynchronize,
+    };
+}
+
+UpdateTattooAppearanceRequest validAppearanceRequest() {
+    return UpdateTattooAppearanceRequest{
+        .actorFormId = 0x14,
+        .runtimeHandle = 42,
+        .color = 0xFF00FF,
+        .alpha = 0.75F,
+        .mode = UpdateTattooAppearanceMode::updateAndSynchronize,
     };
 }
 
@@ -477,6 +502,132 @@ void removeRuntimeFailureIsReturnedUnchanged() {
     expect(runtime.removeCount == 1, "expected one failed remove runtime call");
 }
 
+void unavailableDependenciesStopAppearanceUpdate() {
+    FakeTattooRuntime unavailableApi;
+    unavailableApi.apiAvailableValue = false;
+    SlaveTatsService apiService(unavailableApi);
+    FakeTattooRuntime unavailableJContainers;
+    unavailableJContainers.jContainersReadyValue = false;
+    SlaveTatsService jContainersService(unavailableJContainers);
+
+    const auto apiResult = apiService.updateAppearance(validAppearanceRequest());
+    const auto jContainersResult = jContainersService.updateAppearance(validAppearanceRequest());
+
+    expectError(apiResult, ServiceErrorCode::slaveTatsUnavailable, "SlaveTatsNG not available");
+    expectError(jContainersResult, ServiceErrorCode::jContainersUnavailable, "JContainers not ready");
+    expect(unavailableApi.updateCount == 0 && unavailableJContainers.updateCount == 0,
+        "appearance runtime must not run before dependencies are ready");
+}
+
+void zeroAppearanceActorIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validAppearanceRequest();
+    request.actorFormId = 0;
+
+    const auto result = service.updateAppearance(request);
+
+    expectError(result, ServiceErrorCode::actorNotFound, "Actor not found");
+    expect(runtime.updateCount == 0, "zero actor must not reach the appearance runtime");
+}
+
+void zeroAppearanceHandleIsRejectedForFullUpdate() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto request = validAppearanceRequest();
+    request.runtimeHandle = 0;
+
+    const auto result = service.updateAppearance(request);
+
+    expectError(
+        result,
+        ServiceErrorCode::staleTattooHandle,
+        "Tattoo handle is invalid; refresh the slot snapshot and try again");
+    expect(runtime.updateCount == 0, "zero handle must not reach the full appearance update runtime");
+}
+
+void outOfRangeAppearanceColorIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto belowRange = validAppearanceRequest();
+    belowRange.color = -1;
+    auto aboveRange = validAppearanceRequest();
+    aboveRange.color = 0x1000000;
+
+    const auto belowResult = service.updateAppearance(belowRange);
+    const auto aboveResult = service.updateAppearance(aboveRange);
+
+    expectError(belowResult, ServiceErrorCode::updateFailed, "Tattoo color must be between 0 and 0xFFFFFF");
+    expectError(aboveResult, ServiceErrorCode::updateFailed, "Tattoo color must be between 0 and 0xFFFFFF");
+    expect(runtime.updateCount == 0, "out-of-range color must not reach the appearance runtime");
+}
+
+void outOfRangeAppearanceAlphaIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto belowRange = validAppearanceRequest();
+    belowRange.alpha = -0.01F;
+    auto aboveRange = validAppearanceRequest();
+    aboveRange.alpha = 1.01F;
+    auto notANumber = validAppearanceRequest();
+    notANumber.alpha = std::numeric_limits<float>::quiet_NaN();
+
+    const auto belowResult = service.updateAppearance(belowRange);
+    const auto aboveResult = service.updateAppearance(aboveRange);
+    const auto nanResult = service.updateAppearance(notANumber);
+
+    expectError(belowResult, ServiceErrorCode::updateFailed, "Tattoo alpha must be between 0 and 1");
+    expectError(aboveResult, ServiceErrorCode::updateFailed, "Tattoo alpha must be between 0 and 1");
+    expectError(nanResult, ServiceErrorCode::updateFailed, "Tattoo alpha must be between 0 and 1");
+    expect(runtime.updateCount == 0, "out-of-range alpha must not reach the appearance runtime");
+}
+
+void appearanceBoundariesAreForwardedUnchanged() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto black = validAppearanceRequest();
+    black.color = 0;
+    black.alpha = 0.0F;
+    auto white = validAppearanceRequest();
+    white.color = 0xFFFFFF;
+    white.alpha = 1.0F;
+
+    const auto blackResult = service.updateAppearance(black);
+    expect(blackResult.has_value(), "expected black and transparent appearance accepted");
+    expect(runtime.updatedRequest.color == 0 && runtime.updatedRequest.alpha == 0.0F,
+        "expected black and transparent appearance forwarded unchanged");
+    const auto whiteResult = service.updateAppearance(white);
+
+    expect(whiteResult.has_value(), "expected white and opaque appearance accepted");
+    expect(runtime.updateCount == 2, "expected both appearance boundaries forwarded");
+    expect(runtime.updatedRequest.color == 0xFFFFFF && runtime.updatedRequest.alpha == 1.0F,
+        "expected white and opaque appearance forwarded unchanged");
+}
+
+void synchronizeOnlyAppearanceRequestIsForwardedUnchanged() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    const auto request = UpdateTattooAppearanceRequest{
+        .actorFormId = 0x14,
+        .runtimeHandle = 0,
+        .color = 0,
+        .alpha = 0.0F,
+        .mode = UpdateTattooAppearanceMode::synchronizeOnly,
+    };
+
+    const auto result = service.updateAppearance(request);
+
+    expect(result.has_value(), "expected synchronization-only request accepted without a handle");
+    expect(runtime.updateCount == 1, "expected one synchronization-only runtime call");
+    expect(runtime.updatedRequest.actorFormId == 0x14 && runtime.updatedRequest.runtimeHandle == 0,
+        "expected synchronization actor and handle forwarded unchanged");
+    expect(runtime.updatedRequest.color == 0 && runtime.updatedRequest.alpha == 0.0F &&
+            runtime.updatedRequest.mode == UpdateTattooAppearanceMode::synchronizeOnly,
+        "expected synchronization appearance mode and values forwarded unchanged");
+    expect(result->actorFormId == 0x14 && result->runtimeHandle == 0,
+        "expected synchronization runtime result returned unchanged");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -518,5 +669,12 @@ int main() {
     failures += run("invalid remove target is rejected", invalidRemoveTargetIsRejected);
     failures += run("valid remove request is forwarded exactly once", validRemoveRequestIsForwardedExactlyOnce);
     failures += run("remove runtime failure is returned unchanged", removeRuntimeFailureIsReturnedUnchanged);
+    failures += run("unavailable dependencies stop appearance update", unavailableDependenciesStopAppearanceUpdate);
+    failures += run("zero appearance actor is rejected", zeroAppearanceActorIsRejected);
+    failures += run("zero appearance handle is rejected for full update", zeroAppearanceHandleIsRejectedForFullUpdate);
+    failures += run("out-of-range appearance color is rejected", outOfRangeAppearanceColorIsRejected);
+    failures += run("out-of-range appearance alpha is rejected", outOfRangeAppearanceAlphaIsRejected);
+    failures += run("appearance boundaries are forwarded unchanged", appearanceBoundariesAreForwardedUnchanged);
+    failures += run("synchronize-only appearance request is forwarded unchanged", synchronizeOnlyAppearanceRequestIsForwardedUnchanged);
     return failures == 0 ? 0 : 1;
 }

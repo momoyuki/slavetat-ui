@@ -17,6 +17,8 @@ using SlotApplyOperation = std::function<core::ApplyTattooResult(
     const core::ApplyTattooRequest& request)>;
 using SlotRemoveOperation = std::function<core::RemoveTattooResult(
     const core::RemoveTattooRequest& request)>;
+using SlotAppearanceOperation = std::function<core::UpdateTattooAppearanceResult(
+    const core::UpdateTattooAppearanceRequest& request)>;
 
 class NativeSlotWorkflowRuntime {
 public:
@@ -25,6 +27,7 @@ public:
         SlotQueryOperation query,
         SlotApplyOperation apply,
         SlotRemoveOperation remove,
+        SlotAppearanceOperation updateAppearance,
         NativeSlotScheduler scheduler);
 
     void pump();
@@ -33,11 +36,13 @@ private:
     void scheduleQuery(SlotQueryTicket ticket);
     void scheduleApply(SlotApplyTicket ticket);
     void scheduleRemove(SlotRemoveTicket ticket);
+    void scheduleAppearance(SlotAppearanceTicket ticket);
 
     NativeSlotWorkflowModel& m_model;
     SlotQueryOperation m_query;
     SlotApplyOperation m_apply;
     SlotRemoveOperation m_remove;
+    SlotAppearanceOperation m_updateAppearance;
     NativeSlotScheduler m_scheduler;
     std::atomic_bool m_inFlight{false};
 };

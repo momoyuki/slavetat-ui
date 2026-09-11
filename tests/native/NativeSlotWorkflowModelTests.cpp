@@ -21,6 +21,8 @@ using stui::core::TattooArea;
 using stui::core::TattooEntry;
 using stui::core::TattooSlot;
 using stui::core::TattooSlots;
+using stui::core::UpdateTattooAppearanceMode;
+using stui::core::UpdateTattooAppearanceSuccess;
 using stui::native::NativeCatalogBrowserModel;
 using stui::native::NativeSlotWorkflowModel;
 using stui::native::SlotWorkflowScreen;
@@ -79,6 +81,22 @@ void completeInitialQuery(NativeSlotWorkflowModel& model, TattooSlots result) {
     const auto ticket = model.takeSlotQuery();
     expect(ticket.has_value(), "expected initial slot query ticket");
     model.completeSlotQuery(ticket->generation, std::move(result));
+}
+
+TattooSlots slotsWithEditableOwnedTattoo() {
+    auto result = slots(TattooArea::body, 4);
+    result.slots[1].occupancy = SlotOccupancy::slaveTats;
+    result.slots[1].tattoo = TattooEntry{
+        .runtimeHandle = 73,
+        .section = "Marks",
+        .name = "Existing",
+        .texturePath = "marks/existing.dds",
+        .area = "BODY",
+        .slot = 1,
+        .color = 0x2468AC,
+        .alpha = 0.42F,
+    };
+    return result;
 }
 
 void startSchedulesOnePlayerBodyQuery() {
@@ -540,6 +558,201 @@ void queryFailureRemainsRetryable() {
         "expected Refresh to create a newer query generation");
 }
 
+void editAppearanceRequiresOwnedSlotWithHandleAndCopiesSnapshot() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    auto bodySlots = slotsWithEditableOwnedTattoo();
+    bodySlots.slots[2].occupancy = SlotOccupancy::external;
+    bodySlots.slots[3].occupancy = SlotOccupancy::slaveTats;
+    bodySlots.slots[3].tattoo = *bodySlots.slots[1].tattoo;
+    bodySlots.slots[3].tattoo->runtimeHandle = 0;
+    bodySlots.slots[3].tattoo->slot = 3;
+    completeInitialQuery(model, std::move(bodySlots));
+
+    expect(model.selectSlot(0), "expected empty slot selection accepted for Add flow");
+    expect(!model.beginEditAppearance(), "expected empty slot edit rejected");
+    model.backToSlots();
+    expect(!model.selectSlot(2), "expected external slot selection rejected");
+    expect(model.selectSlot(3), "expected zero-handle owned slot action selected");
+    expect(!model.beginEditAppearance(), "expected zero-handle slot edit rejected");
+    model.backToSlots();
+    expect(model.selectSlot(1) && model.beginEditAppearance(),
+        "expected owned slot edit accepted");
+
+    const auto* session = model.editAppearance();
+    expect(model.screen() == SlotWorkflowScreen::editAppearance && session,
+        "expected Edit Appearance screen with a session");
+    expect(session->actorFormId == 0x14 && session->area == TattooArea::body &&
+            session->slot == 1 && session->runtimeHandle == 73 &&
+            session->texturePath == "marks/existing.dds",
+        "expected session identity copied from the selected slot snapshot");
+    expect(session->original.color == 0x2468AC && session->original.alpha == 0.42F &&
+            session->edited.color == 0x2468AC && session->edited.alpha == 0.42F &&
+            session->mode == UpdateTattooAppearanceMode::updateAndSynchronize,
+        "expected original and edited appearance initialized from the snapshot");
+    expect(!model.canSaveAppearance(), "expected unchanged appearance Save disabled");
+    expect(!model.takeAppearanceRequest(), "expected editor entry not to create a ticket");
+}
+
+void localAppearanceEditsNormalizeTrackDirtyAndCancelWithoutTicket() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    completeInitialQuery(model, slotsWithEditableOwnedTattoo());
+    expect(model.selectSlot(1) && model.beginEditAppearance(),
+        "expected edit session opened");
+
+    model.setEditedAppearance(-1, 1.25F);
+    const auto* normalized = model.editAppearance();
+    expect(normalized && normalized->edited.color == 0 && normalized->edited.alpha == 1.0F,
+        "expected editor values clamped to supported color and alpha ranges");
+    expect(model.canSaveAppearance(), "expected normalized changed appearance to enable Save");
+    expect(!model.takeAppearanceRequest(), "expected local edits not to create a ticket");
+
+    model.setEditedAppearance(0x2468AC, 0.42F);
+    expect(!model.canSaveAppearance(), "expected original appearance to disable Save again");
+    model.setEditedAppearance(0x123456, 0.35F);
+    model.cancelEditAppearance();
+    expect(model.screen() == SlotWorkflowScreen::slotActions && !model.editAppearance(),
+        "expected Cancel to discard the session and return to Slot Actions");
+    expect(!model.takeAppearanceRequest(), "expected Cancel not to create a ticket");
+}
+
+void appearanceSaveCreatesOneTicketAndSuccessRefreshesOnlyBody() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    completeInitialQuery(model, slotsWithEditableOwnedTattoo());
+    expect(model.selectSlot(1) && model.beginEditAppearance(),
+        "expected edit session opened");
+    model.setEditedAppearance(0x123456, 0.35F);
+
+    expect(model.confirmAppearanceUpdate(), "expected changed appearance Save accepted");
+    expect(!model.confirmAppearanceUpdate(), "expected duplicate appearance Save rejected");
+    const auto ticket = model.takeAppearanceRequest();
+    expect(ticket && ticket->request.actorFormId == 0x14 && ticket->request.runtimeHandle == 73 &&
+            ticket->request.color == 0x123456 && ticket->request.alpha == 0.35F &&
+            ticket->request.mode == UpdateTattooAppearanceMode::updateAndSynchronize,
+        "expected full update ticket to use the edited session values");
+    expect(model.screen() == SlotWorkflowScreen::savingAppearance && !model.canSaveAppearance(),
+        "expected Saving Appearance to prevent a duplicate Save");
+    expect(!model.takeAppearanceRequest(), "expected appearance ticket consumed once");
+
+    model.completeAppearanceUpdate(ticket->generation + 1, UpdateTattooAppearanceSuccess{});
+    expect(model.screen() == SlotWorkflowScreen::savingAppearance && model.editAppearance(),
+        "expected stale appearance completion ignored");
+    model.completeAppearanceUpdate(ticket->generation, UpdateTattooAppearanceSuccess{
+        .actorFormId = 0x14,
+        .runtimeHandle = 73,
+    });
+    expect(model.screen() == SlotWorkflowScreen::currentSlots && !model.editAppearance(),
+        "expected successful appearance save to clear the session and return to Current Slots");
+    const auto refresh = model.takeSlotQuery();
+    expect(refresh && refresh->area == TattooArea::body,
+        "expected successful appearance save to refresh only selected BODY slots");
+}
+
+void selectingAnotherAreaInvalidatesMatchingAppearanceCompletion() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    completeInitialQuery(model, slotsWithEditableOwnedTattoo());
+    expect(model.selectSlot(1) && model.beginEditAppearance(),
+        "expected edit session opened");
+    model.setEditedAppearance(0x123456, 0.35F);
+    expect(model.confirmAppearanceUpdate(), "expected appearance Save accepted");
+    const auto ticket = model.takeAppearanceRequest();
+    expect(ticket.has_value(), "expected appearance ticket");
+
+    model.selectArea(TattooArea::face);
+    const auto faceQuery = model.takeSlotQuery();
+    expect(faceQuery && faceQuery->area == TattooArea::face,
+        "expected navigation to schedule only the selected FACE query");
+
+    model.completeAppearanceUpdate(ticket->generation, UpdateTattooAppearanceSuccess{
+        .actorFormId = 0x14,
+        .runtimeHandle = 73,
+    });
+
+    expect(model.selectedArea() == TattooArea::face &&
+            model.screen() == SlotWorkflowScreen::currentSlots &&
+            !model.editAppearance() && !model.error(),
+        "expected formerly matching completion not to mutate navigated workflow state");
+    expect(!model.takeSlotQuery(),
+        "expected obsolete appearance completion not to schedule a refresh");
+}
+
+void appearanceWriteFailureRetriesFullUpdateAndSyncFailureRetriesOnlySync() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    completeInitialQuery(model, slotsWithEditableOwnedTattoo());
+    expect(model.selectSlot(1) && model.beginEditAppearance(),
+        "expected write retry session opened");
+    model.setEditedAppearance(0x123456, 0.35F);
+    expect(model.confirmAppearanceUpdate(), "expected first write attempt accepted");
+    const auto first = model.takeAppearanceRequest();
+    model.completeAppearanceUpdate(first->generation, std::unexpected(ServiceError{
+        ServiceErrorCode::updateFailed,
+        "appearance write failed",
+    }));
+
+    const auto* failedWrite = model.editAppearance();
+    expect(model.screen() == SlotWorkflowScreen::editAppearance && failedWrite &&
+            failedWrite->mode == UpdateTattooAppearanceMode::updateAndSynchronize &&
+            failedWrite->edited.color == 0x123456 && failedWrite->edited.alpha == 0.35F &&
+            model.error() && model.error()->code == ServiceErrorCode::updateFailed,
+        "expected write error to retain edited values for a full-update retry");
+    expect(model.confirmAppearanceUpdate(), "expected write retry accepted");
+    const auto writeRetry = model.takeAppearanceRequest();
+    expect(writeRetry && writeRetry->generation > first->generation &&
+            writeRetry->request.mode == UpdateTattooAppearanceMode::updateAndSynchronize,
+        "expected write retry to remain a full update");
+
+    model.completeAppearanceUpdate(writeRetry->generation, std::unexpected(ServiceError{
+        ServiceErrorCode::synchronizeFailed,
+        "appearance sync failed",
+    }));
+    const auto* failedSync = model.editAppearance();
+    expect(model.screen() == SlotWorkflowScreen::editAppearance && failedSync &&
+            failedSync->mode == UpdateTattooAppearanceMode::synchronizeOnly &&
+            model.error() && model.error()->code == ServiceErrorCode::synchronizeFailed,
+        "expected synchronization error to switch the retained session to Retry Sync");
+    model.setEditedAppearance(0xABCDEF, 0.9F);
+    failedSync = model.editAppearance();
+    expect(failedSync && failedSync->edited.color == 0x123456 &&
+            failedSync->edited.alpha == 0.35F,
+        "expected Retry Sync mode to ignore color and alpha edits");
+    expect(model.confirmAppearanceUpdate(), "expected synchronization-only retry accepted");
+    const auto syncRetry = model.takeAppearanceRequest();
+    expect(syncRetry && syncRetry->generation > writeRetry->generation &&
+            syncRetry->request.mode == UpdateTattooAppearanceMode::synchronizeOnly &&
+            syncRetry->request.runtimeHandle == 73 && syncRetry->request.color == 0x123456 &&
+            syncRetry->request.alpha == 0.35F,
+        "expected Retry Sync to preserve identity and values without another full update");
+
+    model.completeAppearanceUpdate(syncRetry->generation, std::unexpected(ServiceError{
+        ServiceErrorCode::updateFailed,
+        "retry scheduling failed",
+    }));
+    const auto* failedRetry = model.editAppearance();
+    expect(model.screen() == SlotWorkflowScreen::editAppearance && failedRetry &&
+            failedRetry->mode == UpdateTattooAppearanceMode::synchronizeOnly &&
+            model.error() && model.error()->code == ServiceErrorCode::updateFailed,
+        "expected a failed Retry Sync to retain synchronization-only mode");
+    expect(model.confirmAppearanceUpdate(), "expected failed Retry Sync to remain retryable");
+    const auto secondSyncRetry = model.takeAppearanceRequest();
+    expect(secondSyncRetry && secondSyncRetry->generation > syncRetry->generation &&
+            secondSyncRetry->request.mode == UpdateTattooAppearanceMode::synchronizeOnly,
+        "expected a failed Retry Sync never to emit a second full appearance update");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -572,5 +785,10 @@ int main() {
     failures += run("apply failure retains Preview for retry", applyFailureRetainsPreviewForRetry);
     failures += run("stale completions are ignored", staleCompletionsAreIgnored);
     failures += run("query failure remains retryable", queryFailureRemainsRetryable);
+    failures += run("edit appearance requires owned slot with handle and copies snapshot", editAppearanceRequiresOwnedSlotWithHandleAndCopiesSnapshot);
+    failures += run("local appearance edits normalize track dirty and Cancel without ticket", localAppearanceEditsNormalizeTrackDirtyAndCancelWithoutTicket);
+    failures += run("selecting another area invalidates matching appearance completion", selectingAnotherAreaInvalidatesMatchingAppearanceCompletion);
+    failures += run("appearance Save creates one ticket and success refreshes only BODY", appearanceSaveCreatesOneTicketAndSuccessRefreshesOnlyBody);
+    failures += run("appearance write failure retries full update and sync failure retries only sync", appearanceWriteFailureRetriesFullUpdateAndSyncFailureRetriesOnlySync);
     return failures == 0 ? 0 : 1;
 }

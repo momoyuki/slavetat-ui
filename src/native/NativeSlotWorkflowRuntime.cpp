@@ -10,6 +10,13 @@ core::ServiceError operationError(core::ServiceErrorCode code, const char* messa
     return core::ServiceError{.code = code, .message = message};
 }
 
+core::ServiceErrorCode appearanceErrorCode(
+    core::UpdateTattooAppearanceMode mode) noexcept {
+    return mode == core::UpdateTattooAppearanceMode::synchronizeOnly
+        ? core::ServiceErrorCode::synchronizeFailed
+        : core::ServiceErrorCode::updateFailed;
+}
+
 class InFlightGuard {
 public:
     explicit InFlightGuard(std::atomic_bool& inFlight) noexcept : m_inFlight(inFlight) {}
@@ -31,11 +38,13 @@ NativeSlotWorkflowRuntime::NativeSlotWorkflowRuntime(
     SlotQueryOperation query,
     SlotApplyOperation apply,
     SlotRemoveOperation remove,
+    SlotAppearanceOperation updateAppearance,
     NativeSlotScheduler scheduler)
     : m_model(model),
       m_query(std::move(query)),
       m_apply(std::move(apply)),
       m_remove(std::move(remove)),
+      m_updateAppearance(std::move(updateAppearance)),
       m_scheduler(std::move(scheduler)) {}
 
 void NativeSlotWorkflowRuntime::pump() {
@@ -54,6 +63,10 @@ void NativeSlotWorkflowRuntime::pump() {
     }
     if (auto remove = m_model.takeRemoveRequest()) {
         scheduleRemove(std::move(*remove));
+        return;
+    }
+    if (auto appearance = m_model.takeAppearanceRequest()) {
+        scheduleAppearance(std::move(*appearance));
         return;
     }
 
@@ -133,6 +146,33 @@ void NativeSlotWorkflowRuntime::scheduleRemove(SlotRemoveTicket ticket) {
             std::unexpected(operationError(
                 core::ServiceErrorCode::removeFailed,
                 "Failed to schedule tattoo remove.")));
+        m_inFlight.store(false);
+    }
+}
+
+void NativeSlotWorkflowRuntime::scheduleAppearance(SlotAppearanceTicket ticket) {
+    const std::uint64_t generation = ticket.generation;
+    const auto errorCode = appearanceErrorCode(ticket.request.mode);
+    NativeSlotTask task = [this, ticket = std::move(ticket), errorCode] {
+        InFlightGuard guard(m_inFlight);
+        core::UpdateTattooAppearanceResult result = std::unexpected(operationError(
+            errorCode,
+            "Tattoo appearance update failed."));
+        try {
+            result = m_updateAppearance(ticket.request);
+        } catch (...) {
+        }
+        m_model.completeAppearanceUpdate(ticket.generation, std::move(result));
+    };
+
+    try {
+        m_scheduler(std::move(task));
+    } catch (...) {
+        m_model.completeAppearanceUpdate(
+            generation,
+            std::unexpected(operationError(
+                errorCode,
+                "Failed to schedule tattoo appearance update.")));
         m_inFlight.store(false);
     }
 }

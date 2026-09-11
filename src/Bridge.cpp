@@ -479,33 +479,23 @@ void Bridge::handleApplyToSlot(uint32_t actorId, std::string area, std::string s
 }
 
 void Bridge::handleUpdateTattoo(uint32_t actorId, int tattooHandle, int color, float alpha) {
-    if (!m_tattooAPI || !m_jcReady) {
-        sendToUI(R"({"type":"error","message":"SlaveTatsNG or JContainers not ready"})");
-        return;
-    }
-    auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorId);
-    if (!actor) {
-        sendToUI(std::format(R"({{"type":"error","message":"Actor 0x{:X} not found"}})", actorId));
-        return;
-    }
-
-    if (!tattooHandle) {
-        sendToUI(R"({"type":"error","message":"Invalid tattoo handle — try Refresh"})");
-        return;
-    }
-
     logger::info("SlaveTatsUI: updateTattoo handle={} color=0x{:X} alpha={:.2f}", tattooHandle, color, alpha);
 
-    jcmini::JMap::setInt(tattooHandle, "color", color);
-    jcmini::JMap::setFlt(
-        tattooHandle,
-        "invertedAlpha",
-        runtime::toSlaveTatsInvertedAlpha(alpha));
+    const auto result = m_service.updateAppearance(core::UpdateTattooAppearanceRequest{
+        .actorFormId = actorId,
+        .runtimeHandle = tattooHandle,
+        .color = color,
+        .alpha = alpha,
+    });
 
-    // Mark the actor's SlaveTats data as changed so synchronize_tattoos doesn't abort
-    jcmini::JFormDB::setInt(actor, ".SlaveTats.updated", 1);
-    m_tattooAPI->synchronize_tattoos(actor, false);
-    sendToUI(R"({"type":"success","action":"updateTattoo"})");
+    if (!result) {
+        sendToUI(std::format(
+            R"({{"type":"error","message":"{}"}})",
+            escapeJSON(result.error().message)));
+        return;
+    }
+
+    sendToUI(adapters::toPrismaUpdateTattooSuccessJSON());
 }
 
 // Runs on a detached background thread — tries disk cache, then loose file, then BSA

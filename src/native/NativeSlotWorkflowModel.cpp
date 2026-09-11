@@ -68,6 +68,9 @@ void NativeSlotWorkflowModel::selectArea(core::TattooArea area) {
     m_targetSlot.reset();
     m_previewTattoo.reset();
     m_previewAppearance.reset();
+    m_pendingAppearance.reset();
+    m_activeAppearanceGeneration.reset();
+    m_editAppearance.reset();
     m_error.reset();
     clampSelectedPage();
     if (m_started && !selectedState().slots) {
@@ -125,6 +128,7 @@ bool NativeSlotWorkflowModel::selectSlot(std::int32_t slot) {
     m_targetSlot = slot;
     m_previewTattoo.reset();
     m_previewAppearance = PreviewTattooAppearance{};
+    m_editAppearance.reset();
     if (found->occupancy == core::SlotOccupancy::slaveTats && found->tattoo) {
         m_previewAppearance = PreviewTattooAppearance{
             .color = std::clamp(found->tattoo->color, 0, 0xFFFFFF),
@@ -207,6 +211,7 @@ void NativeSlotWorkflowModel::backToSlots() {
     m_targetSlot.reset();
     m_previewTattoo.reset();
     m_previewAppearance.reset();
+    m_editAppearance.reset();
     m_error.reset();
 }
 
@@ -267,6 +272,84 @@ bool NativeSlotWorkflowModel::confirmApply() {
     return true;
 }
 
+bool NativeSlotWorkflowModel::beginEditAppearance() {
+    if (m_screen != SlotWorkflowScreen::slotActions || !m_targetSlot) {
+        return false;
+    }
+
+    const auto* currentSlots = slots();
+    if (!currentSlots) {
+        return false;
+    }
+
+    const auto found = std::ranges::find_if(currentSlots->slots, [this](const core::TattooSlot& candidate) {
+        return candidate.index == *m_targetSlot;
+    });
+    if (found == currentSlots->slots.end() || found->occupancy != core::SlotOccupancy::slaveTats ||
+        !found->tattoo || found->tattoo->runtimeHandle == 0) {
+        return false;
+    }
+
+    const PreviewTattooAppearance appearance{
+        .color = found->tattoo->color,
+        .alpha = found->tattoo->alpha,
+    };
+    m_editAppearance = AppearanceEditSession{
+        .actorFormId = currentSlots->actorFormId,
+        .area = m_selectedArea,
+        .slot = found->index,
+        .runtimeHandle = found->tattoo->runtimeHandle,
+        .texturePath = found->tattoo->texturePath,
+        .original = appearance,
+        .edited = appearance,
+    };
+    m_error.reset();
+    m_screen = SlotWorkflowScreen::editAppearance;
+    return true;
+}
+
+void NativeSlotWorkflowModel::setEditedAppearance(std::int32_t color, float alpha) noexcept {
+    if (m_screen != SlotWorkflowScreen::editAppearance || !m_editAppearance ||
+        m_editAppearance->mode == core::UpdateTattooAppearanceMode::synchronizeOnly) {
+        return;
+    }
+
+    m_editAppearance->edited.color = std::clamp(color, 0, 0xFFFFFF);
+    m_editAppearance->edited.alpha = std::clamp(alpha, 0.0F, 1.0F);
+}
+
+void NativeSlotWorkflowModel::cancelEditAppearance() {
+    if (m_screen != SlotWorkflowScreen::editAppearance) {
+        return;
+    }
+
+    m_editAppearance.reset();
+    m_error.reset();
+    m_screen = SlotWorkflowScreen::slotActions;
+}
+
+bool NativeSlotWorkflowModel::confirmAppearanceUpdate() {
+    if (!canSaveAppearance() || !m_editAppearance) {
+        return false;
+    }
+
+    const std::uint64_t generation = nextGeneration();
+    m_pendingAppearance = SlotAppearanceTicket{
+        .generation = generation,
+        .request = core::UpdateTattooAppearanceRequest{
+            .actorFormId = m_editAppearance->actorFormId,
+            .runtimeHandle = m_editAppearance->runtimeHandle,
+            .color = m_editAppearance->edited.color,
+            .alpha = m_editAppearance->edited.alpha,
+            .mode = m_editAppearance->mode,
+        },
+    };
+    m_activeAppearanceGeneration = generation;
+    m_error.reset();
+    m_screen = SlotWorkflowScreen::savingAppearance;
+    return true;
+}
+
 std::optional<SlotQueryTicket> NativeSlotWorkflowModel::takeSlotQuery() {
     auto ticket = std::move(m_pendingSlotQuery);
     m_pendingSlotQuery.reset();
@@ -282,6 +365,12 @@ std::optional<SlotApplyTicket> NativeSlotWorkflowModel::takeApplyRequest() {
 std::optional<SlotRemoveTicket> NativeSlotWorkflowModel::takeRemoveRequest() {
     auto ticket = std::move(m_pendingRemove);
     m_pendingRemove.reset();
+    return ticket;
+}
+
+std::optional<SlotAppearanceTicket> NativeSlotWorkflowModel::takeAppearanceRequest() {
+    auto ticket = std::move(m_pendingAppearance);
+    m_pendingAppearance.reset();
     return ticket;
 }
 
@@ -346,6 +435,35 @@ void NativeSlotWorkflowModel::completeRemove(
     scheduleSlotQuery(m_selectedArea);
 }
 
+void NativeSlotWorkflowModel::completeAppearanceUpdate(
+    std::uint64_t generation,
+    core::UpdateTattooAppearanceResult result) {
+    if (!m_activeAppearanceGeneration || generation != *m_activeAppearanceGeneration) {
+        return;
+    }
+
+    m_activeAppearanceGeneration.reset();
+    if (!result) {
+        m_error = std::move(result.error());
+        if (m_editAppearance) {
+            const bool mustSynchronizeOnly =
+                m_editAppearance->mode == core::UpdateTattooAppearanceMode::synchronizeOnly ||
+                m_error->code == core::ServiceErrorCode::synchronizeFailed;
+            m_editAppearance->mode = mustSynchronizeOnly
+                ? core::UpdateTattooAppearanceMode::synchronizeOnly
+                : core::UpdateTattooAppearanceMode::updateAndSynchronize;
+        }
+        m_screen = SlotWorkflowScreen::editAppearance;
+        return;
+    }
+
+    m_error.reset();
+    m_editAppearance.reset();
+    m_targetSlot.reset();
+    m_screen = SlotWorkflowScreen::currentSlots;
+    scheduleSlotQuery(m_selectedArea);
+}
+
 SlotWorkflowScreen NativeSlotWorkflowModel::screen() const noexcept {
     return m_screen;
 }
@@ -382,6 +500,15 @@ const repository::TattooDefinition* NativeSlotWorkflowModel::previewTattoo() con
 
 const PreviewTattooAppearance* NativeSlotWorkflowModel::previewAppearance() const noexcept {
     return m_previewAppearance ? &*m_previewAppearance : nullptr;
+}
+
+const AppearanceEditSession* NativeSlotWorkflowModel::editAppearance() const noexcept {
+    return m_editAppearance ? &*m_editAppearance : nullptr;
+}
+
+bool NativeSlotWorkflowModel::canSaveAppearance() const noexcept {
+    return m_screen == SlotWorkflowScreen::editAppearance && m_editAppearance &&
+        m_editAppearance->edited != m_editAppearance->original;
 }
 
 std::vector<std::int32_t> NativeSlotWorkflowModel::inUseSlots(

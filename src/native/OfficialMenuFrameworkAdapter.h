@@ -16,6 +16,7 @@ namespace stui::native {
 class NativeThumbnailRuntime;
 class NativeSlotWorkflowModel;
 class NativeSlotWorkflowRuntime;
+struct AppearanceEditSession;
 enum class SlotWorkflowScreen;
 enum class NativeThumbnailStatus;
 struct NativeThumbnailView;
@@ -90,6 +91,20 @@ struct SlotPageRange {
     SlotWorkflowScreen screen,
     bool hasTarget,
     bool hasTattoo) noexcept;
+[[nodiscard]] bool isAppearanceSaveEnabled(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept;
+[[nodiscard]] bool isAppearanceEditingEnabled(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept;
+struct AppearanceSavePresentation {
+    std::string_view label;
+    bool enabled{};
+};
+
+[[nodiscard]] AppearanceSavePresentation appearanceSavePresentation(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept;
 enum class RemoveButtonState {
     initial,
     retryRemove,
@@ -164,6 +179,24 @@ struct TattooColorComponents {
     float blue{};
 };
 
+struct AppearanceThumbnailPresentation {
+    std::string_view texturePath;
+    TattooColorComponents color;
+    float alpha{};
+};
+
+struct EditAppearanceFramePresentation {
+    bool shouldContinue{};
+    std::optional<AppearanceThumbnailPresentation> thumbnail;
+};
+
+struct EditAppearanceFrameInteraction {
+    bool appearanceChanged{};
+    std::int32_t color{0xFFFFFF};
+    float alpha{1.0F};
+    bool cancelRequested{};
+};
+
 struct SlotColorSwatchPresentation {
     float x{};
     float y{};
@@ -176,6 +209,16 @@ struct SlotColorSwatchPresentation {
     std::int32_t color) noexcept;
 [[nodiscard]] std::int32_t tattooColorValue(
     TattooColorComponents components) noexcept;
+[[nodiscard]] std::optional<AppearanceThumbnailPresentation> editAppearanceThumbnailPresentation(
+    const AppearanceEditSession* session) noexcept;
+[[nodiscard]] EditAppearanceFramePresentation editAppearanceFramePresentation(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* postCommandSession) noexcept;
+void orchestrateEditAppearanceFrame(
+    NativeSlotWorkflowModel& workflow,
+    EditAppearanceFrameInteraction interaction,
+    const std::function<void()>& teardown,
+    const std::function<void(const AppearanceThumbnailPresentation&)>& continueRendering);
 
 [[nodiscard]] std::string formatCatalogTattooTooltip(
     std::string_view tattooName,

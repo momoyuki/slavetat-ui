@@ -89,6 +89,25 @@ struct RemoveTattooSuccess {
     std::int32_t slot{-1};
 };
 
+enum class UpdateTattooAppearanceMode {
+    updateAndSynchronize,
+    synchronizeOnly,
+};
+
+struct UpdateTattooAppearanceRequest {
+    std::uint32_t actorFormId{};
+    std::int32_t runtimeHandle{};
+    std::int32_t color{0xFFFFFF};
+    float alpha{1.0F};
+    UpdateTattooAppearanceMode mode{
+        UpdateTattooAppearanceMode::updateAndSynchronize};
+};
+
+struct UpdateTattooAppearanceSuccess {
+    std::uint32_t actorFormId{};
+    std::int32_t runtimeHandle{};
+};
+
 enum class ServiceErrorCode {
     slaveTatsUnavailable,
     jContainersUnavailable,
@@ -102,6 +121,8 @@ enum class ServiceErrorCode {
     applyFailed,
     removeFailed,
     synchronizeFailed,
+    staleTattooHandle,
+    updateFailed,
 };
 
 struct ServiceError {
@@ -113,5 +134,7 @@ using TattooQueryResult = std::expected<std::vector<TattooEntry>, ServiceError>;
 using TattooSlotsResult = std::expected<TattooSlots, ServiceError>;
 using ApplyTattooResult = std::expected<ApplyTattooSuccess, ServiceError>;
 using RemoveTattooResult = std::expected<RemoveTattooSuccess, ServiceError>;
+using UpdateTattooAppearanceResult =
+    std::expected<UpdateTattooAppearanceSuccess, ServiceError>;
 
 }  // namespace stui::core

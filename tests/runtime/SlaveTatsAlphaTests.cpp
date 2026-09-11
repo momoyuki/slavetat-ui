@@ -25,6 +25,8 @@ void visibleAlphaEncodesAsSlaveTatsInvertedAlpha() {
         "expected transparent visible Alpha encoded as invertedAlpha 1.0");
     expect(nearlyEqual(stui::runtime::toSlaveTatsInvertedAlpha(0.1F), 0.9F),
         "expected visible Alpha 0.1 encoded as invertedAlpha 0.9");
+    expect(nearlyEqual(stui::runtime::toSlaveTatsInvertedAlpha(0.35F), 0.65F),
+        "expected visible Alpha 0.35 encoded as invertedAlpha 0.65");
     expect(nearlyEqual(stui::runtime::toSlaveTatsInvertedAlpha(0.4F), 0.6F),
         "expected visible Alpha 0.4 encoded as invertedAlpha 0.6");
     expect(nearlyEqual(stui::runtime::toSlaveTatsInvertedAlpha(1.0F), 0.0F),

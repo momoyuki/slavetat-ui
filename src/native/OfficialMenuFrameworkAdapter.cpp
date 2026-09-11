@@ -153,6 +153,32 @@ bool isPreviewApplyEnabled(
     return screen == SlotWorkflowScreen::preview && hasTarget && hasTattoo;
 }
 
+bool isAppearanceSaveEnabled(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept {
+    return screen == SlotWorkflowScreen::editAppearance && session &&
+        session->edited != session->original;
+}
+
+bool isAppearanceEditingEnabled(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept {
+    return screen == SlotWorkflowScreen::editAppearance && session &&
+        session->mode == core::UpdateTattooAppearanceMode::updateAndSynchronize;
+}
+
+AppearanceSavePresentation appearanceSavePresentation(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept {
+    return {
+        .label = session &&
+                session->mode == core::UpdateTattooAppearanceMode::synchronizeOnly
+            ? "Retry Sync"
+            : "Save",
+        .enabled = isAppearanceSaveEnabled(screen, session),
+    };
+}
+
 std::string removeButtonLabel(std::int32_t slot, RemoveButtonState state) {
     switch (state) {
     case RemoveButtonState::initial:
@@ -376,6 +402,58 @@ std::int32_t tattooColorValue(TattooColorComponents components) noexcept {
         (channel(components.red) << 16U) |
         (channel(components.green) << 8U) |
         channel(components.blue));
+}
+
+std::optional<AppearanceThumbnailPresentation> editAppearanceThumbnailPresentation(
+    const AppearanceEditSession* session) noexcept {
+    if (!session) {
+        return std::nullopt;
+    }
+    return AppearanceThumbnailPresentation{
+        .texturePath = session->texturePath,
+        .color = tattooColorComponents(session->edited.color),
+        .alpha = session->edited.alpha,
+    };
+}
+
+EditAppearanceFramePresentation editAppearanceFramePresentation(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* postCommandSession) noexcept {
+    const bool shouldContinue =
+        (screen == SlotWorkflowScreen::editAppearance ||
+            screen == SlotWorkflowScreen::savingAppearance) &&
+        postCommandSession;
+    return {
+        .shouldContinue = shouldContinue,
+        .thumbnail = shouldContinue
+            ? editAppearanceThumbnailPresentation(postCommandSession)
+            : std::nullopt,
+    };
+}
+
+void orchestrateEditAppearanceFrame(
+    NativeSlotWorkflowModel& workflow,
+    EditAppearanceFrameInteraction interaction,
+    const std::function<void()>& teardown,
+    const std::function<void(const AppearanceThumbnailPresentation&)>& continueRendering) {
+    if (interaction.appearanceChanged) {
+        workflow.setEditedAppearance(interaction.color, interaction.alpha);
+    }
+    if (interaction.cancelRequested) {
+        workflow.cancelEditAppearance();
+    }
+
+    const auto presentation = editAppearanceFramePresentation(
+        workflow.screen(), workflow.editAppearance());
+    if (!presentation.shouldContinue) {
+        if (teardown) {
+            teardown();
+        }
+        return;
+    }
+    if (continueRendering) {
+        continueRendering(presentation.thumbnail.value());
+    }
 }
 
 std::string formatCatalogTattooTooltip(
@@ -968,6 +1046,15 @@ void renderSlotActions(
         if (ImGuiMCP::Button("Replace")) {
             (void)workflow.replaceSelectedSlot();
         }
+        const bool canEditAppearance = slot &&
+            slot->occupancy == core::SlotOccupancy::slaveTats && slot->tattoo &&
+            slot->tattoo->runtimeHandle != 0;
+        if (canEditAppearance) {
+            ImGuiMCP::SameLine();
+            if (ImGuiMCP::Button("Edit Appearance")) {
+                (void)workflow.beginEditAppearance();
+            }
+        }
         ImGuiMCP::SameLine();
         if (ImGuiMCP::Button("Remove")) {
             (void)workflow.requestRemove();
@@ -1134,6 +1221,156 @@ void renderPreview(
     }
 }
 
+void renderEditAppearance(
+    NativeSlotWorkflowModel& workflow,
+    NativeThumbnailRuntime& thumbnails,
+    const std::function<void()>& close) {
+    const auto* session = workflow.editAppearance();
+    const auto initialFramePresentation =
+        editAppearanceFramePresentation(workflow.screen(), session);
+    if (!initialFramePresentation.shouldContinue) {
+        return;
+    }
+    std::vector<std::string> paths;
+    if (initialFramePresentation.thumbnail &&
+        !initialFramePresentation.thumbnail->texturePath.empty()) {
+        paths.emplace_back(initialFramePresentation.thumbnail->texturePath);
+    }
+    thumbnails.synchronize(slotThumbnailEpoch(workflow.selectedArea()), paths);
+    thumbnails.pump();
+    const auto thumbnailViews = thumbnails.views();
+
+    const auto* viewport = ImGuiMCP::GetMainViewport();
+    if (!viewport) {
+        return;
+    }
+    const auto layout = OfficialMenuFrameworkAdapter::calculateFoundationLayout(
+        {viewport->Pos.x, viewport->Pos.y},
+        {viewport->Size.x, viewport->Size.y});
+    ImGuiMCP::SetNextWindowPos(
+        {layout.position.x, layout.position.y}, ImGuiMCP::ImGuiCond_Appearing, {0.0F, 0.0F});
+    ImGuiMCP::SetNextWindowSize(
+        {layout.size.width, layout.size.height}, ImGuiMCP::ImGuiCond_Appearing);
+    bool open = true;
+    ImGuiMCP::PushStyleVar(ImGuiMCP::ImGuiStyleVar_WindowBorderSize, 0.0F);
+    ImGuiMCP::Begin(
+        "Tattoo Browser##SlaveTatsUI",
+        &open,
+        ImGuiMCP::ImGuiWindowFlags_NoCollapse |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+            ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse);
+
+    const bool saving = workflow.screen() == SlotWorkflowScreen::savingAppearance;
+    ImGuiMCP::TextUnformatted("Edit Appearance");
+    if (session) {
+        const auto targetLabel = formatSlotTargetLabel(session->area, session->slot);
+        ImGuiMCP::TextUnformatted(targetLabel.c_str());
+    }
+    if (const auto* error = workflow.error()) {
+        ImGuiMCP::TextUnformatted(error->message.c_str());
+    } else if (saving) {
+        ImGuiMCP::TextUnformatted("Saving appearance...");
+    }
+
+    TattooColorComponents colorComponents =
+        tattooColorComponents(session ? session->edited.color : 0xFFFFFF);
+    float colorValues[3]{
+        colorComponents.red,
+        colorComponents.green,
+        colorComponents.blue,
+    };
+    float alpha = session ? session->edited.alpha : 1.0F;
+    ImGuiMCP::BeginDisabled(!isAppearanceEditingEnabled(workflow.screen(), session));
+    const bool colorChanged = ImGuiMCP::ColorEdit3(
+        "Color", colorValues, ImGuiMCP::ImGuiColorEditFlags_NoInputs);
+    const bool alphaChanged =
+        ImGuiMCP::SliderFloat("Alpha", &alpha, 0.0F, 1.0F, "%.2f");
+    const EditAppearanceFrameInteraction frameInteraction{
+        .appearanceChanged = colorChanged || alphaChanged,
+        .color = tattooColorValue({
+                .red = colorValues[0],
+                .green = colorValues[1],
+                .blue = colorValues[2],
+            }),
+        .alpha = alpha,
+    };
+    ImGuiMCP::EndDisabled();
+
+    const auto teardown = [] {
+        ImGuiMCP::End();
+        ImGuiMCP::PopStyleVar();
+    };
+    orchestrateEditAppearanceFrame(
+        workflow,
+        frameInteraction,
+        teardown,
+        [&](const AppearanceThumbnailPresentation& thumbnailPresentation) {
+            const float footerHeight = ImGuiMCP::GetFrameHeightWithSpacing();
+            const float imageHeight = std::max(
+                1.0F,
+                ImGuiMCP::GetContentRegionAvail().y - footerHeight);
+            ImGuiMCP::PushStyleColor(
+                ImGuiMCP::ImGuiCol_ChildBg,
+                ImGuiMCP::ImVec4(0.08F, 0.08F, 0.08F, 1.0F));
+            if (ImGuiMCP::BeginChild(
+                    "EditAppearanceImage",
+                    {0.0F, imageHeight},
+                    ImGuiMCP::ImGuiChildFlags_Border,
+                    ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
+                        ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
+                if (session) {
+                    const core::TattooSlot editSlot{
+                        .index = session->slot,
+                        .occupancy = core::SlotOccupancy::slaveTats,
+                        .tattoo = core::TattooEntry{
+                            .texturePath = std::string(thumbnailPresentation.texturePath)},
+                    };
+                    renderSlotImage(
+                        editSlot,
+                        thumbnailViews,
+                        ImGuiMCP::GetContentRegionAvail(),
+                        {
+                            thumbnailPresentation.color.red,
+                            thumbnailPresentation.color.green,
+                            thumbnailPresentation.color.blue,
+                            thumbnailPresentation.alpha,
+                        });
+                }
+            }
+            ImGuiMCP::EndChild();
+            ImGuiMCP::PopStyleColor();
+
+            ImGuiMCP::BeginDisabled(saving);
+            const bool cancelled = ImGuiMCP::Button("Cancel");
+            ImGuiMCP::EndDisabled();
+            orchestrateEditAppearanceFrame(
+                workflow,
+                {.cancelRequested = cancelled},
+                teardown,
+                [&](const AppearanceThumbnailPresentation&) {
+                    ImGuiMCP::SameLine();
+                    const auto savePresentation = appearanceSavePresentation(
+                        workflow.screen(), workflow.editAppearance());
+                    ImGuiMCP::BeginDisabled(!savePresentation.enabled);
+                    if (ImGuiMCP::Button(savePresentation.label.data())) {
+                        (void)workflow.confirmAppearanceUpdate();
+                    }
+                    ImGuiMCP::EndDisabled();
+                    ImGuiMCP::SameLine();
+                    ImGuiMCP::BeginDisabled(saving);
+                    if (ImGuiMCP::Button("Close")) {
+                        open = false;
+                    }
+                    ImGuiMCP::EndDisabled();
+
+                    teardown();
+                    if (!open && close) {
+                        close();
+                    }
+                });
+        });
+}
+
 }  // namespace
 
 bool OfficialMenuFrameworkAdapter::renderLauncher() {
@@ -1156,6 +1393,11 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         workflow.screen() == SlotWorkflowScreen::removeConfirmation ||
         workflow.screen() == SlotWorkflowScreen::removing) {
         renderSlotActions(workflow, thumbnails, close);
+        return;
+    }
+    if (workflow.screen() == SlotWorkflowScreen::editAppearance ||
+        workflow.screen() == SlotWorkflowScreen::savingAppearance) {
+        renderEditAppearance(workflow, thumbnails, close);
         return;
     }
     if (workflow.screen() == SlotWorkflowScreen::preview ||

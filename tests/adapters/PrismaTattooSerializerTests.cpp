@@ -27,5 +27,12 @@ int main() {
         return 1;
     }
 
+    const auto updateSuccess = stui::adapters::toPrismaUpdateTattooSuccessJSON();
+    if (updateSuccess != R"({"type":"success","action":"updateTattoo"})") {
+        std::cerr << "Expected exact updateTattoo success response\n";
+        std::cerr << "Actual:   " << updateSuccess << '\n';
+        return 1;
+    }
+
     return 0;
 }

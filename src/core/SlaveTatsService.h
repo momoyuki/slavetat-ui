@@ -14,6 +14,7 @@ public:
     TattooSlotsResult querySlots(std::uint32_t actorFormId, TattooArea area);
     ApplyTattooResult applyToSlot(const ApplyTattooRequest& request);
     RemoveTattooResult removeFromSlot(const RemoveTattooRequest& request);
+    UpdateTattooAppearanceResult updateAppearance(const UpdateTattooAppearanceRequest& request);
 
 private:
     ITattooRuntime& m_runtime;

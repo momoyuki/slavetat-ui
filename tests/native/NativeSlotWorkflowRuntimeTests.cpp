@@ -1,5 +1,6 @@
 #include "native/NativeSlotWorkflowRuntime.h"
 
+#include <expected>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
@@ -19,6 +20,10 @@ using stui::core::SlotOccupancy;
 using stui::core::TattooArea;
 using stui::core::TattooSlot;
 using stui::core::TattooSlots;
+using stui::core::UpdateTattooAppearanceMode;
+using stui::core::UpdateTattooAppearanceRequest;
+using stui::core::UpdateTattooAppearanceResult;
+using stui::core::UpdateTattooAppearanceSuccess;
 using stui::native::NativeCatalogBrowserModel;
 using stui::native::NativeSlotTask;
 using stui::native::NativeSlotWorkflowModel;
@@ -49,6 +54,7 @@ TattooSlots bodySlotsWithOwnedTattoo() {
     auto result = bodySlots();
     result.slots[1].occupancy = SlotOccupancy::slaveTats;
     result.slots[1].tattoo = stui::core::TattooEntry{
+        .runtimeHandle = 73,
         .section = "Marks",
         .name = "Existing",
         .area = "BODY",
@@ -111,6 +117,17 @@ struct Fixture {
                       .slot = request.slot,
                   });
               },
+              [this](const UpdateTattooAppearanceRequest& request) {
+                  ++appearanceCount;
+                  appearanceRequest = request;
+                  if (appearanceThrows) {
+                      throw std::runtime_error("appearance update failed");
+                  }
+                  return UpdateTattooAppearanceResult(UpdateTattooAppearanceSuccess{
+                      .actorFormId = request.actorFormId,
+                      .runtimeHandle = request.runtimeHandle,
+                  });
+              },
               [this](NativeSlotTask task) {
                   if (schedulerThrows) {
                       schedulerThrows = false;
@@ -130,17 +147,47 @@ struct Fixture {
     std::size_t queryCount{};
     std::size_t applyCount{};
     std::size_t removeCount{};
+    std::size_t appearanceCount{};
     std::uint32_t queriedActor{};
     TattooArea queriedArea{TattooArea::feet};
     ApplyTattooRequest appliedRequest;
     RemoveTattooRequest removedRequest;
+    UpdateTattooAppearanceRequest appearanceRequest;
     bool returnOwnedSlot{};
     bool queryThrows{};
     bool applyThrows{};
     bool removeThrows{};
+    bool appearanceThrows{};
     bool schedulerThrows{};
     NativeSlotWorkflowRuntime runtime;
 };
+
+void completeInitialOwnedSlotQuery(Fixture& fixture) {
+    fixture.returnOwnedSlot = true;
+    fixture.model.start();
+    fixture.runtime.pump();
+    fixture.scheduled.back()();
+}
+
+void beginAppearanceEdit(Fixture& fixture) {
+    completeInitialOwnedSlotQuery(fixture);
+    expect(fixture.model.selectSlot(1) && fixture.model.beginEditAppearance(),
+        "expected editable owned slot");
+    fixture.model.setEditedAppearance(0x123456, 0.35F);
+}
+
+void prepareSynchronizeOnlyRetry(Fixture& fixture) {
+    beginAppearanceEdit(fixture);
+    expect(fixture.model.confirmAppearanceUpdate(), "expected full appearance update request");
+    const auto fullUpdate = fixture.model.takeAppearanceRequest();
+    expect(static_cast<bool>(fullUpdate), "expected full appearance update ticket");
+    fixture.model.completeAppearanceUpdate(fullUpdate->generation, std::unexpected(
+        stui::core::ServiceError{
+            .code = ServiceErrorCode::synchronizeFailed,
+            .message = "appearance synchronization failed",
+        }));
+    expect(fixture.model.confirmAppearanceUpdate(), "expected synchronization retry request");
+}
 
 void schedulesOnlyOneQueryAndCompletesModel() {
     Fixture fixture;
@@ -290,6 +337,118 @@ void convertsRemoveExceptionsToRetryableModelErrors() {
         "expected Remove exception converted to retryable error");
 }
 
+void schedulesFullAppearanceUpdateOnceAndReleasesInFlightGuard() {
+    Fixture fixture;
+    beginAppearanceEdit(fixture);
+    expect(fixture.model.confirmAppearanceUpdate(), "expected full appearance update request");
+
+    fixture.runtime.pump();
+    fixture.runtime.pump();
+    expect(fixture.scheduled.size() == 2,
+        "expected repeated pumps to schedule one full appearance update");
+    expect(fixture.appearanceCount == 0,
+        "expected appearance operation deferred to the game-thread task");
+
+    fixture.scheduled.back()();
+    expect(fixture.appearanceCount == 1 && fixture.appearanceRequest.actorFormId == 0x14 &&
+            fixture.appearanceRequest.runtimeHandle == 73 &&
+            fixture.appearanceRequest.color == 0x123456 &&
+            fixture.appearanceRequest.alpha == 0.35F &&
+            fixture.appearanceRequest.mode == UpdateTattooAppearanceMode::updateAndSynchronize,
+        "expected full appearance request forwarded to the scheduled operation");
+    expect(fixture.model.screen() == SlotWorkflowScreen::currentSlots,
+        "expected successful full appearance update to complete the model");
+
+    fixture.runtime.pump();
+    expect(fixture.scheduled.size() == 3,
+        "expected full appearance completion to release the in-flight guard for refresh");
+}
+
+void schedulesSynchronizeOnlyAppearanceUpdateAndReleasesInFlightGuard() {
+    Fixture fixture;
+    prepareSynchronizeOnlyRetry(fixture);
+
+    fixture.runtime.pump();
+    fixture.runtime.pump();
+    expect(fixture.scheduled.size() == 2,
+        "expected repeated pumps to schedule one synchronization-only update");
+    fixture.scheduled.back()();
+
+    expect(fixture.appearanceCount == 1 &&
+            fixture.appearanceRequest.mode == UpdateTattooAppearanceMode::synchronizeOnly,
+        "expected synchronization retry forwarded without a second full update");
+    fixture.runtime.pump();
+    expect(fixture.scheduled.size() == 3,
+        "expected synchronization completion to release the in-flight guard for refresh");
+}
+
+void mapsFullAppearanceExceptionsAndSchedulerRejectionToUpdateFailed() {
+    Fixture operationFailure;
+    beginAppearanceEdit(operationFailure);
+    expect(operationFailure.model.confirmAppearanceUpdate(),
+        "expected full appearance operation failure request");
+    operationFailure.appearanceThrows = true;
+    operationFailure.runtime.pump();
+    operationFailure.scheduled.back()();
+    expect(operationFailure.model.screen() == SlotWorkflowScreen::editAppearance &&
+            operationFailure.model.error() &&
+            operationFailure.model.error()->code == ServiceErrorCode::updateFailed,
+        "expected full appearance exception converted to updateFailed");
+    operationFailure.appearanceThrows = false;
+    expect(operationFailure.model.confirmAppearanceUpdate(),
+        "expected full appearance exception to remain retryable");
+    operationFailure.runtime.pump();
+    expect(operationFailure.scheduled.size() == 3,
+        "expected operation exception to release the in-flight guard");
+
+    Fixture schedulingFailure;
+    beginAppearanceEdit(schedulingFailure);
+    expect(schedulingFailure.model.confirmAppearanceUpdate(),
+        "expected full appearance scheduler failure request");
+    schedulingFailure.schedulerThrows = true;
+    schedulingFailure.runtime.pump();
+    expect(schedulingFailure.model.screen() == SlotWorkflowScreen::editAppearance &&
+            schedulingFailure.model.error() &&
+            schedulingFailure.model.error()->code == ServiceErrorCode::updateFailed,
+        "expected full appearance scheduler rejection converted to updateFailed");
+    expect(schedulingFailure.model.confirmAppearanceUpdate(),
+        "expected full appearance scheduler rejection to remain retryable");
+    schedulingFailure.runtime.pump();
+    expect(schedulingFailure.scheduled.size() == 2,
+        "expected scheduler rejection to release the in-flight guard");
+}
+
+void mapsSynchronizeOnlyExceptionsAndSchedulerRejectionToSynchronizeFailed() {
+    Fixture operationFailure;
+    prepareSynchronizeOnlyRetry(operationFailure);
+    operationFailure.appearanceThrows = true;
+    operationFailure.runtime.pump();
+    operationFailure.scheduled.back()();
+    expect(operationFailure.model.screen() == SlotWorkflowScreen::editAppearance &&
+            operationFailure.model.error() &&
+            operationFailure.model.error()->code == ServiceErrorCode::synchronizeFailed,
+        "expected synchronization exception converted to synchronizeFailed");
+    expect(operationFailure.model.confirmAppearanceUpdate(),
+        "expected synchronization exception to remain retryable");
+    operationFailure.runtime.pump();
+    expect(operationFailure.scheduled.size() == 3,
+        "expected synchronization exception to release the in-flight guard");
+
+    Fixture schedulingFailure;
+    prepareSynchronizeOnlyRetry(schedulingFailure);
+    schedulingFailure.schedulerThrows = true;
+    schedulingFailure.runtime.pump();
+    expect(schedulingFailure.model.screen() == SlotWorkflowScreen::editAppearance &&
+            schedulingFailure.model.error() &&
+            schedulingFailure.model.error()->code == ServiceErrorCode::synchronizeFailed,
+        "expected synchronization scheduler rejection converted to synchronizeFailed");
+    expect(schedulingFailure.model.confirmAppearanceUpdate(),
+        "expected synchronization scheduler rejection to remain retryable");
+    schedulingFailure.runtime.pump();
+    expect(schedulingFailure.scheduled.size() == 2,
+        "expected synchronization scheduler rejection to release the in-flight guard");
+}
+
 void ignoresStaleCompletionAfterAReplacementQuery() {
     Fixture fixture;
     fixture.model.start();
@@ -327,6 +486,10 @@ int main() {
     failures += run("converts operation and scheduler exceptions to model errors", convertsOperationAndSchedulerExceptionsToModelErrors);
     failures += run("converts Apply and scheduler exceptions to model errors", convertsApplyAndApplySchedulerExceptionsToModelErrors);
     failures += run("converts Remove exceptions to retryable model errors", convertsRemoveExceptionsToRetryableModelErrors);
+    failures += run("schedules full appearance update once and releases in-flight guard", schedulesFullAppearanceUpdateOnceAndReleasesInFlightGuard);
+    failures += run("schedules synchronization-only appearance update and releases in-flight guard", schedulesSynchronizeOnlyAppearanceUpdateAndReleasesInFlightGuard);
+    failures += run("maps full appearance exceptions and scheduler rejection to updateFailed", mapsFullAppearanceExceptionsAndSchedulerRejectionToUpdateFailed);
+    failures += run("maps synchronization-only exceptions and scheduler rejection to synchronizeFailed", mapsSynchronizeOnlyExceptionsAndSchedulerRejectionToSynchronizeFailed);
     failures += run("ignores stale completion after replacement query", ignoresStaleCompletionAfterAReplacementQuery);
     return failures == 0 ? 0 : 1;
 }

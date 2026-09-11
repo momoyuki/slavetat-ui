@@ -164,4 +164,52 @@ RemoveTattooResult SlaveTatsService::removeFromSlot(const RemoveTattooRequest& r
     return m_runtime.removeFromSlot(request);
 }
 
+UpdateTattooAppearanceResult SlaveTatsService::updateAppearance(
+    const UpdateTattooAppearanceRequest& request) {
+    if (!m_runtime.apiAvailable()) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::slaveTatsUnavailable,
+            "SlaveTatsNG not available",
+        });
+    }
+
+    if (!m_runtime.jContainersReady()) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::jContainersUnavailable,
+            "JContainers not ready",
+        });
+    }
+
+    if (request.actorFormId == 0) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::actorNotFound,
+            "Actor not found",
+        });
+    }
+
+    if (request.mode == UpdateTattooAppearanceMode::updateAndSynchronize &&
+        request.runtimeHandle == 0) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::staleTattooHandle,
+            "Tattoo handle is invalid; refresh the slot snapshot and try again",
+        });
+    }
+
+    if (request.color < 0 || request.color > 0xFFFFFF) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::updateFailed,
+            "Tattoo color must be between 0 and 0xFFFFFF",
+        });
+    }
+
+    if (!(request.alpha >= 0.0F && request.alpha <= 1.0F)) {
+        return std::unexpected(ServiceError{
+            ServiceErrorCode::updateFailed,
+            "Tattoo alpha must be between 0 and 1",
+        });
+    }
+
+    return m_runtime.updateAppearance(request);
+}
+
 }  // namespace stui::core

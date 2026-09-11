@@ -16,6 +16,8 @@ public:
     virtual TattooSlotsResult querySlots(std::uint32_t actorFormId, TattooArea area) = 0;
     virtual ApplyTattooResult applyToSlot(const ApplyTattooRequest& request) = 0;
     virtual RemoveTattooResult removeFromSlot(const RemoveTattooRequest& request) = 0;
+    virtual UpdateTattooAppearanceResult updateAppearance(
+        const UpdateTattooAppearanceRequest& request) = 0;
 };
 
 }  // namespace stui::core
