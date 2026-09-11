@@ -127,7 +127,7 @@ struct CatalogBrowserGridLayout {
     float thumbnailHeight{};
 };
 
-struct CatalogAreaBadgeLayout {
+struct CatalogBadgeLayout {
     float x{};
     float y{};
     float width{};
@@ -136,7 +136,7 @@ struct CatalogAreaBadgeLayout {
     float textY{};
 };
 
-[[nodiscard]] CatalogAreaBadgeLayout calculateCatalogAreaBadgeLayout(
+[[nodiscard]] CatalogBadgeLayout calculateCatalogBadgeLayout(
     float containerWidth,
     float textWidth,
     float textHeight,
@@ -176,6 +176,10 @@ struct SlotColorSwatchPresentation {
     std::int32_t color) noexcept;
 [[nodiscard]] std::int32_t tattooColorValue(
     TattooColorComponents components) noexcept;
+
+[[nodiscard]] std::string formatCatalogTattooTooltip(
+    std::string_view tattooName,
+    const std::vector<std::int32_t>& inUseSlots);
 
 [[nodiscard]] std::optional<SlotColorSwatchPresentation> calculateSlotColorSwatch(
     const core::TattooSlot& slot,

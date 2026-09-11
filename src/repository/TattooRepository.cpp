@@ -164,4 +164,37 @@ const TattooFacets& TattooRepository::facets() const noexcept {
     return m_facets;
 }
 
+TattooFacets TattooRepository::contextualFacets(const TattooFilter& filter) const {
+    const std::string foldedArea = foldASCII(filter.area);
+    const std::string foldedSourceId = foldASCII(filter.sourceId);
+    TattooFacets result{
+        .areas = m_facets.areas,
+    };
+    std::unordered_set<std::string> seenSources;
+    std::vector<std::pair<std::string, std::string>> sections;
+
+    for (const auto& entry : m_entries) {
+        if (!foldedArea.empty() && entry.foldedArea != foldedArea) {
+            continue;
+        }
+        if (seenSources.insert(entry.foldedSourceId).second) {
+            result.sources.push_back(TattooSourceOption{
+                .sourceId = entry.definition.sourceId,
+                .packName = entry.definition.packName,
+            });
+        }
+        if (foldedSourceId.empty() || entry.foldedSourceId == foldedSourceId) {
+            sections.emplace_back(entry.foldedSection, entry.definition.section);
+        }
+    }
+
+    std::ranges::sort(result.sources, [](const TattooSourceOption& left,
+                                            const TattooSourceOption& right) {
+        return std::tuple(foldASCII(left.packName), foldASCII(left.sourceId), left.sourceId) <
+               std::tuple(foldASCII(right.packName), foldASCII(right.sourceId), right.sourceId);
+    });
+    result.sections = buildFacetValues(std::move(sections));
+    return result;
+}
+
 }  // namespace stui::repository

@@ -211,7 +211,8 @@ void NativeSlotWorkflowModel::backToSlots() {
 }
 
 void NativeSlotWorkflowModel::selectTattoo(const repository::TattooDefinition& tattoo) {
-    if (m_screen != SlotWorkflowScreen::picker || !m_targetSlot) {
+    if (m_screen != SlotWorkflowScreen::picker || !m_targetSlot ||
+        !equalsFoldedASCII(tattoo.area, areaName(m_selectedArea))) {
         return;
     }
 
@@ -241,7 +242,8 @@ void NativeSlotWorkflowModel::cancelPreview() {
 
 bool NativeSlotWorkflowModel::confirmApply() {
     if (m_screen != SlotWorkflowScreen::preview || !m_targetSlot || !m_previewTattoo ||
-        !m_previewAppearance) {
+        !m_previewAppearance ||
+        !equalsFoldedASCII(m_previewTattoo->area, areaName(m_selectedArea))) {
         return false;
     }
 
@@ -380,6 +382,23 @@ const repository::TattooDefinition* NativeSlotWorkflowModel::previewTattoo() con
 
 const PreviewTattooAppearance* NativeSlotWorkflowModel::previewAppearance() const noexcept {
     return m_previewAppearance ? &*m_previewAppearance : nullptr;
+}
+
+std::vector<std::int32_t> NativeSlotWorkflowModel::inUseSlots(
+    const repository::TattooDefinition& tattoo) const {
+    std::vector<std::int32_t> matches;
+    const auto* currentSlots = slots();
+    if (!currentSlots) {
+        return matches;
+    }
+
+    for (const auto& slot : currentSlots->slots) {
+        if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo &&
+            slot.tattoo->section == tattoo.section && slot.tattoo->name == tattoo.name) {
+            matches.push_back(slot.index);
+        }
+    }
+    return matches;
 }
 
 const core::ServiceError* NativeSlotWorkflowModel::error() const noexcept {

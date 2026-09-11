@@ -1,8 +1,34 @@
 #include "native/NativeCatalogBrowserModel.h"
 
+#include <algorithm>
+#include <string_view>
 #include <utility>
 
 namespace stui::native {
+namespace {
+
+bool equalsFoldedASCII(std::string_view left, std::string_view right) {
+    return left.size() == right.size() && std::ranges::equal(
+        left,
+        right,
+        [](char leftCharacter, char rightCharacter) {
+            const auto fold = [](char character) {
+                return character >= 'A' && character <= 'Z'
+                    ? static_cast<char>(character + ('a' - 'A'))
+                    : character;
+            };
+            return fold(leftCharacter) == fold(rightCharacter);
+        });
+}
+
+template <class Range, class Projection>
+bool containsFolded(const Range& values, std::string_view value, Projection projection) {
+    return std::ranges::any_of(values, [&](const auto& candidate) {
+        return equalsFoldedASCII(std::invoke(projection, candidate), value);
+    });
+}
+
+}  // namespace
 
 NativeCatalogBrowserModel::NativeCatalogBrowserModel(CatalogSnapshotProvider provider) :
     m_provider(std::move(provider)) {}
@@ -27,18 +53,21 @@ void NativeCatalogBrowserModel::setSearch(std::string value) {
 void NativeCatalogBrowserModel::setSourceId(std::string value) {
     m_filter.sourceId = std::move(value);
     m_filter.pageIndex = 0;
+    reconcileContextualFilters();
     query();
 }
 
 void NativeCatalogBrowserModel::setSection(std::string value) {
     m_filter.section = std::move(value);
     m_filter.pageIndex = 0;
+    reconcileContextualFilters();
     query();
 }
 
 void NativeCatalogBrowserModel::setArea(std::string value) {
     m_filter.area = std::move(value);
     m_filter.pageIndex = 0;
+    reconcileContextualFilters();
     query();
 }
 
@@ -73,12 +102,41 @@ const repository::TattooPage& NativeCatalogBrowserModel::page() const noexcept {
     return m_page;
 }
 
+repository::TattooFacets NativeCatalogBrowserModel::contextualFacets() const {
+    return m_snapshot
+        ? m_snapshot->repository.contextualFacets(m_filter)
+        : repository::TattooFacets{};
+}
+
 repository::TattooCatalogSnapshot NativeCatalogBrowserModel::snapshot() const noexcept {
     return m_snapshot;
 }
 
 void NativeCatalogBrowserModel::resetFilter() {
     m_filter = repository::TattooFilter{.pageSize = kPageSize};
+}
+
+void NativeCatalogBrowserModel::reconcileContextualFilters() {
+    if (!m_snapshot) {
+        m_filter.sourceId.clear();
+        m_filter.section.clear();
+        return;
+    }
+
+    auto facets = m_snapshot->repository.contextualFacets(m_filter);
+    if (!m_filter.sourceId.empty() &&
+        !containsFolded(facets.sources, m_filter.sourceId,
+            [](const repository::TattooSourceOption& source) -> std::string_view {
+                return source.sourceId;
+            })) {
+        m_filter.sourceId.clear();
+        facets = m_snapshot->repository.contextualFacets(m_filter);
+    }
+    if (!m_filter.section.empty() &&
+        !containsFolded(facets.sections, m_filter.section,
+            [](const std::string& section) -> std::string_view { return section; })) {
+        m_filter.section.clear();
+    }
 }
 
 void NativeCatalogBrowserModel::query() {

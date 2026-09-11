@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace stui::native {
 
@@ -79,6 +80,8 @@ public:
     [[nodiscard]] std::optional<std::int32_t> targetSlot() const noexcept;
     [[nodiscard]] const repository::TattooDefinition* previewTattoo() const noexcept;
     [[nodiscard]] const PreviewTattooAppearance* previewAppearance() const noexcept;
+    [[nodiscard]] std::vector<std::int32_t> inUseSlots(
+        const repository::TattooDefinition& tattoo) const;
     [[nodiscard]] const core::ServiceError* error() const noexcept;
 
 private:

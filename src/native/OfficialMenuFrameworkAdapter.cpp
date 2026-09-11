@@ -307,7 +307,7 @@ CatalogBrowserGridLayout calculateCatalogBrowserGridLayout(
     };
 }
 
-CatalogAreaBadgeLayout calculateCatalogAreaBadgeLayout(
+CatalogBadgeLayout calculateCatalogBadgeLayout(
     float containerWidth,
     float textWidth,
     float textHeight,
@@ -376,6 +376,24 @@ std::int32_t tattooColorValue(TattooColorComponents components) noexcept {
         (channel(components.red) << 16U) |
         (channel(components.green) << 8U) |
         channel(components.blue));
+}
+
+std::string formatCatalogTattooTooltip(
+    std::string_view tattooName,
+    const std::vector<std::int32_t>& inUseSlots) {
+    std::string tooltip(tattooName);
+    if (inUseSlots.empty()) {
+        return tooltip;
+    }
+
+    tooltip += "\nIn use: Slots ";
+    for (std::size_t index = 0; index < inUseSlots.size(); ++index) {
+        if (index != 0) {
+            tooltip += ", ";
+        }
+        tooltip += std::to_string(inUseSlots[index]);
+    }
+    return tooltip;
 }
 
 std::optional<SlotColorSwatchPresentation> calculateSlotColorSwatch(
@@ -1147,6 +1165,10 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     }
 
     model.refresh();
+    const auto targetArea = slotAreaLabel(workflow.selectedArea());
+    if (model.filter().area != targetArea) {
+        model.setArea(std::string(targetArea));
+    }
     thumbnails.synchronize(model.snapshot(), collectPickerTexturePaths(model.page()));
     thumbnails.pump();
     const auto thumbnailViews = thumbnails.views();
@@ -1188,29 +1210,21 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     const auto snapshot = model.snapshot();
     std::vector<CatalogBrowserSourceOption> sourceOptions;
     std::vector<const char*> sectionLabels{"All sections"};
-    std::vector<const char*> areaLabels{"All areas"};
     int sourceIndex = 0;
     int sectionIndex = 0;
-    int areaIndex = 0;
+    const auto contextualFacets = model.contextualFacets();
 
     if (snapshot) {
-        const auto& facets = snapshot->repository.facets();
-        sourceOptions = buildCatalogBrowserSourceOptions(facets.sources);
-        for (std::size_t index = 0; index < facets.sources.size(); ++index) {
-            if (facets.sources[index].sourceId == filter.sourceId) {
+        sourceOptions = buildCatalogBrowserSourceOptions(contextualFacets.sources);
+        for (std::size_t index = 0; index < contextualFacets.sources.size(); ++index) {
+            if (contextualFacets.sources[index].sourceId == filter.sourceId) {
                 sourceIndex = static_cast<int>(index + 1);
             }
         }
-        for (std::size_t index = 0; index < facets.sections.size(); ++index) {
-            sectionLabels.push_back(facets.sections[index].c_str());
-            if (facets.sections[index] == filter.section) {
+        for (std::size_t index = 0; index < contextualFacets.sections.size(); ++index) {
+            sectionLabels.push_back(contextualFacets.sections[index].c_str());
+            if (contextualFacets.sections[index] == filter.section) {
                 sectionIndex = static_cast<int>(index + 1);
-            }
-        }
-        for (std::size_t index = 0; index < facets.areas.size(); ++index) {
-            areaLabels.push_back(facets.areas[index].c_str());
-            if (facets.areas[index] == filter.area) {
-                areaIndex = static_cast<int>(index + 1);
             }
         }
     }
@@ -1267,19 +1281,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                 sectionLabels.data(),
                 static_cast<int>(sectionLabels.size()))) {
             model.setSection(
-                sectionIndex == 0 ? "" : snapshot->repository.facets().sections[sectionIndex - 1]);
-        }
-
-        ImGuiMCP::TableNextRow();
-        ImGuiMCP::TableSetColumnIndex(0);
-        ImGuiMCP::AlignTextToFramePadding();
-        ImGuiMCP::TextUnformatted("Area");
-        ImGuiMCP::TableSetColumnIndex(1);
-        ImGuiMCP::SetNextItemWidth(-1.0F);
-        if (ImGuiMCP::Combo(
-                "##Area", &areaIndex, areaLabels.data(), static_cast<int>(areaLabels.size()))) {
-            model.setArea(
-                areaIndex == 0 ? "" : snapshot->repository.facets().areas[areaIndex - 1]);
+                sectionIndex == 0 ? "" : contextualFacets.sections[sectionIndex - 1]);
         }
         ImGuiMCP::EndTable();
     }
@@ -1325,6 +1327,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                 }
                 ImGuiMCP::TableSetColumnIndex(static_cast<int>(gridPosition.column));
                 const auto& tattoo = page.entries[index];
+                const auto inUseSlots = workflow.inUseSlots(tattoo);
                 const auto thumbnailIndex = findCatalogThumbnailViewIndex(
                     tattoo.texturePath,
                     thumbnailViews);
@@ -1370,9 +1373,10 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                         }
                     }
 
-                    if (!tattoo.area.empty()) {
-                        const auto textSize = ImGuiMCP::CalcTextSize(tattoo.area.c_str());
-                        const auto badge = calculateCatalogAreaBadgeLayout(
+                    if (!inUseSlots.empty()) {
+                        constexpr const char* badgeText = "In Use";
+                        const auto textSize = ImGuiMCP::CalcTextSize(badgeText);
+                        const auto badge = calculateCatalogBadgeLayout(
                             imageRegion.x,
                             textSize.x,
                             textSize.y,
@@ -1400,13 +1404,14 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                                 imageScreenOrigin.y + badge.textY,
                             },
                             0xFFFFFFFF,
-                            tattoo.area.c_str());
+                            badgeText);
                     }
                 }
                 ImGuiMCP::EndChild();
                 ImGuiMCP::PopStyleColor();
                 if (ImGuiMCP::IsItemHovered()) {
-                    ImGuiMCP::SetTooltip("%s", tattoo.name.c_str());
+                    const auto tooltip = formatCatalogTattooTooltip(tattoo.name, inUseSlots);
+                    ImGuiMCP::SetTooltip("%s", tooltip.c_str());
                 }
                 if (ImGuiMCP::IsItemClicked()) {
                     workflow.selectTattoo(tattoo);

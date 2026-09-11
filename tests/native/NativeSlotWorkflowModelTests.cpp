@@ -313,6 +313,60 @@ void editedAppearanceFlowsIntoApplyRequest() {
         "expected edited color and alpha in the exact Apply request");
 }
 
+void rejectsTattooOutsideTheSelectedArea() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    completeInitialQuery(model, slots(TattooArea::body, 3));
+    expect(model.selectSlot(2), "expected empty Body target selected");
+
+    model.selectTattoo(tattoo("Face Mark", 9, "Face"));
+    expect(model.screen() == SlotWorkflowScreen::picker && !model.previewTattoo(),
+        "expected Face tattoo rejected for a Body target");
+
+    model.selectTattoo(tattoo("Body Mark", 10, "body"));
+    expect(model.screen() == SlotWorkflowScreen::preview && model.previewTattoo(),
+        "expected case-insensitive Body tattoo accepted for a Body target");
+}
+
+void findsInUseSlotsBySlaveTatsTattooIdentity() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    auto bodySlots = slots(TattooArea::body, 4);
+    for (const int index : {0, 2}) {
+        bodySlots.slots[index].occupancy = SlotOccupancy::slaveTats;
+        bodySlots.slots[index].tattoo = TattooEntry{
+            .section = "Marks",
+            .name = "Corruption",
+            .area = "BODY",
+            .slot = index,
+        };
+    }
+    bodySlots.slots[1].occupancy = SlotOccupancy::slaveTats;
+    bodySlots.slots[1].tattoo = TattooEntry{
+        .section = "Marks",
+        .name = "Different",
+        .area = "BODY",
+        .slot = 1,
+    };
+    bodySlots.slots[3].occupancy = SlotOccupancy::external;
+    bodySlots.slots[3].tattoo = TattooEntry{
+        .section = "Marks",
+        .name = "Corruption",
+        .area = "BODY",
+        .slot = 3,
+    };
+    completeInitialQuery(model, std::move(bodySlots));
+
+    expect(model.inUseSlots(tattoo("Corruption", 7)) == std::vector<std::int32_t>{0, 2},
+        "expected exact identity matches from SlaveTats-managed slots only");
+    expect(model.inUseSlots(tattoo("corruption", 8)).empty(),
+        "expected runtime-exact Tattoo Identity matching");
+}
+
 void previewDoesNotApplyAndCancelReturnsToSlots() {
     TattooCatalogSnapshot snapshot = catalogWithEntries(13);
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
@@ -510,6 +564,8 @@ int main() {
     failures += run("remove completion refreshes or retains confirmation", removeCompletionRefreshesOrRetainsConfirmationForRetry);
     failures += run("empty and owned targets initialize expected appearance", emptyAndOwnedTargetsInitializeExpectedAppearance);
     failures += run("edited appearance flows into Apply request", editedAppearanceFlowsIntoApplyRequest);
+    failures += run("rejects tattoo outside selected Area", rejectsTattooOutsideTheSelectedArea);
+    failures += run("finds In Use slots by Tattoo Identity", findsInUseSlotsBySlaveTatsTattooIdentity);
     failures += run("preview does not apply and Cancel returns to Slots", previewDoesNotApplyAndCancelReturnsToSlots);
     failures += run("explicit confirmation creates one fixed-policy request", explicitConfirmationCreatesOneFixedPolicyRequest);
     failures += run("apply success returns to slots and refreshes area", applySuccessReturnsToSlotsAndRefreshesArea);

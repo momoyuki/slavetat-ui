@@ -47,6 +47,7 @@ public:
 
     [[nodiscard]] TattooPage query(const TattooFilter& filter = {}) const;
     [[nodiscard]] const TattooFacets& facets() const noexcept;
+    [[nodiscard]] TattooFacets contextualFacets(const TattooFilter& filter) const;
 
 private:
     struct IndexedDefinition {

@@ -196,8 +196,8 @@ void browserGridUsesRemainingHeightWithoutVerticalScrolling() {
         "expected small windows to clamp thumbnail height instead of going negative");
 }
 
-void areaBadgeAnchorsInsideThumbnailTopRightCorner() {
-    const auto badge = stui::native::calculateCatalogAreaBadgeLayout(
+void catalogBadgeAnchorsInsideThumbnailTopRightCorner() {
+    const auto badge = stui::native::calculateCatalogBadgeLayout(
         200.0F, 40.0F, 16.0F, 6.0F, 3.0F, 4.0F);
 
     expect(badge.x == 144.0F && badge.y == 4.0F,
@@ -287,6 +287,14 @@ void currentSlotColorSwatchSkipsEmptyAndExternalSlots() {
     expect(!stui::native::calculateSlotColorSwatch(
                 external, 200.0F, 120.0F, 16.0F, 6.0F).has_value(),
         "expected external Current Slot to omit the color swatch");
+}
+
+void catalogTooltipIncludesInUseSlotDetails() {
+    expect(stui::native::formatCatalogTattooTooltip("Corruption", {}) == "Corruption",
+        "expected unused tattoo tooltip to contain only its name");
+    expect(stui::native::formatCatalogTattooTooltip("Corruption", {2, 5}) ==
+            "Corruption\nIn use: Slots 2, 5",
+        "expected In Use tooltip to list every matching Current Slot");
 }
 
 void pageInputKeepsPendingEditsUntilEnterOrFocusLoss() {
@@ -556,8 +564,8 @@ int main() {
         std::cout << "PASS thumbnail card widgets have stable unique IDs\n";
         browserGridUsesRemainingHeightWithoutVerticalScrolling();
         std::cout << "PASS browser grid uses remaining height without scrolling\n";
-        areaBadgeAnchorsInsideThumbnailTopRightCorner();
-        std::cout << "PASS area badge anchors inside thumbnail top-right\n";
+        catalogBadgeAnchorsInsideThumbnailTopRightCorner();
+        std::cout << "PASS catalog badge anchors inside thumbnail top-right\n";
         thumbnailCardsReserveNoPersistentMetadataRow();
         std::cout << "PASS thumbnail cards reserve no persistent metadata row\n";
         footerControlAlignsToRightContentEdge();
@@ -570,6 +578,8 @@ int main() {
         std::cout << "PASS Current Slot color swatch uses owned tattoo color\n";
         currentSlotColorSwatchSkipsEmptyAndExternalSlots();
         std::cout << "PASS Current Slot color swatch skips empty and external slots\n";
+        catalogTooltipIncludesInUseSlotDetails();
+        std::cout << "PASS catalog tooltip includes In Use Slot details\n";
         pageInputKeepsPendingEditsUntilEnterOrFocusLoss();
         std::cout << "PASS page input keeps pending edits until commit\n";
         classifiesEmptyCatalogSeparatelyFromNoMatches();
