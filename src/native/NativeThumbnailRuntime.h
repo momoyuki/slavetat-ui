@@ -6,6 +6,8 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -41,6 +43,9 @@ public:
     void synchronize(
         repository::TattooCatalogSnapshot snapshot,
         const repository::TattooPage& page);
+    void synchronize(
+        NativeThumbnailEpoch epoch,
+        std::span<const std::string> texturePaths);
     void pump();
     [[nodiscard]] std::vector<NativeThumbnailView> views() const;
     void reset();

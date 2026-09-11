@@ -4,6 +4,8 @@
 #include "repository/TattooCatalogStore.h"
 #include "native/NativeMenu.h"
 #include "native/NativeCatalogBrowserModel.h"
+#include "native/NativeSlotWorkflowModel.h"
+#include "native/NativeSlotWorkflowRuntime.h"
 #include "native/D3D11NativeThumbnailSource.h"
 #include "native/NativeThumbnailRuntime.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
@@ -21,6 +23,28 @@ namespace {
 repository::TattooCatalogStore g_tattooCatalogStore;
 native::NativeCatalogBrowserModel g_nativeCatalogBrowser(
     [] { return g_tattooCatalogStore.snapshot(); });
+native::NativeSlotWorkflowModel g_nativeSlotWorkflow(g_nativeCatalogBrowser);
+native::NativeSlotWorkflowRuntime g_nativeSlotWorkflowRuntime(
+    g_nativeSlotWorkflow,
+    [](std::uint32_t actorFormId, core::TattooArea area) {
+        return Bridge::get()->tattooService().querySlots(actorFormId, area);
+    },
+    [](const core::ApplyTattooRequest& request) {
+        return Bridge::get()->tattooService().applyToSlot(request);
+    },
+    [](const core::RemoveTattooRequest& request) {
+        return Bridge::get()->tattooService().removeFromSlot(request);
+    },
+    [](const core::UpdateTattooAppearanceRequest& request) {
+        return Bridge::get()->tattooService().updateAppearance(request);
+    },
+    [](native::NativeSlotTask task) {
+        auto* taskInterface = SKSE::GetTaskInterface();
+        if (!taskInterface) {
+            throw std::runtime_error("SKSE task interface unavailable");
+        }
+        taskInterface->AddTask(std::move(task));
+    });
 
 std::unique_ptr<native::NativeThumbnailRuntime> makeUnavailableNativeThumbnailRuntime(
     std::filesystem::path textureRoot = {}) {
@@ -234,6 +258,7 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
             }
         }
         Bridge::get()->onDataLoaded();
+        g_nativeSlotWorkflow.start();
         break;
     }
 }
@@ -306,7 +331,11 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
     static native::OfficialMenuFrameworkAdapter menuFrameworkAdapter;
     static native::NativeMenu nativeMenu([](native::NativeMenu& menu) {
         native::OfficialMenuFrameworkAdapter::renderFoundation(
-            g_nativeCatalogBrowser, *g_nativeThumbnailRuntime, [&menu] { menu.close(); });
+            g_nativeSlotWorkflow,
+            g_nativeSlotWorkflowRuntime,
+            g_nativeCatalogBrowser,
+            *g_nativeThumbnailRuntime,
+            [&menu] { menu.close(); });
     }, &native::OfficialMenuFrameworkAdapter::renderLauncher);
     if (const auto result = nativeMenu.registerMenu(menuFrameworkAdapter); !result) {
         logger::warn(

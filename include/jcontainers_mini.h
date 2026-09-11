@@ -5,6 +5,7 @@
 
 #include "JContainers/jc_interface.h"
 #include "RE/Skyrim.h"
+#include <limits>
 #include <string>
 
 namespace jcmini {
@@ -32,6 +33,7 @@ inline void (*fn_jmap_setFlt)(void*, int32_t, RE::BSFixedString, float)   = null
 
 // JFormDB (form-keyed storage — used by SlaveTats for per-actor data)
 inline RE::BSFixedString (*fn_jfdb_getStr)(void*, RE::TESForm*, RE::BSFixedString, RE::BSFixedString) = nullptr;
+inline int32_t           (*fn_jfdb_getInt)(void*, RE::TESForm*, RE::BSFixedString, int32_t)           = nullptr;
 inline void              (*fn_jfdb_setInt)(void*, RE::TESForm*, RE::BSFixedString, int32_t)           = nullptr;
 
 // JValue
@@ -66,6 +68,7 @@ inline bool Init(const jc::root_interface* root) {
     bindFunc(refl, "setFlt",     "JMap",   fn_jmap_setFlt);
 
     bindFunc(refl, "getStr",     "JFormDB", fn_jfdb_getStr);
+    bindFunc(refl, "getInt",     "JFormDB", fn_jfdb_getInt);
     bindFunc(refl, "setInt",     "JFormDB", fn_jfdb_setInt);
 
     bindFunc(refl, "addToPool",  "JValue", fn_jval_addToPool);
@@ -118,6 +121,20 @@ struct JMap {
     static void setFlt(int obj, const char* key, float val) {
         if (fn_jmap_setFlt) fn_jmap_setFlt(g_domain, obj, RE::BSFixedString(key), val);
     }
+    // JContainers setters return void, so verify the observable postcondition
+    // with a default value that cannot be mistaken for the requested value.
+    static bool setIntAndVerify(int obj, const char* key, int val) {
+        if (obj == 0 || !fn_jmap_setInt || !fn_jmap_getInt) return false;
+        fn_jmap_setInt(g_domain, obj, RE::BSFixedString(key), val);
+        constexpr int missing = std::numeric_limits<int>::min();
+        return fn_jmap_getInt(g_domain, obj, RE::BSFixedString(key), missing) == val;
+    }
+    static bool setFltAndVerify(int obj, const char* key, float val) {
+        if (obj == 0 || !fn_jmap_setFlt || !fn_jmap_getFlt) return false;
+        fn_jmap_setFlt(g_domain, obj, RE::BSFixedString(key), val);
+        const float missing = std::numeric_limits<float>::quiet_NaN();
+        return fn_jmap_getFlt(g_domain, obj, RE::BSFixedString(key), missing) == val;
+    }
 };
 
 struct JFormDB {
@@ -127,6 +144,17 @@ struct JFormDB {
     }
     static void setInt(RE::TESForm* form, const char* path, int val) {
         if (fn_jfdb_setInt && form) fn_jfdb_setInt(g_domain, form, RE::BSFixedString(path), val);
+    }
+    static int getInt(RE::TESForm* form, const char* path, int def = 0) {
+        return fn_jfdb_getInt && form
+            ? fn_jfdb_getInt(g_domain, form, RE::BSFixedString(path), def)
+            : def;
+    }
+    static bool setIntAndVerify(RE::TESForm* form, const char* path, int val) {
+        if (!form || !fn_jfdb_setInt || !fn_jfdb_getInt) return false;
+        fn_jfdb_setInt(g_domain, form, RE::BSFixedString(path), val);
+        constexpr int missing = std::numeric_limits<int>::min();
+        return fn_jfdb_getInt(g_domain, form, RE::BSFixedString(path), missing) == val;
     }
 };
 

@@ -187,6 +187,34 @@ void buildsStableSourceAwareFacets() {
         "expected folded duplicate-free areas");
 }
 
+void contextualFacetsFollowAreaThenSource() {
+    TattooRepository repository({
+        definition("body-a.json", "Body A", "Marks", "A", "a.dds", "Body"),
+        definition("body-b.json", "Body B", "Runes", "B", "b.dds", "BODY"),
+        definition("face.json", "Face", "Face Marks", "C", "c.dds", "Face"),
+    });
+
+    const auto bodyFacets = repository.contextualFacets(TattooFilter{.area = "body"});
+    expect(bodyFacets.sources == std::vector<stui::repository::TattooSourceOption>{
+               {.sourceId = "body-a.json", .packName = "Body A"},
+               {.sourceId = "body-b.json", .packName = "Body B"},
+           },
+        "expected Body Source options to exclude Face-only sources");
+    expect(bodyFacets.sections == std::vector<std::string>{"Marks", "Runes"},
+        "expected Body Section options from every Body source");
+
+    const auto sourceFacets = repository.contextualFacets(TattooFilter{
+        .search = "not present",
+        .sourceId = "BODY-A.JSON",
+        .section = "not present",
+        .area = "BODY",
+    });
+    expect(sourceFacets.sources == bodyFacets.sources,
+        "expected Source options to depend only on Area");
+    expect(sourceFacets.sections == std::vector<std::string>{"Marks"},
+        "expected Section options narrowed only by Area and Source");
+}
+
 void emptyRepositoryReturnsEmptyPageAndFacets() {
     TattooRepository repository(std::vector<TattooDefinition>{});
 
@@ -257,6 +285,9 @@ int main() {
         combinesSourceSectionAndAreaFilters);
     failures += run("empty match resets paging", emptyMatchResetsPaging);
     failures += run("builds stable source-aware facets", buildsStableSourceAwareFacets);
+    failures += run(
+        "contextual facets follow Area then Source",
+        contextualFacetsFollowAreaThenSource);
     failures += run(
         "empty repository returns empty page and facets",
         emptyRepositoryReturnsEmptyPageAndFacets);

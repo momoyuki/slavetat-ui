@@ -156,6 +156,31 @@ void preservesStateForSameSnapshotAndResetsForReplacement() {
         "expected replacement snapshot content");
 }
 
+void clearsFiltersThatAreInvalidInTheNewContext() {
+    TattooCatalogSnapshot current = snapshot({
+        tattoo("body-a.json", "Body Marks", "Body", "Body A", 0),
+        tattoo("body-b.json", "Body Runes", "Body", "Body B", 1),
+        tattoo("face.json", "Face Marks", "Face", "Face", 2),
+    });
+    NativeCatalogBrowserModel model([&current] { return current; });
+    model.refresh();
+    model.setArea("Face");
+    model.setSourceId("face.json");
+    model.setSection("Face Marks");
+
+    model.setArea("Body");
+    expect(model.filter().sourceId.empty() && model.filter().section.empty(),
+        "expected Area change to clear Source and Section unavailable in Body");
+
+    model.setSourceId("body-a.json");
+    model.setSection("Body Marks");
+    model.setSourceId("body-b.json");
+    expect(model.filter().section.empty(),
+        "expected Source change to clear a Section unavailable in that Source");
+    expect(model.page().matchedEntries == 1 && model.page().entries.front().name == "Body B",
+        "expected query to use the reconciled Body Source context");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -178,5 +203,8 @@ int main() {
     failures += run("handles null and no-match snapshots", handlesNullAndNoMatchSnapshots);
     failures += run("preserves state for same snapshot and resets for replacement",
         preservesStateForSameSnapshotAndResetsForReplacement);
+    failures += run(
+        "clears filters invalid in the new context",
+        clearsFiltersThatAreInvalidInTheNewContext);
     return failures == 0 ? 0 : 1;
 }

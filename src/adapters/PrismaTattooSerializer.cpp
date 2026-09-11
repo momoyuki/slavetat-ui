@@ -52,4 +52,8 @@ std::string toPrismaTattooJSON(const core::TattooEntry& tattoo) {
         tattoo.alpha);
 }
 
+std::string toPrismaUpdateTattooSuccessJSON() {
+    return R"({"type":"success","action":"updateTattoo"})";
+}
+
 }  // namespace stui::adapters

@@ -2,6 +2,7 @@
 
 #include "native/NativeCatalogBrowserModel.h"
 #include "native/MenuFrameworkPort.h"
+#include "core/TattooModels.h"
 
 #include <cstddef>
 #include <functional>
@@ -13,6 +14,10 @@
 namespace stui::native {
 
 class NativeThumbnailRuntime;
+class NativeSlotWorkflowModel;
+class NativeSlotWorkflowRuntime;
+struct AppearanceEditSession;
+enum class SlotWorkflowScreen;
 enum class NativeThumbnailStatus;
 struct NativeThumbnailView;
 
@@ -52,6 +57,71 @@ struct CatalogThumbnailFit {
     float height{};
 };
 
+enum class SlotCardTreatment {
+    add,
+    replace,
+    disabled,
+};
+
+struct SlotPageRange {
+    std::size_t pageIndex{};
+    std::size_t pageCount{};
+    std::size_t begin{};
+    std::size_t end{};
+};
+
+[[nodiscard]] SlotCardTreatment slotCardTreatment(
+    core::SlotOccupancy occupancy) noexcept;
+[[nodiscard]] SlotPageRange calculateSlotPage(
+    std::size_t slotCount,
+    std::size_t requestedPage,
+    std::size_t pageSize) noexcept;
+[[nodiscard]] std::string_view slotAreaLabel(core::TattooArea area) noexcept;
+[[nodiscard]] std::vector<std::string> collectVisibleSlotTexturePaths(
+    const core::TattooSlots& slots,
+    std::size_t pageIndex,
+    std::size_t pageSize);
+[[nodiscard]] std::string formatSlotTargetLabel(
+    core::TattooArea area,
+    std::int32_t slot);
+[[nodiscard]] std::string previewApplyButtonLabel(
+    std::int32_t slot,
+    bool retry = false);
+[[nodiscard]] bool isPreviewApplyEnabled(
+    SlotWorkflowScreen screen,
+    bool hasTarget,
+    bool hasTattoo) noexcept;
+[[nodiscard]] bool isAppearanceSaveEnabled(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept;
+[[nodiscard]] bool isAppearanceEditingEnabled(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept;
+struct AppearanceSavePresentation {
+    std::string_view label;
+    bool enabled{};
+};
+
+[[nodiscard]] AppearanceSavePresentation appearanceSavePresentation(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* session) noexcept;
+enum class RemoveButtonState {
+    initial,
+    retryRemove,
+    retrySynchronization,
+};
+
+[[nodiscard]] std::string removeButtonLabel(
+    std::int32_t slot,
+    RemoveButtonState state);
+[[nodiscard]] bool isRemoveConfirmationEnabled(
+    SlotWorkflowScreen screen,
+    bool hasTarget) noexcept;
+[[nodiscard]] std::vector<std::string> collectPickerTexturePaths(
+    const repository::TattooPage& page);
+[[nodiscard]] std::size_t pickerVisibleCardCount(
+    const repository::TattooPage& page) noexcept;
+
 struct CatalogCardGridPosition {
     std::size_t row{};
     std::size_t column{};
@@ -63,7 +133,8 @@ struct CatalogCardGridPosition {
 
 [[nodiscard]] std::string catalogCardWidgetId(
     std::string_view role,
-    std::size_t index);
+    std::string_view sourceId,
+    std::size_t sourceIndex);
 
 struct CatalogBrowserGridLayout {
     float gridHeight{};
@@ -71,7 +142,7 @@ struct CatalogBrowserGridLayout {
     float thumbnailHeight{};
 };
 
-struct CatalogAreaBadgeLayout {
+struct CatalogBadgeLayout {
     float x{};
     float y{};
     float width{};
@@ -80,7 +151,7 @@ struct CatalogAreaBadgeLayout {
     float textY{};
 };
 
-[[nodiscard]] CatalogAreaBadgeLayout calculateCatalogAreaBadgeLayout(
+[[nodiscard]] CatalogBadgeLayout calculateCatalogBadgeLayout(
     float containerWidth,
     float textWidth,
     float textHeight,
@@ -95,6 +166,76 @@ struct CatalogAreaBadgeLayout {
 [[nodiscard]] float calculateRightAlignedControlX(
     float availableWidth,
     float controlWidth) noexcept;
+
+struct PickerFooterActionLayout {
+    float groupWidth{};
+    float cancelX{};
+    float closeX{};
+};
+
+struct TattooColorComponents {
+    float red{};
+    float green{};
+    float blue{};
+};
+
+struct AppearanceThumbnailPresentation {
+    std::string_view texturePath;
+    TattooColorComponents color;
+    float alpha{};
+};
+
+struct EditAppearanceFramePresentation {
+    bool shouldContinue{};
+    std::optional<AppearanceThumbnailPresentation> thumbnail;
+};
+
+struct EditAppearanceFrameInteraction {
+    bool appearanceChanged{};
+    std::int32_t color{0xFFFFFF};
+    float alpha{1.0F};
+    bool cancelRequested{};
+};
+
+struct SlotColorSwatchPresentation {
+    float x{};
+    float y{};
+    float size{};
+    std::uint32_t fillColor{};
+    std::uint32_t borderColor{};
+};
+
+[[nodiscard]] TattooColorComponents tattooColorComponents(
+    std::int32_t color) noexcept;
+[[nodiscard]] std::int32_t tattooColorValue(
+    TattooColorComponents components) noexcept;
+[[nodiscard]] std::optional<AppearanceThumbnailPresentation> editAppearanceThumbnailPresentation(
+    const AppearanceEditSession* session) noexcept;
+[[nodiscard]] EditAppearanceFramePresentation editAppearanceFramePresentation(
+    SlotWorkflowScreen screen,
+    const AppearanceEditSession* postCommandSession) noexcept;
+void orchestrateEditAppearanceFrame(
+    NativeSlotWorkflowModel& workflow,
+    EditAppearanceFrameInteraction interaction,
+    const std::function<void()>& teardown,
+    const std::function<void(const AppearanceThumbnailPresentation&)>& continueRendering);
+
+[[nodiscard]] std::string formatCatalogTattooTooltip(
+    std::string_view tattooName,
+    const std::vector<std::int32_t>& inUseSlots);
+
+[[nodiscard]] std::optional<SlotColorSwatchPresentation> calculateSlotColorSwatch(
+    const core::TattooSlot& slot,
+    float containerWidth,
+    float containerHeight,
+    float size,
+    float margin) noexcept;
+
+[[nodiscard]] PickerFooterActionLayout calculatePickerFooterActionLayout(
+    float availableWidth,
+    float cancelWidth,
+    float closeWidth,
+    float itemSpacing) noexcept;
 
 [[nodiscard]] CatalogBrowserGridLayout calculateCatalogBrowserGridLayout(
     float availableHeight,
@@ -170,7 +311,9 @@ public:
         MenuPosition viewportPosition, MenuSize viewportSize) noexcept;
     [[nodiscard]] static bool renderLauncher();
     static void renderFoundation(
-        NativeCatalogBrowserModel& model,
+        NativeSlotWorkflowModel& workflow,
+        NativeSlotWorkflowRuntime& slotRuntime,
+        NativeCatalogBrowserModel& catalog,
         NativeThumbnailRuntime& thumbnails,
         const std::function<void()>& close);
 

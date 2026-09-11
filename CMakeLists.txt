@@ -24,13 +24,20 @@ set(headers
     src/native/NativeMenu.h
     src/native/OfficialMenuFrameworkAdapter.h
     src/native/NativeCatalogBrowserModel.h
+    src/native/NativeSlotWorkflowModel.h
+    src/native/NativeSlotWorkflowRuntime.h
     src/native/NativeThumbnailController.h
     src/native/NativeThumbnailRuntime.h
     src/native/D3D11NativeThumbnailSource.h
+    src/adapters/PrismaSlotSerializer.h
     src/adapters/PrismaTattooSerializer.h
     src/core/ITattooRuntime.h
     src/core/SlaveTatsService.h
     src/core/TattooModels.h
+    src/runtime/OverlaySlotConfiguration.h
+    src/runtime/AppliedTattooHandleMembership.h
+    src/runtime/SlaveTatsAlpha.h
+    src/runtime/UpdateTattooAppearanceOrchestration.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooCatalogLoader.h
     src/repository/TattooCatalogStore.h
@@ -51,11 +58,16 @@ set(sources
     src/native/NativeMenu.cpp
     src/native/OfficialMenuFrameworkAdapter.cpp
     src/native/NativeCatalogBrowserModel.cpp
+    src/native/NativeSlotWorkflowModel.cpp
+    src/native/NativeSlotWorkflowRuntime.cpp
     src/native/NativeThumbnailController.cpp
     src/native/NativeThumbnailRuntime.cpp
     src/native/D3D11NativeThumbnailSource.cpp
+    src/adapters/PrismaSlotSerializer.cpp
     src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
+    src/runtime/OverlaySlotConfiguration.cpp
+    src/runtime/UpdateTattooAppearanceOrchestration.cpp
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
     src/repository/TattooCatalogStore.cpp
@@ -127,6 +139,26 @@ if(BUILD_TESTING)
     )
     target_include_directories(NativeCatalogBrowserModelTests PRIVATE src)
     add_test(NAME NativeCatalogBrowserModelTests COMMAND NativeCatalogBrowserModelTests)
+
+    add_executable(NativeSlotWorkflowModelTests
+        src/native/NativeSlotWorkflowModel.cpp
+        src/native/NativeCatalogBrowserModel.cpp
+        src/repository/TattooRepository.cpp
+        tests/native/NativeSlotWorkflowModelTests.cpp
+    )
+    target_include_directories(NativeSlotWorkflowModelTests PRIVATE src)
+    add_test(NAME NativeSlotWorkflowModelTests COMMAND NativeSlotWorkflowModelTests)
+
+    add_executable(NativeSlotWorkflowRuntimeTests
+        src/native/NativeSlotWorkflowRuntime.cpp
+        src/native/NativeSlotWorkflowModel.cpp
+        src/native/NativeCatalogBrowserModel.cpp
+        src/repository/TattooRepository.cpp
+        tests/native/NativeSlotWorkflowRuntimeTests.cpp
+    )
+    target_include_directories(NativeSlotWorkflowRuntimeTests PRIVATE src)
+    add_test(NAME NativeSlotWorkflowRuntimeTests COMMAND NativeSlotWorkflowRuntimeTests)
+
     add_executable(NativeMenuTests
         src/native/NativeMenu.cpp
         tests/native/NativeMenuTests.cpp
@@ -137,6 +169,8 @@ if(BUILD_TESTING)
     add_executable(OfficialMenuFrameworkAdapterTests
         src/native/OfficialMenuFrameworkAdapter.cpp
         src/native/NativeCatalogBrowserModel.cpp
+        src/native/NativeSlotWorkflowModel.cpp
+        src/native/NativeSlotWorkflowRuntime.cpp
         src/native/NativeThumbnailController.cpp
         src/native/NativeThumbnailRuntime.cpp
         src/repository/TattooRepository.cpp
@@ -153,12 +187,70 @@ if(BUILD_TESTING)
     target_include_directories(SlaveTatsUICoreTests PRIVATE src)
     add_test(NAME SlaveTatsUICoreTests COMMAND SlaveTatsUICoreTests)
 
+    add_executable(OverlaySlotConfigurationTests
+        src/runtime/OverlaySlotConfiguration.cpp
+        tests/runtime/OverlaySlotConfigurationTests.cpp
+    )
+    target_include_directories(OverlaySlotConfigurationTests PRIVATE src)
+    add_test(NAME OverlaySlotConfigurationTests COMMAND OverlaySlotConfigurationTests)
+
+    add_executable(SlaveTatsAlphaTests
+        tests/runtime/SlaveTatsAlphaTests.cpp
+    )
+    target_include_directories(SlaveTatsAlphaTests PRIVATE src)
+    add_test(NAME SlaveTatsAlphaTests COMMAND SlaveTatsAlphaTests)
+
+    add_executable(AppliedTattooHandleMembershipTests
+        tests/runtime/AppliedTattooHandleMembershipTests.cpp
+    )
+    target_include_directories(AppliedTattooHandleMembershipTests PRIVATE src)
+    add_test(
+        NAME AppliedTattooHandleMembershipTests
+        COMMAND AppliedTattooHandleMembershipTests
+    )
+
+    add_executable(UpdateTattooAppearanceOrchestrationTests
+        src/runtime/UpdateTattooAppearanceOrchestration.cpp
+        tests/runtime/UpdateTattooAppearanceOrchestrationTests.cpp
+    )
+    target_include_directories(UpdateTattooAppearanceOrchestrationTests PRIVATE src)
+    add_test(
+        NAME UpdateTattooAppearanceOrchestrationTests
+        COMMAND UpdateTattooAppearanceOrchestrationTests
+    )
+
+    add_executable(SlaveTatsRuntimeAppearanceTests
+        src/runtime/OverlaySlotConfiguration.cpp
+        src/runtime/SlaveTatsRuntime.cpp
+        src/runtime/UpdateTattooAppearanceOrchestration.cpp
+        tests/runtime/SlaveTatsRuntimeAppearanceTests.cpp
+    )
+    target_include_directories(SlaveTatsRuntimeAppearanceTests PRIVATE src include)
+    target_link_libraries(SlaveTatsRuntimeAppearanceTests PRIVATE CommonLibSSE::CommonLibSSE)
+    add_test(
+        NAME SlaveTatsRuntimeAppearanceTests
+        COMMAND SlaveTatsRuntimeAppearanceTests
+    )
+
+    add_executable(JContainersMiniTests
+        tests/runtime/JContainersMiniTests.cpp
+    )
+    target_include_directories(JContainersMiniTests PRIVATE tests/support include)
+    add_test(NAME JContainersMiniTests COMMAND JContainersMiniTests)
+
     add_executable(PrismaTattooSerializerTests
         src/adapters/PrismaTattooSerializer.cpp
         tests/adapters/PrismaTattooSerializerTests.cpp
     )
     target_include_directories(PrismaTattooSerializerTests PRIVATE src)
     add_test(NAME PrismaTattooSerializerTests COMMAND PrismaTattooSerializerTests)
+
+    add_executable(PrismaSlotSerializerTests
+        src/adapters/PrismaSlotSerializer.cpp
+        tests/adapters/PrismaSlotSerializerTests.cpp
+    )
+    target_include_directories(PrismaSlotSerializerTests PRIVATE src)
+    add_test(NAME PrismaSlotSerializerTests COMMAND PrismaSlotSerializerTests)
 
     add_executable(TattooSourceScannerTests
         src/repository/TattooSourceScanner.cpp

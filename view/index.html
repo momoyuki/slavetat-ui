@@ -817,7 +817,7 @@ function confirmApplyToSlot(){
   var t=tattooByHandle[browserSelectedHandle];
   if(!t)return;
   sendCmd({action:'applyToSlot',actorId:getActorId(),
-    section:t.section,name:t.name,domain:availableDomain,
+    area:ctxArea,section:t.section,name:t.name,domain:availableDomain,
     slot:ctxSlot,color:browserColor,alpha:browserAlphaV});
   setStatus('Applying…','busy');
 }

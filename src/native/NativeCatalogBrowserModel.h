@@ -28,10 +28,12 @@ public:
 
     [[nodiscard]] const repository::TattooFilter& filter() const noexcept;
     [[nodiscard]] const repository::TattooPage& page() const noexcept;
+    [[nodiscard]] repository::TattooFacets contextualFacets() const;
     [[nodiscard]] repository::TattooCatalogSnapshot snapshot() const noexcept;
 
 private:
     void resetFilter();
+    void reconcileContextualFilters();
     void query();
 
     CatalogSnapshotProvider m_provider;

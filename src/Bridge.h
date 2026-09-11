@@ -28,6 +28,7 @@ public:
     void onDataLoaded();  // init PrismaUI, create view
 
     void toggleUI();
+    [[nodiscard]] core::SlaveTatsService& tattooService() noexcept;
 
 private:
     Bridge() = default;
@@ -44,7 +45,7 @@ private:
     void handleQueryActors();
     void handleQuerySlots(uint32_t actorId, std::string area);
     void handleQueryAllSlots(uint32_t actorId);
-    void handleApplyToSlot(uint32_t actorId, std::string section, std::string name, std::string domain, int slot, int color, float alpha);
+    void handleApplyToSlot(uint32_t actorId, std::string area, std::string section, std::string name, std::string domain, int slot, int color, float alpha);
     void handleRemoveFromSlot(uint32_t actorId, std::string area, int slot);
     void handleUpdateTattoo(uint32_t actorId, int tattooHandle, int color, float alpha);
     void handleGetTexture(std::string texPath);
