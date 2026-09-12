@@ -10,6 +10,9 @@ vcpkg_installed/
 # Local Git worktrees
 .worktrees/
 
+# Local Superpowers UI state
+.superpowers/
+
 # MSVC
 *.user
 *.suo
