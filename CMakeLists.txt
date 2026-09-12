@@ -206,6 +206,13 @@ if(BUILD_TESTING)
     target_include_directories(SlaveTatsAlphaTests PRIVATE src)
     add_test(NAME SlaveTatsAlphaTests COMMAND SlaveTatsAlphaTests)
 
+    add_test(
+        NAME SlaveTatsApplyUpgradePolicyTests
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/SlaveTatsRuntime.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/runtime/VerifySlaveTatsApplyUpgradePolicy.cmake
+    )
+
     add_executable(AppliedTattooHandleMembershipTests
         tests/runtime/AppliedTattooHandleMembershipTests.cpp
     )

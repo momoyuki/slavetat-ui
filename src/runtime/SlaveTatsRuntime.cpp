@@ -3,6 +3,7 @@
 #include "jcontainers_mini.h"
 #include "runtime/SlaveTatsAlpha.h"
 #include "runtime/UpdateTattooAppearanceOrchestration.h"
+#include "SKSE/SKSE.h"
 
 #include <expected>
 #include <limits>
@@ -429,10 +430,16 @@ core::ApplyTattooResult SlaveTatsRuntime::applyToSlot(const core::ApplyTattooReq
             request.slot,
             false,
             false,
-            false);
+            true);
     }
 
     if (applied == 0) {
+        SKSE::log::warn(
+            "SlaveTatsUI: SlaveTatsNG rejected tattoo apply (section={}, name={}, area={}, slot={})",
+            request.section,
+            request.name,
+            areaString,
+            request.slot);
         return std::unexpected(core::ServiceError{
             core::ServiceErrorCode::applyFailed,
             "Failed to apply tattoo to slot",
