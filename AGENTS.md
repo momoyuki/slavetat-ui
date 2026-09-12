@@ -9,11 +9,13 @@ For every non-trivial task:
 1. Read `ROADMAP.md` to understand the active milestone and project direction.
 2. Read `CONTEXT.md` for project terminology and workflow concepts.
 3. Read the relevant design in `docs/superpowers/specs/`.
-4. Read the relevant implementation plan in `docs/superpowers/plans/` when one exists.
+4. Read the relevant approved implementation plan in `docs/superpowers/plans/active/` when one exists.
 5. Inspect the current implementation and tests before proposing changes.
 6. Check open issues and pull requests when they may overlap the requested work.
 
-Do not infer the project's direction from the latest PR alone.
+Historical plans under `docs/superpowers/plans/archive/` are implementation records only. They are useful for design archaeology, debugging, and regression context, but they are **not** evidence that unchecked tasks are still pending.
+
+Do not infer the project's direction from the latest PR or an archived plan alone.
 
 ## Source-of-truth hierarchy
 
@@ -22,7 +24,8 @@ Use these documents for different questions:
 - `ROADMAP.md` — **what the project is trying to achieve and milestone order**
 - `CONTEXT.md` — **shared language and mental model**
 - `docs/superpowers/specs/` — **behavior and architecture contracts**
-- `docs/superpowers/plans/` — **implementation sequence for an approved design**
+- `docs/superpowers/plans/active/` — **implementation sequence for approved current work**
+- `docs/superpowers/plans/archive/` — **historical implementation records only**
 - tests and current source — **what is actually implemented now**
 - GitHub issues / PRs — **execution status and discussion**
 
@@ -102,6 +105,8 @@ Read:
 
 `docs/superpowers/specs/2026-09-13-native-advanced-appearance-design.md`
 
+There is currently no active implementation plan for vNext.1. Do not treat an archived plan as its substitute. Create a focused plan under `docs/superpowers/plans/active/` only when implementation is ready to begin.
+
 The important distinction is that SlaveTatsNG material/emission properties are separate values:
 
 - `glow` — emissive color
@@ -148,7 +153,9 @@ When a design decision changes project direction, update `ROADMAP.md`.
 
 When behavior or architecture changes inside a milestone, update the relevant spec.
 
-When implementation sequencing changes, update the relevant plan.
+When implementation sequencing changes, update the relevant plan under `docs/superpowers/plans/active/`.
+
+When an implementation plan is completed or superseded, move it to `docs/superpowers/plans/archive/` rather than deleting it.
 
 Do not duplicate large design documents into `ROADMAP.md`; keep the roadmap concise enough to recover project intent quickly.
 
