@@ -20,6 +20,7 @@ public:
 
     [[nodiscard]] RegistrationResult registerMenu(MenuFrameworkPort& port);
     void toggle() noexcept;
+    void openFromHotkey() noexcept;
     void handleHotkeyInput(bool isDown, bool isPressed) noexcept;
     void open() noexcept;
     void close() noexcept;

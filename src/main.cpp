@@ -96,7 +96,7 @@ public:
 
             if (g_hotkeyBinding->matches(btn->GetIDCode())) {
                 if (g_nativeMenu) {
-                    g_nativeMenu->toggle();
+                    g_nativeMenu->openFromHotkey();
                 }
             }
         }

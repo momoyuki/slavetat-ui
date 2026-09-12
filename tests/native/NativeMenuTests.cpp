@@ -274,6 +274,17 @@ void hotkeyCloseWaitsForOpeningPressToBeReleased() {
     expect(!menu.isOpen(), "expected the next hotkey press to close the menu");
 }
 
+void repeatedExternalHotkeyEventsOnlyOpenTheMenu() {
+    FakeMenuFrameworkPort port;
+    stui::native::NativeMenu menu;
+    expect(menu.registerMenu(port).has_value(), "expected registration");
+
+    menu.openFromHotkey();
+    menu.openFromHotkey();
+
+    expect(menu.isOpen(), "expected repeated external hotkey events not to close the menu");
+}
+
 void unavailableRegistrationCanBeRetriedAndClearsError() {
     FakeMenuFrameworkPort port;
     port.isAvailable = false;
@@ -334,6 +345,8 @@ int main() {
         std::cout << "PASS render action can close owning window\n";
         hotkeyCloseWaitsForOpeningPressToBeReleased();
         std::cout << "PASS hotkey close waits for opening press to be released\n";
+        repeatedExternalHotkeyEventsOnlyOpenTheMenu();
+        std::cout << "PASS repeated external hotkey events only open the menu\n";
         unavailableRegistrationCanBeRetriedAndClearsError();
         std::cout << "PASS unavailable registration can be retried and clears error\n";
         registrationErrorsHaveStableDiagnosticNames();
