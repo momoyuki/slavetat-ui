@@ -283,69 +283,6 @@ FoundationLayout OfficialMenuFrameworkAdapter::calculateFoundationLayout(
     };
 }
 
-std::optional<int> OfficialMenuFrameworkAdapter::menuKeyForDik(std::uint32_t dikCode) noexcept {
-    if (dikCode >= 0x3B && dikCode <= 0x44) {
-        return ImGuiMCP::ImGuiKey_F1 + static_cast<int>(dikCode - 0x3B);
-    }
-    if (dikCode >= 0x02 && dikCode <= 0x0A) {
-        return ImGuiMCP::ImGuiKey_1 + static_cast<int>(dikCode - 0x02);
-    }
-    switch (dikCode) {
-    case 0x0B: return ImGuiMCP::ImGuiKey_0;
-    case 0x10: return ImGuiMCP::ImGuiKey_Q;
-    case 0x11: return ImGuiMCP::ImGuiKey_W;
-    case 0x12: return ImGuiMCP::ImGuiKey_E;
-    case 0x13: return ImGuiMCP::ImGuiKey_R;
-    case 0x14: return ImGuiMCP::ImGuiKey_T;
-    case 0x15: return ImGuiMCP::ImGuiKey_Y;
-    case 0x16: return ImGuiMCP::ImGuiKey_U;
-    case 0x17: return ImGuiMCP::ImGuiKey_I;
-    case 0x18: return ImGuiMCP::ImGuiKey_O;
-    case 0x19: return ImGuiMCP::ImGuiKey_P;
-    case 0x1E: return ImGuiMCP::ImGuiKey_A;
-    case 0x1F: return ImGuiMCP::ImGuiKey_S;
-    case 0x20: return ImGuiMCP::ImGuiKey_D;
-    case 0x21: return ImGuiMCP::ImGuiKey_F;
-    case 0x22: return ImGuiMCP::ImGuiKey_G;
-    case 0x23: return ImGuiMCP::ImGuiKey_H;
-    case 0x24: return ImGuiMCP::ImGuiKey_J;
-    case 0x25: return ImGuiMCP::ImGuiKey_K;
-    case 0x26: return ImGuiMCP::ImGuiKey_L;
-    case 0x2C: return ImGuiMCP::ImGuiKey_Z;
-    case 0x2D: return ImGuiMCP::ImGuiKey_X;
-    case 0x2E: return ImGuiMCP::ImGuiKey_C;
-    case 0x2F: return ImGuiMCP::ImGuiKey_V;
-    case 0x30: return ImGuiMCP::ImGuiKey_B;
-    case 0x31: return ImGuiMCP::ImGuiKey_N;
-    case 0x32: return ImGuiMCP::ImGuiKey_M;
-    case 0x57: return ImGuiMCP::ImGuiKey_F11;
-    case 0x58: return ImGuiMCP::ImGuiKey_F12;
-    case 0x29: return ImGuiMCP::ImGuiKey_GraveAccent;
-    case 0x2B: return ImGuiMCP::ImGuiKey_Backslash;
-    case 0x47: return ImGuiMCP::ImGuiKey_Keypad7;
-    case 0x48: return ImGuiMCP::ImGuiKey_Keypad8;
-    case 0x49: return ImGuiMCP::ImGuiKey_Keypad9;
-    case 0x4B: return ImGuiMCP::ImGuiKey_Keypad4;
-    case 0x4C: return ImGuiMCP::ImGuiKey_Keypad5;
-    case 0x4D: return ImGuiMCP::ImGuiKey_Keypad6;
-    case 0x4F: return ImGuiMCP::ImGuiKey_Keypad1;
-    case 0x50: return ImGuiMCP::ImGuiKey_Keypad2;
-    case 0x51: return ImGuiMCP::ImGuiKey_Keypad3;
-    case 0x52: return ImGuiMCP::ImGuiKey_Keypad0;
-    case 0xC7: return ImGuiMCP::ImGuiKey_Home;
-    case 0xC8: return ImGuiMCP::ImGuiKey_UpArrow;
-    case 0xC9: return ImGuiMCP::ImGuiKey_PageUp;
-    case 0xCB: return ImGuiMCP::ImGuiKey_LeftArrow;
-    case 0xCD: return ImGuiMCP::ImGuiKey_RightArrow;
-    case 0xCF: return ImGuiMCP::ImGuiKey_End;
-    case 0xD0: return ImGuiMCP::ImGuiKey_DownArrow;
-    case 0xD1: return ImGuiMCP::ImGuiKey_PageDown;
-    case 0xD2: return ImGuiMCP::ImGuiKey_Insert;
-    case 0xD3: return ImGuiMCP::ImGuiKey_Delete;
-    default: return std::nullopt;
-    }
-}
-
 CatalogThumbnailFit fitCatalogThumbnail(
     std::size_t textureWidth,
     std::size_t textureHeight,

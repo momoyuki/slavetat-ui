@@ -258,31 +258,23 @@ void renderActionCanCloseOwningWindow() {
     expect(!menu.isOpen(), "expected render action to close its owning window");
 }
 
-void hotkeyCloseWaitsForOpeningPressToBeReleased() {
+void matchingFrameworkInputTogglesAndConsumesTheEvent() {
     FakeMenuFrameworkPort port;
     stui::native::NativeMenu menu;
     expect(menu.registerMenu(port).has_value(), "expected registration");
 
-    menu.toggle();
-    expect(menu.isOpen(), "expected hotkey toggle to open the menu");
-    menu.handleHotkeyInput(true, true);
-    expect(menu.isOpen(), "expected opening key press not to close the menu immediately");
-    menu.handleHotkeyInput(false, false);
-    expect(menu.isOpen(), "expected release to arm the closing hotkey");
-
-    menu.handleHotkeyInput(true, true);
-    expect(!menu.isOpen(), "expected the next hotkey press to close the menu");
-}
-
-void repeatedExternalHotkeyEventsOnlyOpenTheMenu() {
-    FakeMenuFrameworkPort port;
-    stui::native::NativeMenu menu;
-    expect(menu.registerMenu(port).has_value(), "expected registration");
-
-    menu.openFromHotkey();
-    menu.openFromHotkey();
-
-    expect(menu.isOpen(), "expected repeated external hotkey events not to close the menu");
+    expect(menu.handleFrameworkHotkey(true, true, true),
+           "expected matching key-down to be consumed");
+    expect(menu.isOpen(), "expected matching key-down to open the menu");
+    expect(menu.handleFrameworkHotkey(true, true, true),
+           "expected closing key-down to be consumed");
+    expect(!menu.isOpen(), "expected next matching key-down to close the menu");
+    expect(!menu.handleFrameworkHotkey(true, false, true),
+           "expected key-up not to be consumed");
+    expect(!menu.handleFrameworkHotkey(false, true, true),
+           "expected non-keyboard input not to be consumed");
+    expect(!menu.handleFrameworkHotkey(true, true, false),
+           "expected unrelated keyboard input not to be consumed");
 }
 
 void unavailableRegistrationCanBeRetriedAndClearsError() {
@@ -343,10 +335,8 @@ int main() {
         std::cout << "PASS throwing section launch is contained\n";
         renderActionCanCloseOwningWindow();
         std::cout << "PASS render action can close owning window\n";
-        hotkeyCloseWaitsForOpeningPressToBeReleased();
-        std::cout << "PASS hotkey close waits for opening press to be released\n";
-        repeatedExternalHotkeyEventsOnlyOpenTheMenu();
-        std::cout << "PASS repeated external hotkey events only open the menu\n";
+        matchingFrameworkInputTogglesAndConsumesTheEvent();
+        std::cout << "PASS matching framework input toggles and consumes the event\n";
         unavailableRegistrationCanBeRetriedAndClearsError();
         std::cout << "PASS unavailable registration can be retried and clears error\n";
         registrationErrorsHaveStableDiagnosticNames();

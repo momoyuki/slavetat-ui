@@ -82,29 +82,17 @@ void NativeMenu::toggle() noexcept {
         return;
     }
     if (registered_) {
-        waitForHotkeyRelease_ = true;
         open();
     }
 }
 
-void NativeMenu::openFromHotkey() noexcept {
-    if (isOpen() || !registered_) {
-        return;
+bool NativeMenu::handleFrameworkHotkey(
+    bool isKeyboard, bool isDown, bool matchesBinding) noexcept {
+    if (!isKeyboard || !isDown || !matchesBinding) {
+        return false;
     }
-    waitForHotkeyRelease_ = true;
-    open();
-}
-
-void NativeMenu::handleHotkeyInput(bool isDown, bool isPressed) noexcept {
-    if (waitForHotkeyRelease_) {
-        if (!isDown) {
-            waitForHotkeyRelease_ = false;
-        }
-        return;
-    }
-    if (isPressed) {
-        close();
-    }
+    toggle();
+    return true;
 }
 
 void NativeMenu::open() noexcept {

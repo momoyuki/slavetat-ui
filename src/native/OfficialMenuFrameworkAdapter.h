@@ -323,7 +323,6 @@ public:
 
     [[nodiscard]] static FoundationLayout calculateFoundationLayout(
         MenuPosition viewportPosition, MenuSize viewportSize) noexcept;
-    [[nodiscard]] static std::optional<int> menuKeyForDik(std::uint32_t dikCode) noexcept;
     [[nodiscard]] static bool renderLauncher(runtime::HotkeyBinding& hotkey);
     static void renderFoundation(
         NativeSlotWorkflowModel& workflow,

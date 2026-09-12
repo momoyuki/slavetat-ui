@@ -19,17 +19,6 @@ void expect(bool condition, std::string_view message) {
     }
 }
 
-void mapsConfiguredDikCodesToMenuFrameworkKeys() {
-    expect(stui::native::OfficialMenuFrameworkAdapter::menuKeyForDik(0x42) == 579,
-           "expected F8 to map to ImGui F8");
-    expect(stui::native::OfficialMenuFrameworkAdapter::menuKeyForDik(0x1E) == 546,
-           "expected A to map to ImGui A");
-    expect(stui::native::OfficialMenuFrameworkAdapter::menuKeyForDik(0x50) == 614,
-           "expected Numpad2 to map to ImGui Keypad2");
-    expect(!stui::native::OfficialMenuFrameworkAdapter::menuKeyForDik(0xFFFF),
-           "expected unsupported DIK code not to map");
-}
-
 float returnVersionThree() {
     return 3.13F;
 }
@@ -721,8 +710,6 @@ void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
 
 int main() {
     try {
-        mapsConfiguredDikCodesToMenuFrameworkKeys();
-        std::cout << "PASS configured DIK codes map to menu framework keys\n";
         rejectsIncompleteExportTable();
         std::cout << "PASS rejects incomplete export table\n";
         translatesSectionAndNonPausingWindowState();

@@ -68,48 +68,31 @@ std::unique_ptr<native::NativeThumbnailRuntime> g_nativeThumbnailRuntime =
 bool g_nativeThumbnailRuntimeUnavailableLogged{};
 native::NativeMenu* g_nativeMenu{};
 std::unique_ptr<runtime::HotkeyBinding> g_hotkeyBinding;
+SKSEMenuFramework::Model::InputEvent* g_hotkeyInputEvent{};
 
 }  // namespace
 
 // ── Input handler ─────────────────────────────────────────────────────────────
 
-class InputSink : public RE::BSTEventSink<RE::InputEvent*> {
-public:
-    static InputSink* get() {
-        static InputSink inst;
-        return &inst;
+bool __stdcall onMenuHotkeyInput(RE::InputEvent* event) {
+    if (!event || !g_hotkeyBinding || !g_nativeMenu) {
+        return false;
     }
-
-    RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event,
-                                          RE::BSTEventSource<RE::InputEvent*>*) override {
-        if (!a_event) return RE::BSEventNotifyControl::kContinue;
-
-        for (auto* e = *a_event; e; e = e->next) {
-            auto* btn = e->AsButtonEvent();
-            if (!btn || !btn->IsDown() || e->GetDevice() != RE::INPUT_DEVICE::kKeyboard) {
-                continue;
-            }
-
-            if (!g_hotkeyBinding) {
-                continue;
-            }
-
-            if (g_hotkeyBinding->matches(btn->GetIDCode())) {
-                if (g_nativeMenu) {
-                    g_nativeMenu->openFromHotkey();
-                }
-            }
-        }
-        return RE::BSEventNotifyControl::kContinue;
+    const auto* button = event->AsButtonEvent();
+    if (!button) {
+        return false;
     }
-};
+    return g_nativeMenu->handleFrameworkHotkey(
+        event->GetDevice() == RE::INPUT_DEVICE::kKeyboard,
+        button->IsDown(),
+        g_hotkeyBinding->matches(button->GetIDCode()));
+}
 
 // ── SKSE message handlers ─────────────────────────────────────────────────────
 
 static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
     switch (msg->type) {
     case SKSE::MessagingInterface::kDataLoaded:
-        RE::BSInputDeviceManager::GetSingleton()->AddEventSink(InputSink::get());
         {
             std::array<wchar_t, 32768> executablePath{};
             const DWORD pathLength = GetModuleFileNameW(
@@ -295,17 +278,6 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
 
     static native::OfficialMenuFrameworkAdapter menuFrameworkAdapter;
     static native::NativeMenu nativeMenu([](native::NativeMenu& menu) {
-        if (const auto configuredKey = g_hotkeyBinding->key()) {
-            if (const auto menuKey = native::OfficialMenuFrameworkAdapter::menuKeyForDik(
-                    *configuredKey)) {
-                const auto key = static_cast<ImGuiMCP::ImGuiKey>(*menuKey);
-                menu.handleHotkeyInput(
-                    ImGuiMCP::IsKeyDown(key), ImGuiMCP::IsKeyPressed(key, false));
-                if (!menu.isOpen()) {
-                    return;
-                }
-            }
-        }
         native::OfficialMenuFrameworkAdapter::renderFoundation(
             g_nativeSlotWorkflow,
             g_nativeSlotWorkflowRuntime,
@@ -321,8 +293,10 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
             "SlaveTatsUI: native menu unavailable: {}",
             native::registrationErrorName(result.error()));
     } else {
+        g_hotkeyInputEvent = SKSEMenuFramework::AddInputEvent(&onMenuHotkeyInput);
         logger::info(
-            "SlaveTatsUI: native menu registered (frameworkVersion={:.2f}, blocking=true)",
+            "SlaveTatsUI: native menu and input callback registered "
+            "(frameworkVersion={:.2f}, blocking=true)",
             menuFrameworkAdapter.version());
     }
 
