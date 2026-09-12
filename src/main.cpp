@@ -10,6 +10,7 @@
 #include "native/OfficialMenuFrameworkAdapter.h"
 #include "runtime/ApplicationRuntime.h"
 #include "runtime/HotkeyBinding.h"
+#include "SKSEMenuFramework.h"
 #include "textures/ExactStreamReader.h"
 
 #include <array>
@@ -294,6 +295,17 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
 
     static native::OfficialMenuFrameworkAdapter menuFrameworkAdapter;
     static native::NativeMenu nativeMenu([](native::NativeMenu& menu) {
+        if (const auto configuredKey = g_hotkeyBinding->key()) {
+            if (const auto menuKey = native::OfficialMenuFrameworkAdapter::menuKeyForDik(
+                    *configuredKey)) {
+                const auto key = static_cast<ImGuiMCP::ImGuiKey>(*menuKey);
+                menu.handleHotkeyInput(
+                    ImGuiMCP::IsKeyDown(key), ImGuiMCP::IsKeyPressed(key, false));
+                if (!menu.isOpen()) {
+                    return;
+                }
+            }
+        }
         native::OfficialMenuFrameworkAdapter::renderFoundation(
             g_nativeSlotWorkflow,
             g_nativeSlotWorkflowRuntime,

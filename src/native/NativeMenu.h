@@ -20,6 +20,7 @@ public:
 
     [[nodiscard]] RegistrationResult registerMenu(MenuFrameworkPort& port);
     void toggle() noexcept;
+    void handleHotkeyInput(bool isDown, bool isPressed) noexcept;
     void open() noexcept;
     void close() noexcept;
     [[nodiscard]] bool isOpen() const noexcept;
@@ -36,6 +37,7 @@ private:
     LaunchFunction launch_;
     std::optional<MenuRegistrationError> lastError_;
     bool registered_{};
+    bool waitForHotkeyRelease_{};
 };
 
 }  // namespace stui::native

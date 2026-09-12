@@ -82,7 +82,20 @@ void NativeMenu::toggle() noexcept {
         return;
     }
     if (registered_) {
+        waitForHotkeyRelease_ = true;
         open();
+    }
+}
+
+void NativeMenu::handleHotkeyInput(bool isDown, bool isPressed) noexcept {
+    if (waitForHotkeyRelease_) {
+        if (!isDown) {
+            waitForHotkeyRelease_ = false;
+        }
+        return;
+    }
+    if (isPressed) {
+        close();
     }
 }
 
