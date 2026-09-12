@@ -1,0 +1,33 @@
+# SlaveTats UI
+
+SlaveTats UI provides a slot-first interface for browsing and managing the Player's SlaveTats overlays.
+
+## Language
+
+**Tattoo Identity**:
+The combination of section and name that SlaveTats uses to resolve a tattoo definition.
+_Avoid_: Source identity, file identity
+
+**Current Slot**:
+A configured overlay slot in the currently selected body area, whether empty, managed by SlaveTats, or managed externally.
+_Avoid_: Tattoo card
+
+**Selected Area**:
+The Player overlay area whose Current Slots are being managed: Body, Face, Hands, or Feet.
+_Avoid_: Area filter
+
+**Area-compatible Tattoo**:
+A catalog tattoo whose declared area matches the Selected Area without regard to letter case. Only Area-compatible Tattoos are eligible for selection and application.
+_Avoid_: Cross-area tattoo
+
+**Contextual Filter**:
+A Picker filter whose available values are limited by the Selected Area and any preceding filter. A value that is not available in a new context is cleared.
+_Avoid_: Global filter
+
+**Slot Snapshot**:
+The most recently loaded Current Slot state for the Selected Area. It is the source of In-use Tattoo status and is refreshed at workflow boundaries rather than polled continuously.
+_Avoid_: Live slot polling
+
+**In-use Tattoo**:
+A catalog tattoo whose Tattoo Identity matches at least one SlaveTats-managed Current Slot in the selected area. The UI labels this selectable state `In Use`; its matching Current Slot indices are supporting detail rather than part of the label.
+_Avoid_: Used tattoo

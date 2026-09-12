@@ -1,0 +1,61 @@
+#pragma once
+
+#include "native/NativeThumbnailController.h"
+#include "textures/TextureCache.h"
+
+#include <functional>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace stui::native {
+
+using NativeThumbnailTask = std::function<void()>;
+using NativeThumbnailScheduler = std::function<void(NativeThumbnailTask)>;
+using NativeThumbnailNow = std::function<textures::TextureCacheTimePoint()>;
+using NativeThumbnailCancellationCheck = std::function<bool()>;
+
+class NativeThumbnailTextureSource {
+public:
+    virtual ~NativeThumbnailTextureSource() = default;
+    virtual std::shared_ptr<textures::D3D11Texture> find(
+        std::string_view texturePath,
+        textures::TextureCacheTimePoint now) = 0;
+    virtual NativeThumbnailLoadResult load(
+        std::string_view texturePath,
+        const NativeThumbnailCancellationCheck& isCurrent,
+        textures::TextureCacheTimePoint now) = 0;
+    virtual void pruneExpired(textures::TextureCacheTimePoint now) = 0;
+    virtual void clear() = 0;
+    virtual bool available() const noexcept = 0;
+};
+
+class NativeThumbnailRuntime {
+public:
+    NativeThumbnailRuntime(
+        std::unique_ptr<NativeThumbnailTextureSource> source,
+        NativeThumbnailScheduler scheduler,
+        NativeThumbnailNow now);
+
+    void synchronize(
+        repository::TattooCatalogSnapshot snapshot,
+        const repository::TattooPage& page);
+    void synchronize(
+        NativeThumbnailEpoch epoch,
+        std::span<const std::string> texturePaths);
+    void pump();
+    [[nodiscard]] std::vector<NativeThumbnailView> views() const;
+    void reset();
+
+private:
+    std::unique_ptr<NativeThumbnailTextureSource> m_source;
+    NativeThumbnailScheduler m_scheduler;
+    NativeThumbnailNow m_now;
+    NativeThumbnailController m_controller;
+    std::optional<textures::TextureCacheTimePoint> m_lastPrune;
+};
+
+}  // namespace stui::native

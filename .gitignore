@@ -7,6 +7,12 @@ vcpkg_installed/
 # Generated archives
 *.zip
 
+# Local Git worktrees
+.worktrees/
+
+# Local Superpowers UI state
+.superpowers/
+
 # MSVC
 *.user
 *.suo

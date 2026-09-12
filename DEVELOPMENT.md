@@ -1,244 +1,119 @@
-# SlaveTats UI — Development Guide
+# SlaveTats UI Development
+
+SlaveTats UI is a native C++ SKSE plugin. SKSE Menu Framework owns window
+registration and rendering; the plugin owns a typed, UI-independent tattoo
+service and a bounded D3D11 thumbnail path.
 
 ## Architecture
 
-```
-Skyrim / SKSE
-│
-├── SlaveTatsNG.dll        ← tattoo data + actor manipulation API
-├── JContainers64.dll      ← JSON object store (required by SlaveTatsNG)
-├── PrismaUI.dll           ← CEF in-game browser overlay
-│
-└── SlaveTatsUI.dll        ← THIS PLUGIN
-       │
-       ├── main.cpp        SKSE plugin entry, hotkey (F8), message routing
-       ├── Bridge.h/.cpp   JS↔C++ command dispatcher + texture pipeline
-       └── pch.h           Precompiled header
-```
-
-### Communication Flow
-
-```
-HTML (index.html)                         Bridge.cpp
-─────────────────                         ──────────
-slavetatsCmd(JSON)  ──── PrismaUI ──────► onJSCommand()
-                                              │
-                                         dispatch by action:
-                                         ┌── queryAvailable → handleQueryAvailable (game thread)
-                                         ├── queryApplied   → handleQueryApplied   (game thread)
-                                         ├── addTattoo      → handleAddTattoo      (game thread)
-                                         ├── removeTattoo   → handleRemoveTattoo   (game thread)
-                                         ├── syncTattoos    → handleSyncTattoos    (game thread)
-                                         └── getTexture     → std::thread → handleGetTexture (bg)
-
-slavetatsOnData(JSON) ◄─── PrismaUI ──── sendToUI(json)
+```text
+SKSE / SlaveTatsNG / JContainers messages
+                 |
+                 v
+        ApplicationRuntime
+       /                  \
+SlaveTatsRuntime     SlaveTatsService
+                            |
+                            v
+               NativeSlotWorkflowRuntime
+                 /                    \
+ NativeSlotWorkflowModel     NativeThumbnailRuntime
+                 \                    /
+                  OfficialMenuFrameworkAdapter
+                              |
+                         NativeMenu
 ```
 
-### Texture Pipeline
+- `ApplicationRuntime` owns one concrete runtime and service for the process.
+- `SlaveTatsService` validates transport-independent queries and mutations.
+- `SlaveTatsRuntime` binds SlaveTatsNG and JContainers to Skyrim operations.
+- `NativeSlotWorkflowModel` owns Player slot/picker/preview/edit state.
+- `NativeSlotWorkflowRuntime` schedules game-thread queries and mutations.
+- `NativeThumbnailRuntime` resolves only requested page textures and publishes
+  bounded D3D11 shader-resource views.
+- `OfficialMenuFrameworkAdapter` renders the model without owning domain state.
+- `NativeMenu` registers the blocking window and handles launch/toggle behavior.
 
+## Source Layout
+
+```text
+include/                         External API headers
+src/core/                        Typed models, runtime port, and service
+src/runtime/                     Skyrim adapters and application ownership
+src/repository/                  Tattoo discovery, parsing, and querying
+src/textures/                    DDS resolution, decoding, upload, and cache
+src/native/                      Workflow, thumbnails, and Menu Framework adapter
+tests/                           Unit and integration-style executable tests
+docs/superpowers/specs/          Approved design records
+docs/superpowers/plans/          Implementation plans
 ```
-handleGetTexture (background thread)
-  │
-  ├─ 1. Check disk cache (.rgba file) → hit → sendRGBAToUI → done
-  │
-  ├─ 2. LoadFromDDSFile (loose file via Win32)
-  │         └── success → sendDecodedTexture → cache + sendRGBAToUI → done
-  │
-  └─ 3. BSA fallback (game thread via SKSE TaskInterface)
-              └── BSResourceNiBinaryStream
-                    └── std::thread → LoadFromDDSMemory → sendDecodedTexture
-```
-
-`sendDecodedTexture`:
-- Decompresses BC1/BC3/BC5/BC7 → RGBA8 via DirectXTex
-- Resizes mip0 to 128×128 via DirectXTex
-- Strips rowPitch padding → raw RGBA bytes
-- Writes `.rgba` cache file
-- Base64-encodes → `sendToUI({type:"texture", path, w, h, data})`
-
----
-
-## Build Requirements
-
-| Tool | Version |
-|------|---------|
-| Visual Studio 2022 | with "Desktop development with C++" workload |
-| CMake | 3.21 or later |
-| vcpkg | integrated with Visual Studio or standalone |
-| Windows SDK | 10.0.19041.0 or later (for DirectXTex COM) |
-
----
-
-## vcpkg Dependencies
-
-Declared in [vcpkg.json](vcpkg.json):
-
-```json
-{
-  "name": "slavetats-ui",
-  "version": "0.1.0",
-  "dependencies": [
-    "commonlibsse-ng",
-    "nlohmann-json",
-    "directxtex"
-  ]
-}
-```
-
-Run `vcpkg install` in the project root, or let CMake's toolchain file handle it automatically.
-
----
 
 ## Building
 
-```powershell
-# Configure
-cmake -B build -S . `
-  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-  -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+Requirements:
 
-# Build (debug)
-cmake --build build --config Debug
+- Visual Studio 2022 with Desktop development with C++
+- CMake 3.21 or newer and Ninja
+- vcpkg with `VCPKG_ROOT` set
+- dependencies declared in `vcpkg.json`
 
-# Build (release)
-cmake --build build --config Release
-```
-
-Output DLL: `build\debug\SlaveTatsUI.dll` or `build\release\SlaveTatsUI.dll`
-
----
-
-## Deployment (MO2)
+Use the repository script because it imports the MSVC environment required by
+CommonLibSSE and D3D11 headers:
 
 ```powershell
-$mod = "D:\Modding\SKYRIM-MOD\mods\SlaveTatsUI"
-
-# DLL
-Copy-Item "build\debug\SlaveTatsUI.dll" "$mod\SKSE\Plugins\SlaveTatsUI.dll" -Force
-
-# UI
-Copy-Item "view\index.html" "$mod\PrismaUI\views\SlaveTatsUI\index.html" -Force
+.\build.ps1 -Config debug
+.\build.ps1 -Config release
 ```
 
-> **Never** place files directly in the Skyrim data directory. MO2's usvfs virtualises them at runtime.
+Outputs:
 
----
-
-## Key Technical Notes
-
-### `interface` macro conflict
-
-DirectXTex pulls in COM headers which define:
-```c
-#define interface __interface
-```
-This breaks `slavetats::interface::Interface`. Both `pch.h` and `Bridge.h` must `#undef interface` after including `<DirectXTex.h>`:
-```cpp
-#include <DirectXTex.h>
-#ifdef interface
-#  undef interface
-#endif
+```text
+build\debug\SlaveTatsUI.dll
+build\release\SlaveTatsUI.dll
 ```
 
-### SlaveTatsNG return values
+## Testing
 
-`slavetats::interface::simple_add_tattoo` and `simple_remove_tattoo` return `fail_t` (`bool`), but **return `true` even on success** (suspected: returns slot number cast to bool, or ForceSync sub-step fails while visual succeeds). Bridge treats any return value as success and logs a warning if `true`:
-```cpp
-if (failed) logger::warn("...");
-sendToUI(R"({"type":"success",...})");  // always
+The build script configures and builds all test executables. Run the complete
+suite for both configurations before proposing a commit:
+
+```powershell
+ctest --test-dir build/debug --output-on-failure
+ctest --test-dir build/release --output-on-failure
 ```
 
-### JContainers plugin name
+For a focused cycle, build through an MSVC-initialized shell or rerun
+`build.ps1`, then use `ctest -R '<test-name>'`.
 
-The SKSE plugin name is **`"JContainers64"`** (NOT `"JContainers"`). Register the messaging listener as:
-```cpp
-msg->RegisterListener("JContainers64", onJContainersMessage);
-```
+Tests are small C++ executables registered with CTest. New behavior follows
+red-green-refactor: add a behavior test, observe the expected failure, implement
+the minimum change, and rerun focused plus relevant full suites.
 
-### BSA vs loose file visibility
+## Runtime Lifecycle
 
-MO2's usvfs hooks Win32 file I/O, so loose files are visible to `LoadFromDDSFile`. BSA contents are **not** visible via Win32 — they require `RE::BSResourceNiBinaryStream`, which must be called on the **game thread** (SKSE TaskInterface).
+1. Plugin load initializes logging and registers the native menu.
+2. SKSE, SlaveTatsNG, and JContainers listeners are registered.
+3. `kDataLoaded` scans effective loose/BSA tattoo JSON sources and initializes
+   the native D3D11 thumbnail runtime.
+4. The configured hotkey or Menu Framework section item launches the Player
+   workflow and opens the native window.
+5. External work is scheduled through the SKSE task interface; presentation
+   observes model state on later frames.
 
-### Thumbnail disk cache
+## Thumbnail Policy
 
-Cache files are raw binary `.rgba`:
-```
-[uint32 width] [uint32 height] [width × height × 4 bytes RGBA]
-```
-Location: `SKSE log dir / SlaveTatsUI / thumbcache / <sanitized_path>.rgba`
+Search and filtering operate on metadata and never decode textures. The current
+catalog or slot page requests only visible thumbnails. Texture resolution checks
+loose files before the BSA resource reader, then DirectXTex decodes DDS bytes and
+the D3D11 uploader creates shader-resource views. The cache is bounded to 12
+entries with a two-minute idle lifetime. Failures produce placeholders and a
+stage-specific log entry.
 
-For loose files: invalidated by mtime comparison (source newer than cache → re-decode).
-For BSA files: permanent (BSA contents don't change at runtime).
+## Contribution Gates
 
----
-
-## File Structure
-
-```
-slavetat-ui\
-├── CMakeLists.txt
-├── vcpkg.json
-├── README.md
-├── DEVELOPMENT.md
-├── include\
-│   ├── PrismaUI_API.h             PrismaUI C++ header
-│   ├── SlaveTatsNG_Interface.h    SlaveTatsNG API
-│   ├── jcontainers_mini.h         JContainers minimal binding
-│   └── JContainers\
-│       ├── jc_interface.h
-│       └── jcontainers_constants.h
-├── src\
-│   ├── pch.h                      Precompiled header
-│   ├── main.cpp                   SKSE plugin entry + hotkey
-│   ├── Bridge.h
-│   └── Bridge.cpp                 All game↔UI logic
-└── view\
-    └── index.html                 PrismaUI overlay (HTML/CSS/JS)
-```
-
----
-
-## PrismaUI Interop API
-
-### C++ → JS
-
-```cpp
-// Send JSON string; JS receives it in slavetatsOnData(jsonStr)
-void Bridge::sendToUI(const std::string& json) {
-    m_prismaUI->InteropCall(m_view, json.c_str());
-}
-```
-
-### JS → C++
-
-```javascript
-// JS side: call C++ handler
-slavetatsCmd(JSON.stringify({ action: 'addTattoo', ... }));
-
-// C++ registers via PrismaUI:
-m_prismaUI->RegisterJSListener(m_view, "slavetatsCmd", onJSCommand);
-```
-
-### Message types (C++ → JS)
-
-| type | Fields | Trigger |
-|------|--------|---------|
-| `ready` | — | Plugin fully initialised |
-| `available` | `tattoos[]` | Response to `queryAvailable` |
-| `applied` | `tattoos[]` | Response to `queryApplied` |
-| `success` | `action`, `section`, `name` | Add/remove/sync succeeded |
-| `error` | `message` | Any error |
-| `texture` | `path`, `w`, `h`, `data` (base64 RGBA) | Response to `getTexture` |
-| `textureError` | `path` | Texture not found |
-
-### Message types (JS → C++)
-
-| action | Fields |
-|--------|--------|
-| `queryAvailable` | `domain` |
-| `queryApplied` | `actorId` (hex FormID) |
-| `addTattoo` | `actorId`, `section`, `name`, `color`, `alpha` |
-| `removeTattoo` | `actorId`, `section`, `name` |
-| `syncTattoos` | `actorId` |
-| `getTexture` | `path` (relative to `textures\actors\character\slavetats\`) |
-| `toggleUI` | — |
+- Keep core models and services free of SKSE Menu Framework and D3D11 types.
+- Keep game-thread work out of render callbacks.
+- Add tests for every new behavior and run Debug plus Release suites.
+- Run `git diff --check` and inspect the full diff for secrets and unrelated
+  changes.
+- Show the diff and proposed Conventional Commit message before committing.

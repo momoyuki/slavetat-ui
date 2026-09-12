@@ -1,0 +1,105 @@
+#include "native/NativeThumbnailRuntime.h"
+
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <utility>
+
+namespace stui::native {
+
+NativeThumbnailRuntime::NativeThumbnailRuntime(
+    std::unique_ptr<NativeThumbnailTextureSource> source,
+    NativeThumbnailScheduler scheduler,
+    NativeThumbnailNow now)
+    : m_source(std::move(source)),
+      m_scheduler(std::move(scheduler)),
+      m_now(std::move(now)) {}
+
+void NativeThumbnailRuntime::synchronize(
+    repository::TattooCatalogSnapshot snapshot,
+    const repository::TattooPage& page) {
+    std::vector<std::string> texturePaths;
+    texturePaths.reserve(page.entries.size());
+    for (const auto& entry : page.entries) {
+        texturePaths.push_back(entry.texturePath);
+    }
+    synchronize(std::move(snapshot), texturePaths);
+}
+
+void NativeThumbnailRuntime::synchronize(
+    NativeThumbnailEpoch epoch,
+    std::span<const std::string> texturePaths) {
+    const auto currentTime = m_now();
+    const bool sourceAvailable = m_source->available();
+    m_controller.synchronize(
+        std::move(epoch),
+        texturePaths,
+        [this, currentTime, sourceAvailable](std::string_view texturePath) {
+            return sourceAvailable ? m_source->find(texturePath, currentTime) : nullptr;
+        });
+}
+
+void NativeThumbnailRuntime::pump() {
+    using namespace std::chrono_literals;
+
+    const auto currentTime = m_now();
+    if (!m_lastPrune || currentTime - *m_lastPrune >= 1s) {
+        m_source->pruneExpired(currentTime);
+        m_lastPrune = currentTime;
+    }
+
+    if (!m_source->available()) {
+        return;
+    }
+
+    auto request = m_controller.takeNextRequest();
+    if (!request) {
+        return;
+    }
+
+    const NativeThumbnailRequest capturedRequest = std::move(*request);
+    auto completionClaimed = std::make_shared<std::atomic_bool>(false);
+    const auto complete = [this, capturedRequest, completionClaimed](
+                              NativeThumbnailLoadResult result) {
+        bool expected = false;
+        if (completionClaimed->compare_exchange_strong(expected, true)) {
+            m_controller.complete(capturedRequest, std::move(result));
+        }
+    };
+    NativeThumbnailTask task = [this, capturedRequest, completionClaimed, complete] {
+        if (completionClaimed->load()) {
+            return;
+        }
+
+        NativeThumbnailLoadResult result =
+            std::unexpected(NativeThumbnailFailure::broken);
+        try {
+            result = m_source->load(
+                capturedRequest.texturePath,
+                [this, capturedRequest] {
+                    return m_controller.isCurrent(capturedRequest);
+                },
+                m_now());
+        } catch (...) {
+        }
+        complete(std::move(result));
+    };
+
+    try {
+        m_scheduler(std::move(task));
+    } catch (...) {
+        complete(std::unexpected(NativeThumbnailFailure::broken));
+    }
+}
+
+std::vector<NativeThumbnailView> NativeThumbnailRuntime::views() const {
+    return m_controller.views();
+}
+
+void NativeThumbnailRuntime::reset() {
+    m_controller.clear();
+    m_source->clear();
+    m_lastPrune.reset();
+}
+
+}  // namespace stui::native
