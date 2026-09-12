@@ -19,6 +19,7 @@ public:
     NativeMenu& operator=(const NativeMenu&) = delete;
 
     [[nodiscard]] RegistrationResult registerMenu(MenuFrameworkPort& port);
+    void toggle() noexcept;
     void open() noexcept;
     void close() noexcept;
     [[nodiscard]] bool isOpen() const noexcept;

@@ -1,119 +1,104 @@
 # SlaveTats UI
 
-A PrismaUI overlay for SlaveTatsNG — browse, apply, and remove body tattoos from an in-game panel without opening any menus.
+A native SKSE Menu Framework interface for SlaveTatsNG. Browse installed tattoo
+packs, inspect the Player's overlay slots, and apply, replace, edit, or remove
+tattoos without using MCM.
 
-> Building from source or contributing? See [DEVELOPMENT.md](DEVELOPMENT.md) and [DEPLOY.md](DEPLOY.md).
-
----
+> Building from source or contributing? See [DEVELOPMENT.md](DEVELOPMENT.md) and
+> [DEPLOY.md](DEPLOY.md).
 
 ## Requirements
 
-All of the following must be installed and enabled **before** loading SlaveTats UI:
+Install and enable all of these before loading SlaveTats UI:
 
 | Mod | Notes |
 |-----|-------|
-| [SKSE64](https://skse.silverlock.org/) | Match your Skyrim SE/AE build number exactly |
-| [SlaveTatsNG](https://github.com/nopse0/SlaveTatsNG/tree/master) | Provides the tattoo application API |
-| [JContainers SE](https://www.nexusmods.com/skyrimspecialedition/mods/16495) | Required by SlaveTatsNG for data storage |
-| [PrismaUI](https://www.prismaui.dev/getting-started/introduction/) | CEF-based in-game browser overlay |
-| One or more SlaveTats texture packs | Loose files or BSA — both are supported |
+| [SKSE64](https://skse.silverlock.org/) | Must match the installed Skyrim SE/AE version |
+| [SKSE Menu Framework](https://www.nexusmods.com/skyrimspecialedition/mods/120352) | Version 3.x |
+| [SlaveTatsNG](https://github.com/nopse0/SlaveTatsNG/tree/master) | Provides the tattoo runtime API |
+| [JContainers SE](https://www.nexusmods.com/skyrimspecialedition/mods/16495) | Provides SlaveTats data storage |
+| One or more SlaveTats texture packs | Loose files and BSA archives are supported |
 
-> **Recommended**: Use [Mod Organizer 2 (MO2)](https://github.com/ModOrganizer2/modorganizer) for installation. The plugin was designed and tested under MO2's virtual file system (usvfs).
-
----
+PrismaUI is not required by SlaveTats UI. It may remain installed if another
+mod uses it.
 
 ## Installation
 
-1. Download the latest `SlaveTatsUI.zip` from the releases page.
-2. In MO2, click **Install a new mod from an archive** and select the zip.
-3. Enable the mod. The mod structure is:
-   ```
-   SlaveTatsUI\
-   ├── SKSE\Plugins\SlaveTatsUI.dll
-   └── PrismaUI\views\SlaveTatsUI\index.html
-   ```
-4. Launch the game via **SKSE** (through MO2).
+Install the release archive with Mod Organizer 2 and enable it. The package is
+DLL-only:
 
----
+```text
+SlaveTatsUI\
+└── SKSE\Plugins\SlaveTatsUI.dll
+```
+
+Launch Skyrim through SKSE in MO2.
 
 ## Usage
 
-The UI shows a **slot grid** grouped by body area (BODY / FACE / HANDS / FEET). Each slot is either empty (green), occupied (blue), or used by another mod's overlay (amber, read-only).
+Press **F8** by default or choose **SlaveTatsUI > Tattoo Browser** in SKSE Menu
+Framework. The configured hotkey toggles the native window.
 
-| Action | How |
-|--------|-----|
-| Open / close UI | Press **F8** in-game (configurable — see [Changing the hotkey](#changing-the-hotkey) below) |
-| Switch actor | **Actor** dropdown in the header; click **&#8635;** to rescan nearby NPCs |
-| Apply a tattoo to an empty slot | Click a green (empty) slot → pick a tattoo from the browser (expand Section → Area, or **Show All** to search across areas) → adjust color/alpha → **Apply to Slot** |
-| Edit an applied tattoo | Click a blue (occupied) slot → adjust color/alpha → **Save** |
-| Replace an applied tattoo | Open the slot's edit view → **Replace** → pick a new tattoo from the browser |
-| Remove a tattoo | Open the slot's edit view → **Remove** → confirm |
-| Filter the tattoo browser | Type in the search bar (filters by name/section) while the browser view is open |
-| Sync visuals | Click **Sync** button (top-right) if tattoos appear out of sync |
+The workflow starts on the Player's current slots:
 
-### Changing the hotkey
+- choose an empty slot to browse and apply a tattoo;
+- choose an occupied SlaveTats slot to edit its color/alpha, replace it, or
+  remove it;
+- external overlay slots remain visible but read-only;
+- search, source/section/area filters, and pagination narrow the catalog;
+- Refresh reloads current slot state and Sync reapplies visual updates.
 
-The F8 toggle is configurable via `SlaveTatsUI.json`, created on first run at:
-```
-%USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SlaveTatsUI.json
-```
-Edit the `"hotkey"` field to any of `F1`-`F12`, `INSERT`, `DELETE`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`, `TILDE`, `BACKSLASH`, `NUMPAD0`-`NUMPAD9`, or a raw DIK scancode integer, then restart the game.
+Only current-page thumbnails are requested. Loose and BSA-backed DDS textures
+are decoded and uploaded to a bounded D3D11 cache; missing textures render a
+placeholder rather than blocking the menu.
 
-### Thumbnails
+## Changing the Hotkey
 
-- Thumbnails (128×128) load in the background — no game stutter.
-- Textures are cached to disk after first load. Cache location:
-  ```
-  %USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SlaveTatsUI\thumbcache\
-  ```
-- First load of a large pack may take a few seconds per tattoo. Subsequent game sessions load instantly from cache.
-- Both loose `.dds` files and BSA-packed textures are supported (BC1, BC3, BC5, BC7, and uncompressed formats).
-
----
+`SlaveTatsUI.json` is created beside the plugin log configuration directory on
+first run. Set `hotkey` to `F1`-`F12`, `INSERT`, `DELETE`, `HOME`, `END`,
+`PAGEUP`, `PAGEDOWN`, `TILDE`, `BACKSLASH`, `NUMPAD0`-`NUMPAD9`, or a raw DIK
+scancode integer, then restart the game.
 
 ## Compatibility
 
-- **Skyrim SE** (1.5.97) and **AE** (1.6.x) — depends on which SKSE64 and CommonLibSSE-NG build the DLL was compiled against.
-- The UI panel appears on the right side of the screen (520px wide, draggable) and does not obstruct the left-side view of your character.
-- Compatible with any SlaveTats texture pack that follows the standard path:
-  `textures\actors\character\slavetats\<section>\*.dds`
-
----
+- Skyrim SE 1.5.97 and AE 1.6.x are supported when the DLL is built against a
+  matching SKSE/CommonLibSSE-NG setup.
+- The initial native workflow targets the Player only (FormID `0x14`).
+- Texture packs must follow
+  `textures\actors\character\slavetats\<section>\*.dds`.
 
 ## Troubleshooting
 
-**UI does not open on F8**
-- Confirm SKSE is running (check `My Games\…\SKSE\skse.log`).
-- Confirm PrismaUI is installed and its own DLL is loading.
-- Check `SKSE\Plugins\SlaveTatsUI.log` for errors.
+**The UI does not open**
 
-**"JContainers Not Ready"**
-- JContainers SE must load before SlaveTatsNG. Ensure load order is correct.
-- The plugin retries internally; try pressing Refresh in the Available tab after a few seconds.
+- Confirm SKSE Menu Framework 3.x is installed and enabled.
+- Check `SlaveTatsUI.log` for `native menu unavailable` and its named reason.
+- Confirm the configured hotkey is not claimed by another mod.
 
-**Available tab shows nothing**
-- Click **Refresh** — the plugin queries SlaveTatsNG on demand.
-- Ensure at least one SlaveTats texture pack is installed.
+**JContainers or SlaveTatsNG is unavailable**
 
-**Thumbnail shows ⚠**
-- Texture not found in loose files or BSA. Verify the texture pack is installed and enabled in MO2.
-- Check `SlaveTatsUI.log` for the exact path the plugin attempted.
+- Confirm both dependencies match the current Skyrim runtime and load through
+  SKSE.
+- Inspect `SlaveTatsUI.log` for interface-version or initialization errors.
 
-**Apply / Remove has no effect**
-- SlaveTatsNG requires the actor to be loaded in-scene. Test on Player (FormID 0x14) while in first/third person.
+**A thumbnail is missing**
 
----
+- Confirm the tattoo pack is enabled and its DDS path follows the standard
+  layout.
+- Check the log for the texture path and failure stage (`resolve` or `upload`).
+
+**Apply, edit, remove, or sync has no visible effect**
+
+- Test on the loaded Player in first- or third-person view.
+- Use Refresh to reload slot state and Sync to request visual synchronization.
 
 ## Log Location
 
-```
-%USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\Plugins\SlaveTatsUI.log
+The primary log is normally written to:
+
+```text
+%USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\SlaveTatsUI.log
 ```
 
-Reference Links:
-- SlaveTatsNG : https://www.loverslab.com/files/file/35989-slavetatsng (loverslab)
-- SlaveTatsNG : https://github.com/nopse0/SlaveTatsNG/tree/master (github)
-- SlaveTatsGUI: https://github.com/nopse0/SlaveTatsGUI
-- PrismaUI: https://www.prismaui.dev/getting-started/introduction/
-- SkyUI : https://github.com/doodlum/SkyUI-Community/
-- Racemenu : https://www.nexusmods.com/skyrimspecialedition/mods/19080
+If that directory is unavailable, the plugin falls back to
+`Data\SKSE\Plugins\SlaveTatsUI.log`.

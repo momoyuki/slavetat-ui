@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 message("Using toolchain file ${CMAKE_TOOLCHAIN_FILE}.")
 
-project(SlaveTatsUI VERSION 0.1.0 DESCRIPTION "SlaveTats Prisma UI bridge plugin" LANGUAGES CXX)
+project(SlaveTatsUI VERSION 0.1.0 DESCRIPTION "Native SlaveTats UI plugin" LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
@@ -12,14 +12,12 @@ include(GNUInstallDirs)
 include(CTest)
 
 set(headers
-    include/PrismaUI_API.h
     include/SKSEMenuFramework.h
     include/SlaveTatsNG_Interface.h
     include/JContainers/jc_interface.h
     include/JContainers/jcontainers_constants.h
     include/jcontainers_mini.h
     src/pch.h
-    src/Bridge.h
     src/native/MenuFrameworkPort.h
     src/native/NativeMenu.h
     src/native/OfficialMenuFrameworkAdapter.h
@@ -29,14 +27,13 @@ set(headers
     src/native/NativeThumbnailController.h
     src/native/NativeThumbnailRuntime.h
     src/native/D3D11NativeThumbnailSource.h
-    src/adapters/PrismaSlotSerializer.h
-    src/adapters/PrismaTattooSerializer.h
     src/core/ITattooRuntime.h
     src/core/SlaveTatsService.h
     src/core/TattooModels.h
     src/runtime/OverlaySlotConfiguration.h
     src/runtime/AppliedTattooHandleMembership.h
     src/runtime/SlaveTatsAlpha.h
+    src/runtime/ApplicationRuntime.h
     src/runtime/UpdateTattooAppearanceOrchestration.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooCatalogLoader.h
@@ -54,7 +51,6 @@ set(headers
 
 set(sources
     src/main.cpp
-    src/Bridge.cpp
     src/native/NativeMenu.cpp
     src/native/OfficialMenuFrameworkAdapter.cpp
     src/native/NativeCatalogBrowserModel.cpp
@@ -63,10 +59,9 @@ set(sources
     src/native/NativeThumbnailController.cpp
     src/native/NativeThumbnailRuntime.cpp
     src/native/D3D11NativeThumbnailSource.cpp
-    src/adapters/PrismaSlotSerializer.cpp
-    src/adapters/PrismaTattooSerializer.cpp
     src/core/SlaveTatsService.cpp
     src/runtime/OverlaySlotConfiguration.cpp
+    src/runtime/ApplicationRuntime.cpp
     src/runtime/UpdateTattooAppearanceOrchestration.cpp
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
@@ -232,25 +227,23 @@ if(BUILD_TESTING)
         COMMAND SlaveTatsRuntimeAppearanceTests
     )
 
+    add_executable(ApplicationRuntimeTests
+        src/runtime/ApplicationRuntime.cpp
+        src/runtime/OverlaySlotConfiguration.cpp
+        src/runtime/SlaveTatsRuntime.cpp
+        src/runtime/UpdateTattooAppearanceOrchestration.cpp
+        src/core/SlaveTatsService.cpp
+        tests/runtime/ApplicationRuntimeTests.cpp
+    )
+    target_include_directories(ApplicationRuntimeTests PRIVATE src include)
+    target_link_libraries(ApplicationRuntimeTests PRIVATE CommonLibSSE::CommonLibSSE)
+    add_test(NAME ApplicationRuntimeTests COMMAND ApplicationRuntimeTests)
+
     add_executable(JContainersMiniTests
         tests/runtime/JContainersMiniTests.cpp
     )
     target_include_directories(JContainersMiniTests PRIVATE tests/support include)
     add_test(NAME JContainersMiniTests COMMAND JContainersMiniTests)
-
-    add_executable(PrismaTattooSerializerTests
-        src/adapters/PrismaTattooSerializer.cpp
-        tests/adapters/PrismaTattooSerializerTests.cpp
-    )
-    target_include_directories(PrismaTattooSerializerTests PRIVATE src)
-    add_test(NAME PrismaTattooSerializerTests COMMAND PrismaTattooSerializerTests)
-
-    add_executable(PrismaSlotSerializerTests
-        src/adapters/PrismaSlotSerializer.cpp
-        tests/adapters/PrismaSlotSerializerTests.cpp
-    )
-    target_include_directories(PrismaSlotSerializerTests PRIVATE src)
-    add_test(NAME PrismaSlotSerializerTests COMMAND PrismaSlotSerializerTests)
 
     add_executable(TattooSourceScannerTests
         src/repository/TattooSourceScanner.cpp
