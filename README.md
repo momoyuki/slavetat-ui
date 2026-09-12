@@ -55,8 +55,8 @@ placeholder rather than blocking the menu.
 ## Changing the Hotkey
 
 The hotkey defaults to `None`. Open the `SlaveTatsUI` section in SKSE Menu and
-select `Bind Key` to bind the next keyboard key, or `Clear` to disable the
-hotkey. Pressing Escape while binding cancels the change.
+choose a keyboard key from the `Hotkey` dropdown. Choose `None` to disable the
+hotkey.
 
 The setting is saved immediately to `SlaveTatsUI.json` beside the plugin log.
 Existing named or raw DIK scancode values remain supported.

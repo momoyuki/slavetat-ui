@@ -1451,18 +1451,23 @@ void renderEditAppearance(
 bool OfficialMenuFrameworkAdapter::renderLauncher(runtime::HotkeyBinding& hotkey) {
     ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
     const auto hotkeyLabel = hotkey.label();
-    ImGuiMCP::Text("Hotkey: %s", hotkeyLabel.c_str());
-    if (hotkey.isCapturing()) {
-        ImGuiMCP::TextUnformatted("Press a keyboard key to bind, or Escape to cancel.");
-    } else if (ImGuiMCP::Button("Bind Key")) {
-        hotkey.beginCapture();
+    static bool hotkeySaveFailed = false;
+    if (ImGuiMCP::BeginCombo("Hotkey", hotkeyLabel.c_str())) {
+        const auto selectedKey = hotkey.key();
+        for (const auto& option : runtime::hotkeyOptions()) {
+            const bool selected = option.key == selectedKey;
+            if (ImGuiMCP::Selectable(option.label.data(), selected)) {
+                hotkeySaveFailed = !hotkey.select(option.key);
+            }
+            if (selected) {
+                ImGuiMCP::SetItemDefaultFocus();
+            }
+        }
+        ImGuiMCP::EndCombo();
     }
-    ImGuiMCP::SameLine();
-    ImGuiMCP::BeginDisabled(!hotkey.key());
-    if (ImGuiMCP::Button("Clear")) {
-        (void)hotkey.clear();
+    if (hotkeySaveFailed) {
+        ImGuiMCP::TextUnformatted("Could not save the hotkey setting.");
     }
-    ImGuiMCP::EndDisabled();
     return ImGuiMCP::Button("Open Tattoo Browser");
 }
 

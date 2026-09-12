@@ -93,20 +93,7 @@ public:
                 continue;
             }
 
-            const auto key = btn->GetIDCode();
-            if (g_hotkeyBinding->isCapturing()) {
-                if (key == 0x01) {
-                    g_hotkeyBinding->cancelCapture();
-                    logger::info("SlaveTatsUI: hotkey binding canceled");
-                } else if (g_hotkeyBinding->capture(key)) {
-                    logger::info("SlaveTatsUI: hotkey bound to {}", g_hotkeyBinding->label());
-                } else {
-                    logger::error("SlaveTatsUI: failed to save hotkey binding");
-                }
-                continue;
-            }
-
-            if (g_hotkeyBinding->matches(key)) {
+            if (g_hotkeyBinding->matches(btn->GetIDCode())) {
                 if (g_nativeMenu) {
                     g_nativeMenu->toggle();
                 }
