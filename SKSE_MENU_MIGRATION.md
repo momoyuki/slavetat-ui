@@ -1,5 +1,11 @@
 # SKSE Menu Framework Migration Plan
 
+> **Status (2026-09-12):** Native slot-first browsing, thumbnails, apply,
+> replace, remove, appearance editing, and synchronization are implemented.
+> The PrismaUI frontend was retired by
+> `docs/superpowers/specs/2026-09-12-prismaui-retirement-design.md`. The phase
+> descriptions below are retained as migration history.
+
 ## Goal
 
 Move SlaveTatsUI toward a native SKSE Menu Framework frontend while preserving the current SlaveTatsNG integration and PrismaUI behavior during migration.

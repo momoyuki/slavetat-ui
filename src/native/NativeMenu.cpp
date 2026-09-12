@@ -76,6 +76,23 @@ std::optional<MenuRegistrationError> NativeMenu::lastError() const noexcept {
     return lastError_;
 }
 
+void NativeMenu::toggle() noexcept {
+    if (isOpen()) {
+        close();
+        return;
+    }
+    if (!registered_ || !launch_) {
+        return;
+    }
+    try {
+        if (launch_()) {
+            open();
+        }
+    } catch (...) {
+        lastError_ = MenuRegistrationError::callbackFailed;
+    }
+}
+
 void NativeMenu::open() noexcept {
     if (port_ && window_ != 0) {
         port_->setWindowOpen(window_, true);

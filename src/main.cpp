@@ -1,5 +1,4 @@
 #include "pch.h"
-#include "Bridge.h"
 #include "SlaveTatsNG_Interface.h"
 #include "repository/TattooCatalogStore.h"
 #include "native/NativeMenu.h"
@@ -9,6 +8,7 @@
 #include "native/D3D11NativeThumbnailSource.h"
 #include "native/NativeThumbnailRuntime.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
+#include "runtime/ApplicationRuntime.h"
 #include "textures/ExactStreamReader.h"
 
 #include <array>
@@ -21,22 +21,23 @@ using namespace stui;
 namespace {
 
 repository::TattooCatalogStore g_tattooCatalogStore;
+runtime::ApplicationRuntime g_applicationRuntime;
 native::NativeCatalogBrowserModel g_nativeCatalogBrowser(
     [] { return g_tattooCatalogStore.snapshot(); });
 native::NativeSlotWorkflowModel g_nativeSlotWorkflow(g_nativeCatalogBrowser);
 native::NativeSlotWorkflowRuntime g_nativeSlotWorkflowRuntime(
     g_nativeSlotWorkflow,
     [](std::uint32_t actorFormId, core::TattooArea area) {
-        return Bridge::get()->tattooService().querySlots(actorFormId, area);
+        return g_applicationRuntime.service().querySlots(actorFormId, area);
     },
     [](const core::ApplyTattooRequest& request) {
-        return Bridge::get()->tattooService().applyToSlot(request);
+        return g_applicationRuntime.service().applyToSlot(request);
     },
     [](const core::RemoveTattooRequest& request) {
-        return Bridge::get()->tattooService().removeFromSlot(request);
+        return g_applicationRuntime.service().removeFromSlot(request);
     },
     [](const core::UpdateTattooAppearanceRequest& request) {
-        return Bridge::get()->tattooService().updateAppearance(request);
+        return g_applicationRuntime.service().updateAppearance(request);
     },
     [](native::NativeSlotTask task) {
         auto* taskInterface = SKSE::GetTaskInterface();
@@ -63,6 +64,7 @@ std::unique_ptr<native::NativeThumbnailRuntime> makeUnavailableNativeThumbnailRu
 std::unique_ptr<native::NativeThumbnailRuntime> g_nativeThumbnailRuntime =
     makeUnavailableNativeThumbnailRuntime();
 bool g_nativeThumbnailRuntimeUnavailableLogged{};
+native::NativeMenu* g_nativeMenu{};
 
 }  // namespace
 
@@ -139,7 +141,9 @@ public:
             if (!btn || !btn->IsDown()) continue;
 
             if (btn->GetIDCode() == Config::hotkeyDIK) {
-                Bridge::get()->toggleUI();
+                if (g_nativeMenu) {
+                    g_nativeMenu->toggle();
+                }
             }
         }
         return RE::BSEventNotifyControl::kContinue;
@@ -257,7 +261,6 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                     "SlaveTatsUI: native thumbnail runtime initialized (capacity=12, ttl=2m)");
             }
         }
-        Bridge::get()->onDataLoaded();
         g_nativeSlotWorkflow.start();
         break;
     }
@@ -276,10 +279,10 @@ static void onSlaveTatsMessage(SKSE::MessagingInterface::Message* msg) {
         logger::error("SlaveTatsUI: SlaveTatsNG API version mismatch (got v{}, need v{})",
             gotVersion, static_cast<uint32_t>(slavetats::interface::Addresses::version));
         // Store peeked version so the UI can display a meaningful error on connect
-        Bridge::get()->onSlaveTatsVersionMismatch(gotVersion);
+        g_applicationRuntime.noteSlaveTatsVersionMismatch(gotVersion);
         return;
     }
-    Bridge::get()->onSlaveTatsInterface(api);
+    g_applicationRuntime.bindSlaveTats(api);
 }
 
 static void onJContainersMessage(SKSE::MessagingInterface::Message* msg) {
@@ -293,7 +296,9 @@ static void onJContainersMessage(SKSE::MessagingInterface::Message* msg) {
             msg->data ? static_cast<jc::root_interface*>(msg->data)->current_version : 0u);
         return;
     }
-    Bridge::get()->onJContainersReady(root);
+    if (!g_applicationRuntime.bindJContainers(root)) {
+        logger::error("SlaveTatsUI: failed to initialize JContainers interface");
+    }
 }
 
 // ── Plugin entry ──────────────────────────────────────────────────────────────
@@ -337,9 +342,10 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
             *g_nativeThumbnailRuntime,
             [&menu] { menu.close(); });
     }, &native::OfficialMenuFrameworkAdapter::renderLauncher);
+    g_nativeMenu = &nativeMenu;
     if (const auto result = nativeMenu.registerMenu(menuFrameworkAdapter); !result) {
         logger::warn(
-            "SlaveTatsUI: native menu unavailable: {} (PrismaUI remains available)",
+            "SlaveTatsUI: native menu unavailable: {}",
             native::registrationErrorName(result.error()));
     } else {
         logger::info(

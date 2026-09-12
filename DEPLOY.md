@@ -1,76 +1,46 @@
-# SlaveTats UI — Deploy Guide (dev testing via MO2)
+# SlaveTats UI Deployment Guide
 
-This covers copying a freshly built DLL + UI into a Mod Organizer 2 profile for
-in-game testing. For build instructions see [DEVELOPMENT.md](DEVELOPMENT.md#building).
-For end-user installation of a packaged release, see [README.md](README.md#installation).
-
----
+This guide covers development deployment through Mod Organizer 2. Build
+instructions are in [DEVELOPMENT.md](DEVELOPMENT.md#building).
 
 ## Prerequisites
 
-- Build output exists: `build\debug\SlaveTatsUI.dll` or `build\release\SlaveTatsUI.dll`
-  (run [`build.ps1`](build.ps1) first if not).
-- MO2 profile with the load-order dependencies from
-  [README.md](README.md#requirements) already installed and enabled:
-  SKSE64, SlaveTatsNG, JContainers SE, PrismaUI, and at least one texture pack.
-- A dedicated MO2 mod entry for this plugin (create an empty one via
-  **MO2 → right-click mod list → All Mods → Create empty mod**, name it e.g. `SlaveTatsUI`).
+- Skyrim and SKSE are not running.
+- The Debug or Release DLL exists under `build\<config>\SlaveTatsUI.dll`.
+- The MO2 profile has SKSE64, SKSE Menu Framework 3.x, SlaveTatsNG,
+  JContainers SE, and at least one texture pack enabled.
+- A dedicated empty MO2 mod exists for SlaveTats UI.
 
----
+## Mod Layout
 
-## Expected mod folder layout
-
-```
+```text
 <MO2 mods dir>\SlaveTatsUI\
-├── SKSE\Plugins\SlaveTatsUI.dll
-└── PrismaUI\views\SlaveTatsUI\index.html
+└── SKSE\Plugins\SlaveTatsUI.dll
 ```
-
-This mirrors the layout shipped in release zips (see
-[README.md](README.md#installation)) — the same mod folder can be used for both
-dev iteration and, once built in release config, for producing a distributable zip.
-
----
 
 ## Deploy
 
 ```powershell
-$mod = "D:\Modding\SKYRIM-MOD\mods\SlaveTatsUI"   # adjust to your MO2 mods path
-$config = "debug"                                  # or "release"
+$mod = "D:\Modding\SKYRIM-MOD\mods\SlaveTatsUI"
+$config = "debug"
 
+New-Item "$mod\SKSE\Plugins" -ItemType Directory -Force | Out-Null
 Copy-Item "build\$config\SlaveTatsUI.dll" "$mod\SKSE\Plugins\SlaveTatsUI.dll" -Force
-Copy-Item "view\index.html" "$mod\PrismaUI\views\SlaveTatsUI\index.html" -Force
 ```
 
-> **Never** place files directly in the Skyrim `Data` directory. MO2's usvfs
-> virtualises the mods folder at runtime — copying into `Data` bypasses MO2's
-> mod management (enable/disable, conflict resolution, uninstall) entirely.
+Never copy directly into Skyrim's physical `Data` directory. Deploy only to the
+dedicated MO2 mod so enable, disable, conflict, and uninstall operations remain
+recoverable.
 
-`Copy-Item -Force` will fail with a file-in-use error if Skyrim/SKSE is still
-running with the plugin loaded — close the game before redeploying the DLL.
-`index.html` has no such lock since PrismaUI reloads it fresh each launch.
+## Verify
 
----
+1. Compare the built and deployed DLL hashes with `Get-FileHash`.
+2. Launch Skyrim through SKSE in MO2.
+3. Inspect `SlaveTatsUI.log` for native menu registration and dependency errors.
+4. Press the configured hotkey and confirm it opens and closes the native menu.
+5. Verify current slots, catalog navigation, thumbnails, apply, replace, remove,
+   appearance editing, Refresh, and Sync on the Player.
 
-## Verify the deploy
-
-1. Launch the game via **SKSE through MO2** (not a bare `SkyrimSE.exe` shortcut).
-2. Check `<mod>\SKSE\Plugins\SlaveTatsUI.log` (visible in MO2's virtual `Data`
-   dir at `SKSE\Plugins\SlaveTatsUI.log`) for the plugin's startup log lines —
-   confirms the new DLL actually loaded, not a stale cached one.
-3. Press **F8** in-game; the panel should open. If it doesn't, see
-   [README.md — Troubleshooting](README.md#troubleshooting).
-
----
-
-## Iterating during development
-
-Rebuild + redeploy loop:
-
-```powershell
-.\build.ps1 -Config debug
-Copy-Item "build\debug\SlaveTatsUI.dll" "$mod\SKSE\Plugins\SlaveTatsUI.dll" -Force
-```
-
-`index.html` changes take effect on next game launch without a rebuild — copy
-it over the same way whenever [view/index.html](view/index.html) changes.
+An old browser-view directory or legacy thumbnail cache may be removed manually
+from this mod after backing it up. The plugin neither reads nor deletes those
+paths.

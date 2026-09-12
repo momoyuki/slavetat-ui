@@ -167,6 +167,16 @@ struct CatalogBadgeLayout {
     float availableWidth,
     float controlWidth) noexcept;
 
+struct UnifiedFooterLayout {
+    float actionWidth{};
+    float closeWidth{};
+    float closeX{};
+};
+
+[[nodiscard]] UnifiedFooterLayout calculateUnifiedFooterLayout(
+    float availableWidth,
+    float closeWidth) noexcept;
+
 struct PickerFooterActionLayout {
     float groupWidth{};
     float cancelX{};

@@ -366,6 +366,19 @@ float calculateRightAlignedControlX(
     return std::max(0.0F, availableWidth - controlWidth);
 }
 
+UnifiedFooterLayout calculateUnifiedFooterLayout(
+    float availableWidth,
+    float closeWidth) noexcept {
+    const float safeAvailableWidth = std::max(0.0F, availableWidth);
+    const float safeCloseWidth = std::clamp(closeWidth, 0.0F, safeAvailableWidth);
+    const float closeX = safeAvailableWidth - safeCloseWidth;
+    return {
+        .actionWidth = closeX,
+        .closeWidth = safeCloseWidth,
+        .closeX = closeX,
+    };
+}
+
 PickerFooterActionLayout calculatePickerFooterActionLayout(
     float availableWidth,
     float cancelWidth,
@@ -1017,52 +1030,73 @@ void renderSlotActions(
     ImGuiMCP::EndChild();
     ImGuiMCP::PopStyleColor();
 
-    if (confirming || removing) {
-        ImGuiMCP::BeginDisabled(removing);
-        if (ImGuiMCP::Button("Cancel")) {
-            workflow.cancelRemove();
-        }
-        ImGuiMCP::EndDisabled();
-        ImGuiMCP::SameLine();
-        const bool canRemove = isRemoveConfirmationEnabled(
-            workflow.screen(), target.has_value());
-        RemoveButtonState buttonState = RemoveButtonState::initial;
-        if (const auto* error = workflow.error()) {
-            buttonState = error->code == core::ServiceErrorCode::synchronizeFailed
-                ? RemoveButtonState::retrySynchronization
-                : RemoveButtonState::retryRemove;
-        }
-        const auto removeLabel = removeButtonLabel(target.value_or(-1), buttonState);
-        ImGuiMCP::BeginDisabled(!canRemove);
-        if (ImGuiMCP::Button(removeLabel.c_str())) {
-            (void)workflow.confirmRemove();
-        }
-        ImGuiMCP::EndDisabled();
-    } else {
-        if (ImGuiMCP::Button("Back")) {
-            workflow.backToSlots();
-        }
-        ImGuiMCP::SameLine();
-        if (ImGuiMCP::Button("Replace")) {
-            (void)workflow.replaceSelectedSlot();
-        }
-        const bool canEditAppearance = slot &&
-            slot->occupancy == core::SlotOccupancy::slaveTats && slot->tattoo &&
-            slot->tattoo->runtimeHandle != 0;
-        if (canEditAppearance) {
+    const auto* style = ImGuiMCP::GetStyle();
+    const float closeButtonWidth = ImGuiMCP::CalcTextSize("Close").x +
+        (style ? style->FramePadding.x * 2.0F : 16.0F);
+    const auto footerLayout = calculateUnifiedFooterLayout(
+        ImGuiMCP::GetContentRegionAvail().x,
+        closeButtonWidth);
+    if (ImGuiMCP::BeginTable(
+            "SlotActionsFooter",
+            2,
+            ImGuiMCP::ImGuiTableFlags_SizingStretchProp |
+                ImGuiMCP::ImGuiTableFlags_NoPadOuterX)) {
+        ImGuiMCP::TableSetupColumn(
+            "SlotWorkflowActions", ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
+        ImGuiMCP::TableSetupColumn(
+            "SlotWorkflowClose",
+            ImGuiMCP::ImGuiTableColumnFlags_WidthFixed,
+            footerLayout.closeWidth);
+        ImGuiMCP::TableNextRow();
+        ImGuiMCP::TableSetColumnIndex(0);
+        if (confirming || removing) {
+            ImGuiMCP::BeginDisabled(removing);
+            if (ImGuiMCP::Button("Cancel")) {
+                workflow.cancelRemove();
+            }
+            ImGuiMCP::EndDisabled();
             ImGuiMCP::SameLine();
-            if (ImGuiMCP::Button("Edit Appearance")) {
-                (void)workflow.beginEditAppearance();
+            const bool canRemove = isRemoveConfirmationEnabled(
+                workflow.screen(), target.has_value());
+            RemoveButtonState buttonState = RemoveButtonState::initial;
+            if (const auto* error = workflow.error()) {
+                buttonState = error->code == core::ServiceErrorCode::synchronizeFailed
+                    ? RemoveButtonState::retrySynchronization
+                    : RemoveButtonState::retryRemove;
+            }
+            const auto removeLabel = removeButtonLabel(target.value_or(-1), buttonState);
+            ImGuiMCP::BeginDisabled(!canRemove);
+            if (ImGuiMCP::Button(removeLabel.c_str())) {
+                (void)workflow.confirmRemove();
+            }
+            ImGuiMCP::EndDisabled();
+        } else {
+            if (ImGuiMCP::Button("Back")) {
+                workflow.backToSlots();
+            }
+            ImGuiMCP::SameLine();
+            if (ImGuiMCP::Button("Replace")) {
+                (void)workflow.replaceSelectedSlot();
+            }
+            const bool canEditAppearance = slot &&
+                slot->occupancy == core::SlotOccupancy::slaveTats && slot->tattoo &&
+                slot->tattoo->runtimeHandle != 0;
+            if (canEditAppearance) {
+                ImGuiMCP::SameLine();
+                if (ImGuiMCP::Button("Edit Appearance")) {
+                    (void)workflow.beginEditAppearance();
+                }
+            }
+            ImGuiMCP::SameLine();
+            if (ImGuiMCP::Button("Remove")) {
+                (void)workflow.requestRemove();
             }
         }
-        ImGuiMCP::SameLine();
-        if (ImGuiMCP::Button("Remove")) {
-            (void)workflow.requestRemove();
+        ImGuiMCP::TableSetColumnIndex(1);
+        if (ImGuiMCP::Button("Close")) {
+            open = false;
         }
-    }
-    ImGuiMCP::SameLine();
-    if (ImGuiMCP::Button("Close")) {
-        open = false;
+        ImGuiMCP::EndTable();
     }
 
     ImGuiMCP::End();
@@ -1194,24 +1228,45 @@ void renderPreview(
     ImGuiMCP::EndChild();
     ImGuiMCP::PopStyleColor();
 
-    ImGuiMCP::BeginDisabled(applying);
-    if (ImGuiMCP::Button("Cancel")) {
-        workflow.cancelPreview();
-    }
-    ImGuiMCP::EndDisabled();
-    ImGuiMCP::SameLine();
-    const bool canApply = isPreviewApplyEnabled(
-        workflow.screen(), target.has_value(), preview != nullptr);
-    const auto applyLabel = previewApplyButtonLabel(
-        target.value_or(-1), workflow.error() != nullptr);
-    ImGuiMCP::BeginDisabled(!canApply);
-    if (ImGuiMCP::Button(applyLabel.c_str())) {
-        (void)workflow.confirmApply();
-    }
-    ImGuiMCP::EndDisabled();
-    ImGuiMCP::SameLine();
-    if (ImGuiMCP::Button("Close")) {
-        open = false;
+    const auto* style = ImGuiMCP::GetStyle();
+    const float closeButtonWidth = ImGuiMCP::CalcTextSize("Close").x +
+        (style ? style->FramePadding.x * 2.0F : 16.0F);
+    const auto footerLayout = calculateUnifiedFooterLayout(
+        ImGuiMCP::GetContentRegionAvail().x,
+        closeButtonWidth);
+    if (ImGuiMCP::BeginTable(
+            "PreviewFooter",
+            2,
+            ImGuiMCP::ImGuiTableFlags_SizingStretchProp |
+                ImGuiMCP::ImGuiTableFlags_NoPadOuterX)) {
+        ImGuiMCP::TableSetupColumn(
+            "PreviewActions", ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
+        ImGuiMCP::TableSetupColumn(
+            "PreviewClose",
+            ImGuiMCP::ImGuiTableColumnFlags_WidthFixed,
+            footerLayout.closeWidth);
+        ImGuiMCP::TableNextRow();
+        ImGuiMCP::TableSetColumnIndex(0);
+        ImGuiMCP::BeginDisabled(applying);
+        if (ImGuiMCP::Button("Cancel")) {
+            workflow.cancelPreview();
+        }
+        ImGuiMCP::EndDisabled();
+        ImGuiMCP::SameLine();
+        const bool canApply = isPreviewApplyEnabled(
+            workflow.screen(), target.has_value(), preview != nullptr);
+        const auto applyLabel = previewApplyButtonLabel(
+            target.value_or(-1), workflow.error() != nullptr);
+        ImGuiMCP::BeginDisabled(!canApply);
+        if (ImGuiMCP::Button(applyLabel.c_str())) {
+            (void)workflow.confirmApply();
+        }
+        ImGuiMCP::EndDisabled();
+        ImGuiMCP::TableSetColumnIndex(1);
+        if (ImGuiMCP::Button("Close")) {
+            open = false;
+        }
+        ImGuiMCP::EndTable();
     }
 
     ImGuiMCP::End();
@@ -1340,34 +1395,53 @@ void renderEditAppearance(
             ImGuiMCP::EndChild();
             ImGuiMCP::PopStyleColor();
 
-            ImGuiMCP::BeginDisabled(saving);
-            const bool cancelled = ImGuiMCP::Button("Cancel");
-            ImGuiMCP::EndDisabled();
-            orchestrateEditAppearanceFrame(
-                workflow,
-                {.cancelRequested = cancelled},
-                teardown,
-                [&](const AppearanceThumbnailPresentation&) {
-                    ImGuiMCP::SameLine();
-                    const auto savePresentation = appearanceSavePresentation(
-                        workflow.screen(), workflow.editAppearance());
-                    ImGuiMCP::BeginDisabled(!savePresentation.enabled);
-                    if (ImGuiMCP::Button(savePresentation.label.data())) {
-                        (void)workflow.confirmAppearanceUpdate();
-                    }
-                    ImGuiMCP::EndDisabled();
-                    ImGuiMCP::SameLine();
-                    ImGuiMCP::BeginDisabled(saving);
-                    if (ImGuiMCP::Button("Close")) {
-                        open = false;
-                    }
-                    ImGuiMCP::EndDisabled();
+            const auto* style = ImGuiMCP::GetStyle();
+            const float closeButtonWidth = ImGuiMCP::CalcTextSize("Close").x +
+                (style ? style->FramePadding.x * 2.0F : 16.0F);
+            const auto footerLayout = calculateUnifiedFooterLayout(
+                ImGuiMCP::GetContentRegionAvail().x,
+                closeButtonWidth);
+            bool cancelled = false;
+            if (ImGuiMCP::BeginTable(
+                    "EditAppearanceFooter",
+                    2,
+                    ImGuiMCP::ImGuiTableFlags_SizingStretchProp |
+                        ImGuiMCP::ImGuiTableFlags_NoPadOuterX)) {
+                ImGuiMCP::TableSetupColumn(
+                    "EditAppearanceActions", ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
+                ImGuiMCP::TableSetupColumn(
+                    "EditAppearanceClose",
+                    ImGuiMCP::ImGuiTableColumnFlags_WidthFixed,
+                    footerLayout.closeWidth);
+                ImGuiMCP::TableNextRow();
+                ImGuiMCP::TableSetColumnIndex(0);
+                ImGuiMCP::BeginDisabled(saving);
+                cancelled = ImGuiMCP::Button("Cancel");
+                ImGuiMCP::EndDisabled();
+                ImGuiMCP::SameLine();
+                const auto savePresentation = appearanceSavePresentation(
+                    workflow.screen(), workflow.editAppearance());
+                ImGuiMCP::BeginDisabled(!savePresentation.enabled);
+                if (ImGuiMCP::Button(savePresentation.label.data())) {
+                    (void)workflow.confirmAppearanceUpdate();
+                }
+                ImGuiMCP::EndDisabled();
+                ImGuiMCP::TableSetColumnIndex(1);
+                ImGuiMCP::BeginDisabled(saving);
+                if (ImGuiMCP::Button("Close")) {
+                    open = false;
+                }
+                ImGuiMCP::EndDisabled();
+                ImGuiMCP::EndTable();
+            }
 
-                    teardown();
-                    if (!open && close) {
-                        close();
-                    }
-                });
+            if (cancelled) {
+                workflow.cancelEditAppearance();
+            }
+            teardown();
+            if (!open && close) {
+                close();
+            }
         });
 }
 

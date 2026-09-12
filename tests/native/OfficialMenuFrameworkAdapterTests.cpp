@@ -227,6 +227,22 @@ void footerControlAlignsToRightContentEdge() {
         "expected constrained footer alignment clamped inside its cell");
 }
 
+void unifiedFooterKeepsCloseAtRightEdge() {
+    const auto layout = stui::native::calculateUnifiedFooterLayout(300.0F, 64.0F);
+
+    expect(layout.actionWidth == 236.0F,
+        "expected workflow actions to stop before the fixed Close column");
+    expect(layout.closeWidth == 64.0F,
+        "expected Close column to preserve its requested width");
+    expect(layout.closeX == 236.0F,
+        "expected Close to start at the same right-aligned position on every screen");
+
+    const auto constrained = stui::native::calculateUnifiedFooterLayout(40.0F, 64.0F);
+    expect(constrained.actionWidth == 0.0F && constrained.closeWidth == 40.0F &&
+            constrained.closeX == 0.0F,
+        "expected constrained unified footer to keep Close inside available content");
+}
+
 void pickerFooterActionsStayRightAlignedInNavigationOrder() {
     const auto layout = stui::native::calculatePickerFooterActionLayout(
         200.0F,
@@ -718,6 +734,8 @@ int main() {
         std::cout << "PASS thumbnail cards reserve no persistent metadata row\n";
         footerControlAlignsToRightContentEdge();
         std::cout << "PASS footer control aligns to right content edge\n";
+        unifiedFooterKeepsCloseAtRightEdge();
+        std::cout << "PASS unified footer keeps Close at right edge\n";
         pickerFooterActionsStayRightAlignedInNavigationOrder();
         std::cout << "PASS Picker footer actions stay right-aligned\n";
         tattooColorComponentsPreserveRgbChannelOrder();
