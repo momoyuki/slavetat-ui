@@ -54,10 +54,12 @@ placeholder rather than blocking the menu.
 
 ## Changing the Hotkey
 
-`SlaveTatsUI.json` is created beside the plugin log configuration directory on
-first run. Set `hotkey` to `F1`-`F12`, `INSERT`, `DELETE`, `HOME`, `END`,
-`PAGEUP`, `PAGEDOWN`, `TILDE`, `BACKSLASH`, `NUMPAD0`-`NUMPAD9`, or a raw DIK
-scancode integer, then restart the game.
+The hotkey defaults to `None`. Open the `SlaveTatsUI` section in SKSE Menu and
+select `Bind Key` to bind the next keyboard key, or `Clear` to disable the
+hotkey. Pressing Escape while binding cancels the change.
+
+The setting is saved immediately to `SlaveTatsUI.json` beside the plugin log.
+Existing named or raw DIK scancode values remain supported.
 
 ## Compatibility
 

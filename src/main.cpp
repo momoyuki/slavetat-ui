@@ -9,6 +9,7 @@
 #include "native/NativeThumbnailRuntime.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
 #include "runtime/ApplicationRuntime.h"
+#include "runtime/HotkeyBinding.h"
 #include "textures/ExactStreamReader.h"
 
 #include <array>
@@ -65,63 +66,9 @@ std::unique_ptr<native::NativeThumbnailRuntime> g_nativeThumbnailRuntime =
     makeUnavailableNativeThumbnailRuntime();
 bool g_nativeThumbnailRuntimeUnavailableLogged{};
 native::NativeMenu* g_nativeMenu{};
+std::unique_ptr<runtime::HotkeyBinding> g_hotkeyBinding;
 
 }  // namespace
-
-
-namespace Config {
-
-inline uint32_t hotkeyDIK = 0x42;  // default: F8
-
-static const std::unordered_map<std::string, uint32_t> kKeyNames = {
-    {"F1",0x3B},  {"F2",0x3C},  {"F3",0x3D},  {"F4",0x3E},
-    {"F5",0x3F},  {"F6",0x40},  {"F7",0x41},  {"F8",0x42},
-    {"F9",0x43},  {"F10",0x44}, {"F11",0x57}, {"F12",0x58},
-    {"INSERT",0xD2}, {"DELETE",0xD3}, {"HOME",0xC7}, {"END",0xCF},
-    {"PAGEUP",0xC9}, {"PAGEDOWN",0xD1},
-    {"TILDE",0x29},  {"BACKSLASH",0x2B},
-    {"NUMPAD0",0x52},{"NUMPAD1",0x4F},{"NUMPAD2",0x50},{"NUMPAD3",0x51},
-    {"NUMPAD4",0x4B},{"NUMPAD5",0x4C},{"NUMPAD6",0x4D},
-    {"NUMPAD7",0x47},{"NUMPAD8",0x48},{"NUMPAD9",0x49},
-};
-
-inline void load(const std::filesystem::path& dir) {
-    auto path = dir / "SlaveTatsUI.json";
-
-    if (!std::filesystem::exists(path)) {
-        // Write defaults on first run
-        nlohmann::json def;
-        def["hotkey"]   = "F8";
-        def["_comment"] = "hotkey: F1-F12, INSERT, DELETE, HOME, END, PAGEUP, PAGEDOWN, TILDE, BACKSLASH, NUMPAD0-9, or DIK scancode integer";
-        std::ofstream f(path);
-        if (f) f << def.dump(2);
-        logger::info("SlaveTatsUI: created default config at {}", path.string());
-        return;
-    }
-
-    std::ifstream f(path);
-    if (!f) { logger::warn("SlaveTatsUI: cannot open config {}", path.string()); return; }
-
-    auto j = nlohmann::json::parse(f, nullptr, false);
-    if (j.is_discarded()) { logger::warn("SlaveTatsUI: config JSON parse error"); return; }
-
-    if (j.contains("hotkey")) {
-        auto& hk = j["hotkey"];
-        if (hk.is_number_integer()) {
-            hotkeyDIK = hk.get<uint32_t>();
-        } else if (hk.is_string()) {
-            std::string name = hk.get<std::string>();
-            for (char& c : name) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-            auto it = kKeyNames.find(name);
-            if (it != kKeyNames.end()) hotkeyDIK = it->second;
-            else logger::warn("SlaveTatsUI: unknown key name '{}' — using F8", name);
-        }
-    }
-
-    logger::info("SlaveTatsUI: hotkey DIK=0x{:X}", hotkeyDIK);
-}
-
-}  // namespace Config
 
 // ── Input handler ─────────────────────────────────────────────────────────────
 
@@ -138,9 +85,28 @@ public:
 
         for (auto* e = *a_event; e; e = e->next) {
             auto* btn = e->AsButtonEvent();
-            if (!btn || !btn->IsDown()) continue;
+            if (!btn || !btn->IsDown() || e->GetDevice() != RE::INPUT_DEVICE::kKeyboard) {
+                continue;
+            }
 
-            if (btn->GetIDCode() == Config::hotkeyDIK) {
+            if (!g_hotkeyBinding) {
+                continue;
+            }
+
+            const auto key = btn->GetIDCode();
+            if (g_hotkeyBinding->isCapturing()) {
+                if (key == 0x01) {
+                    g_hotkeyBinding->cancelCapture();
+                    logger::info("SlaveTatsUI: hotkey binding canceled");
+                } else if (g_hotkeyBinding->capture(key)) {
+                    logger::info("SlaveTatsUI: hotkey bound to {}", g_hotkeyBinding->label());
+                } else {
+                    logger::error("SlaveTatsUI: failed to save hotkey binding");
+                }
+                continue;
+            }
+
+            if (g_hotkeyBinding->matches(key)) {
                 if (g_nativeMenu) {
                     g_nativeMenu->toggle();
                 }
@@ -333,6 +299,12 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
         spdlog::set_default_logger(std::move(log));
     } catch (...) {}
 
+    g_hotkeyBinding = std::make_unique<runtime::HotkeyBinding>(
+        pluginDir / "SlaveTatsUI.json");
+    if (!g_hotkeyBinding->load()) {
+        logger::warn("SlaveTatsUI: failed to load hotkey configuration; hotkey disabled");
+    }
+
     static native::OfficialMenuFrameworkAdapter menuFrameworkAdapter;
     static native::NativeMenu nativeMenu([](native::NativeMenu& menu) {
         native::OfficialMenuFrameworkAdapter::renderFoundation(
@@ -341,7 +313,9 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
             g_nativeCatalogBrowser,
             *g_nativeThumbnailRuntime,
             [&menu] { menu.close(); });
-    }, &native::OfficialMenuFrameworkAdapter::renderLauncher);
+    }, [] {
+        return native::OfficialMenuFrameworkAdapter::renderLauncher(*g_hotkeyBinding);
+    });
     g_nativeMenu = &nativeMenu;
     if (const auto result = nativeMenu.registerMenu(menuFrameworkAdapter); !result) {
         logger::warn(
@@ -353,8 +327,6 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
             menuFrameworkAdapter.version());
     }
 
-    Config::load(pluginDir);
-
     auto* msg = SKSE::GetMessagingInterface();
     if (!msg) {
         logger::critical("SlaveTatsUI: messaging interface unavailable");
@@ -365,6 +337,6 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
     msg->RegisterListener("SlaveTatsNG",   onSlaveTatsMessage);
     msg->RegisterListener("JContainers64", onJContainersMessage);
 
-    logger::info("SlaveTatsUI: loaded — toggle hotkey DIK=0x{:X} (edit SlaveTatsUI.json to change)", Config::hotkeyDIK);
+    logger::info("SlaveTatsUI: loaded — hotkey={}", g_hotkeyBinding->label());
     return true;
 }

@@ -1,4 +1,5 @@
 #include "native/OfficialMenuFrameworkAdapter.h"
+#include "runtime/HotkeyBinding.h"
 
 #include <RE/Skyrim.h>
 
@@ -1447,8 +1448,21 @@ void renderEditAppearance(
 
 }  // namespace
 
-bool OfficialMenuFrameworkAdapter::renderLauncher() {
+bool OfficialMenuFrameworkAdapter::renderLauncher(runtime::HotkeyBinding& hotkey) {
     ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
+    const auto hotkeyLabel = hotkey.label();
+    ImGuiMCP::Text("Hotkey: %s", hotkeyLabel.c_str());
+    if (hotkey.isCapturing()) {
+        ImGuiMCP::TextUnformatted("Press a keyboard key to bind, or Escape to cancel.");
+    } else if (ImGuiMCP::Button("Bind Key")) {
+        hotkey.beginCapture();
+    }
+    ImGuiMCP::SameLine();
+    ImGuiMCP::BeginDisabled(!hotkey.key());
+    if (ImGuiMCP::Button("Clear")) {
+        (void)hotkey.clear();
+    }
+    ImGuiMCP::EndDisabled();
     return ImGuiMCP::Button("Open Tattoo Browser");
 }
 

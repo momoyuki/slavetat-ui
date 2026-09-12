@@ -34,6 +34,7 @@ set(headers
     src/runtime/AppliedTattooHandleMembership.h
     src/runtime/SlaveTatsAlpha.h
     src/runtime/ApplicationRuntime.h
+    src/runtime/HotkeyBinding.h
     src/runtime/UpdateTattooAppearanceOrchestration.h
     src/runtime/SlaveTatsRuntime.h
     src/repository/TattooCatalogLoader.h
@@ -62,6 +63,7 @@ set(sources
     src/core/SlaveTatsService.cpp
     src/runtime/OverlaySlotConfiguration.cpp
     src/runtime/ApplicationRuntime.cpp
+    src/runtime/HotkeyBinding.cpp
     src/runtime/UpdateTattooAppearanceOrchestration.cpp
     src/runtime/SlaveTatsRuntime.cpp
     src/repository/TattooCatalogLoader.cpp
@@ -98,6 +100,14 @@ target_link_libraries(${PROJECT_NAME}
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
 if(BUILD_TESTING)
+    add_executable(HotkeyBindingTests
+        src/runtime/HotkeyBinding.cpp
+        tests/runtime/HotkeyBindingTests.cpp
+    )
+    target_include_directories(HotkeyBindingTests PRIVATE src)
+    target_link_libraries(HotkeyBindingTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME HotkeyBindingTests COMMAND HotkeyBindingTests)
+
     add_executable(NativeThumbnailRuntimeTests
         src/native/NativeThumbnailController.cpp
         src/native/NativeThumbnailRuntime.cpp
@@ -163,6 +173,7 @@ if(BUILD_TESTING)
 
     add_executable(OfficialMenuFrameworkAdapterTests
         src/native/OfficialMenuFrameworkAdapter.cpp
+        src/runtime/HotkeyBinding.cpp
         src/native/NativeCatalogBrowserModel.cpp
         src/native/NativeSlotWorkflowModel.cpp
         src/native/NativeSlotWorkflowRuntime.cpp

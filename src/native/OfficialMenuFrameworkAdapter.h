@@ -11,6 +11,10 @@
 #include <string_view>
 #include <vector>
 
+namespace stui::runtime {
+class HotkeyBinding;
+}
+
 namespace stui::native {
 
 class NativeThumbnailRuntime;
@@ -319,7 +323,7 @@ public:
 
     [[nodiscard]] static FoundationLayout calculateFoundationLayout(
         MenuPosition viewportPosition, MenuSize viewportSize) noexcept;
-    [[nodiscard]] static bool renderLauncher();
+    [[nodiscard]] static bool renderLauncher(runtime::HotkeyBinding& hotkey);
     static void renderFoundation(
         NativeSlotWorkflowModel& workflow,
         NativeSlotWorkflowRuntime& slotRuntime,

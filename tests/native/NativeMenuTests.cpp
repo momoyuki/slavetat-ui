@@ -205,7 +205,7 @@ void openAndCloseUseRegisteredWindowState() {
     expect(!menu.isOpen(), "expected closed state");
 }
 
-void toggleLaunchesWhenOpeningAndClosesWithoutRelaunching() {
+void toggleOpensAndClosesWithoutInvokingLauncher() {
     FakeMenuFrameworkPort port;
     int launchCount = 0;
     stui::native::NativeMenu menu({}, [&launchCount] {
@@ -215,36 +215,36 @@ void toggleLaunchesWhenOpeningAndClosesWithoutRelaunching() {
     expect(menu.registerMenu(port).has_value(), "expected registration");
 
     menu.toggle();
-    expect(launchCount == 1, "expected opening toggle to launch workflow once");
+    expect(launchCount == 0, "expected opening toggle not to invoke launcher rendering");
     expect(menu.isOpen(), "expected opening toggle to open native window");
 
     menu.toggle();
-    expect(launchCount == 1, "expected closing toggle not to relaunch workflow");
+    expect(launchCount == 0, "expected closing toggle not to invoke launcher rendering");
     expect(!menu.isOpen(), "expected closing toggle to close native window");
 }
 
-void rejectedToggleLaunchLeavesWindowClosed() {
+void rejectedSectionLaunchLeavesWindowClosed() {
     FakeMenuFrameworkPort port;
     stui::native::NativeMenu menu({}, [] { return false; });
     expect(menu.registerMenu(port).has_value(), "expected registration");
 
-    menu.toggle();
+    port.itemCallback();
 
-    expect(!menu.isOpen(), "expected rejected toggle launch to leave window closed");
+    expect(!menu.isOpen(), "expected rejected section launch to leave window closed");
 }
 
-void throwingToggleLaunchIsContained() {
+void throwingSectionLaunchIsContained() {
     FakeMenuFrameworkPort port;
     stui::native::NativeMenu menu({}, []() -> bool {
         throw std::runtime_error("launch failed");
     });
     expect(menu.registerMenu(port).has_value(), "expected registration");
 
-    menu.toggle();
+    port.itemCallback();
 
-    expect(!menu.isOpen(), "expected throwing toggle launch to leave window closed");
+    expect(!menu.isOpen(), "expected throwing section launch to leave window closed");
     expect(menu.lastError() == stui::native::MenuRegistrationError::callbackFailed,
-           "expected contained toggle launch failure");
+           "expected contained section launch failure");
 }
 
 void renderActionCanCloseOwningWindow() {
@@ -308,12 +308,12 @@ int main() {
         std::cout << "PASS render exception is contained at callback boundary\n";
         openAndCloseUseRegisteredWindowState();
         std::cout << "PASS open and close use registered window state\n";
-        toggleLaunchesWhenOpeningAndClosesWithoutRelaunching();
-        std::cout << "PASS toggle launches when opening and closes without relaunching\n";
-        rejectedToggleLaunchLeavesWindowClosed();
-        std::cout << "PASS rejected toggle launch leaves window closed\n";
-        throwingToggleLaunchIsContained();
-        std::cout << "PASS throwing toggle launch is contained\n";
+        toggleOpensAndClosesWithoutInvokingLauncher();
+        std::cout << "PASS toggle opens and closes without invoking launcher\n";
+        rejectedSectionLaunchLeavesWindowClosed();
+        std::cout << "PASS rejected section launch leaves window closed\n";
+        throwingSectionLaunchIsContained();
+        std::cout << "PASS throwing section launch is contained\n";
         renderActionCanCloseOwningWindow();
         std::cout << "PASS render action can close owning window\n";
         unavailableRegistrationCanBeRetriedAndClearsError();

@@ -81,15 +81,8 @@ void NativeMenu::toggle() noexcept {
         close();
         return;
     }
-    if (!registered_ || !launch_) {
-        return;
-    }
-    try {
-        if (launch_()) {
-            open();
-        }
-    } catch (...) {
-        lastError_ = MenuRegistrationError::callbackFailed;
+    if (registered_) {
+        open();
     }
 }
 
