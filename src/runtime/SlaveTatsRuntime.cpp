@@ -150,31 +150,64 @@ public:
 
     bool writeAppearance(
         std::int32_t runtimeHandle,
-        std::int32_t color,
-        float invertedAlpha) override {
+        const core::UpdateTattooAppearanceRequest& request) override {
+        const float invertedAlpha = toSlaveTatsInvertedAlpha(request.alpha);
         if (m_bindings) {
             if (!m_bindings->setTattooInt || !m_bindings->getTattooInt ||
                 !m_bindings->setTattooFloat || !m_bindings->getTattooFloat ||
                 runtimeHandle == 0) {
                 return false;
             }
-            m_bindings->setTattooInt(runtimeHandle, "color", color);
             constexpr auto missingInt = std::numeric_limits<std::int32_t>::min();
-            if (m_bindings->getTattooInt(runtimeHandle, "color", missingInt) != color) {
+            const auto setIntAndVerify = [&](const char* key, std::int32_t value) {
+                m_bindings->setTattooInt(runtimeHandle, key, value);
+                return m_bindings->getTattooInt(runtimeHandle, key, missingInt) == value;
+            };
+            const float missingFloat = std::numeric_limits<float>::quiet_NaN();
+            const auto setFloatAndVerify = [&](const char* key, float value) {
+                m_bindings->setTattooFloat(runtimeHandle, key, value);
+                return m_bindings->getTattooFloat(runtimeHandle, key, missingFloat) == value;
+            };
+
+            if (!setIntAndVerify("color", request.color)) {
                 return false;
             }
-            m_bindings->setTattooFloat(runtimeHandle, "invertedAlpha", invertedAlpha);
-            const float missingFloat = std::numeric_limits<float>::quiet_NaN();
-            return m_bindings->getTattooFloat(
-                runtimeHandle, "invertedAlpha", missingFloat) == invertedAlpha;
+            if (!setFloatAndVerify("invertedAlpha", invertedAlpha)) {
+                return false;
+            }
+            if (!setIntAndVerify("glow", request.glow)) {
+                return false;
+            }
+            if (!setFloatAndVerify("glossiness", request.glossiness)) {
+                return false;
+            }
+            if (!setFloatAndVerify("specularStrength", request.specularStrength)) {
+                return false;
+            }
+            return setFloatAndVerify("emissiveMult", request.emissiveMult);
         }
-        if (!jcmini::JMap::setIntAndVerify(runtimeHandle, "color", color)) {
+        if (!jcmini::JMap::setIntAndVerify(runtimeHandle, "color", request.color)) {
+            return false;
+        }
+        if (!jcmini::JMap::setFltAndVerify(runtimeHandle, "invertedAlpha", invertedAlpha)) {
+            return false;
+        }
+        if (!jcmini::JMap::setIntAndVerify(runtimeHandle, "glow", request.glow)) {
+            return false;
+        }
+        if (!jcmini::JMap::setFltAndVerify(runtimeHandle, "glossiness", request.glossiness)) {
+            return false;
+        }
+        if (!jcmini::JMap::setFltAndVerify(
+                runtimeHandle,
+                "specularStrength",
+                request.specularStrength)) {
             return false;
         }
         return jcmini::JMap::setFltAndVerify(
             runtimeHandle,
-            "invertedAlpha",
-            invertedAlpha);
+            "emissiveMult",
+            request.emissiveMult);
     }
 
     bool markActorUpdated(ActorHandle actorHandle) override {
@@ -269,6 +302,13 @@ core::TattooQueryResult SlaveTatsRuntime::queryAvailable(std::string_view domain
             .locked = jcmini::JMap::getInt(handle, "locked") != 0,
             .alpha = fromSlaveTatsInvertedAlpha(
                 jcmini::JMap::getFlt(handle, "invertedAlpha", 0.0F)),
+            .glow = jcmini::JMap::getInt(handle, "glow", 0),
+            .glossiness = jcmini::JMap::getFlt(handle, "glossiness", 0.0F),
+            .specularStrength = jcmini::JMap::getFlt(
+                handle, "specularStrength", 0.0F),
+            .bump = jcmini::JMap::getStr(handle, "bump"),
+            .glowTexture = jcmini::JMap::getStr(handle, "glowTexture"),
+            .emissiveMult = jcmini::JMap::getFlt(handle, "emissiveMult", 1.0F),
         });
     }
 
@@ -278,7 +318,9 @@ core::TattooQueryResult SlaveTatsRuntime::queryAvailable(std::string_view domain
 core::TattooSlotsResult SlaveTatsRuntime::querySlots(
     std::uint32_t actorFormId,
     core::TattooArea area) {
-    auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorFormId);
+    auto* actor = m_appearanceBindings && m_appearanceBindings->resolveActor
+        ? static_cast<RE::Actor*>(m_appearanceBindings->resolveActor(actorFormId))
+        : RE::TESForm::LookupByID<RE::Actor>(actorFormId);
     if (!actor) {
         return std::unexpected(core::ServiceError{
             core::ServiceErrorCode::actorNotFound,
@@ -335,6 +377,14 @@ core::TattooSlotsResult SlaveTatsRuntime::querySlots(
                     .locked = jcmini::JMap::getInt(tattoo, "locked") != 0,
                     .alpha = fromSlaveTatsInvertedAlpha(
                         jcmini::JMap::getFlt(tattoo, "invertedAlpha", 0.0F)),
+                    .glow = jcmini::JMap::getInt(tattoo, "glow", 0),
+                    .glossiness = jcmini::JMap::getFlt(tattoo, "glossiness", 0.0F),
+                    .specularStrength = jcmini::JMap::getFlt(
+                        tattoo, "specularStrength", 0.0F),
+                    .bump = jcmini::JMap::getStr(tattoo, "bump"),
+                    .glowTexture = jcmini::JMap::getStr(tattoo, "glowTexture"),
+                    .emissiveMult = jcmini::JMap::getFlt(
+                        tattoo, "emissiveMult", 1.0F),
                 },
             });
         } else if (externalSlots->contains(slot)) {

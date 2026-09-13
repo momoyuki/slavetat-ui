@@ -136,6 +136,10 @@ UpdateTattooAppearanceRequest validAppearanceRequest() {
         .runtimeHandle = 42,
         .color = 0xFF00FF,
         .alpha = 0.75F,
+        .glow = 0x102030,
+        .glossiness = 2.5F,
+        .specularStrength = 1.25F,
+        .emissiveMult = 3.0F,
         .mode = UpdateTattooAppearanceMode::updateAndSynchronize,
     };
 }
@@ -571,15 +575,81 @@ void outOfRangeAppearanceAlphaIsRejected() {
     aboveRange.alpha = 1.01F;
     auto notANumber = validAppearanceRequest();
     notANumber.alpha = std::numeric_limits<float>::quiet_NaN();
+    auto infinity = validAppearanceRequest();
+    infinity.alpha = std::numeric_limits<float>::infinity();
 
     const auto belowResult = service.updateAppearance(belowRange);
     const auto aboveResult = service.updateAppearance(aboveRange);
     const auto nanResult = service.updateAppearance(notANumber);
+    const auto infinityResult = service.updateAppearance(infinity);
 
     expectError(belowResult, ServiceErrorCode::updateFailed, "Tattoo alpha must be between 0 and 1");
     expectError(aboveResult, ServiceErrorCode::updateFailed, "Tattoo alpha must be between 0 and 1");
     expectError(nanResult, ServiceErrorCode::updateFailed, "Tattoo alpha must be between 0 and 1");
+    expectError(infinityResult, ServiceErrorCode::updateFailed, "Tattoo alpha must be between 0 and 1");
     expect(runtime.updateCount == 0, "out-of-range alpha must not reach the appearance runtime");
+}
+
+void invalidAppearanceGlowIsRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    auto belowRange = validAppearanceRequest();
+    belowRange.glow = -1;
+    auto aboveRange = validAppearanceRequest();
+    aboveRange.glow = 0x1000000;
+
+    const auto belowResult = service.updateAppearance(belowRange);
+    const auto aboveResult = service.updateAppearance(aboveRange);
+
+    expectError(belowResult, ServiceErrorCode::updateFailed, "Tattoo glow must be between 0 and 0xFFFFFF");
+    expectError(aboveResult, ServiceErrorCode::updateFailed, "Tattoo glow must be between 0 and 0xFFFFFF");
+    expect(runtime.updateCount == 0, "out-of-range glow must not reach the appearance runtime");
+}
+
+void invalidAppearanceMaterialValuesAreRejected() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    const auto quietNan = std::numeric_limits<float>::quiet_NaN();
+    const auto infinity = std::numeric_limits<float>::infinity();
+
+    auto negativeGlossiness = validAppearanceRequest();
+    negativeGlossiness.glossiness = -0.01F;
+    auto nanGlossiness = validAppearanceRequest();
+    nanGlossiness.glossiness = quietNan;
+    auto infiniteGlossiness = validAppearanceRequest();
+    infiniteGlossiness.glossiness = infinity;
+    auto negativeSpecular = validAppearanceRequest();
+    negativeSpecular.specularStrength = -0.01F;
+    auto nanSpecular = validAppearanceRequest();
+    nanSpecular.specularStrength = quietNan;
+    auto infiniteSpecular = validAppearanceRequest();
+    infiniteSpecular.specularStrength = infinity;
+    auto negativeEmissive = validAppearanceRequest();
+    negativeEmissive.emissiveMult = -0.01F;
+    auto nanEmissive = validAppearanceRequest();
+    nanEmissive.emissiveMult = quietNan;
+    auto infiniteEmissive = validAppearanceRequest();
+    infiniteEmissive.emissiveMult = infinity;
+
+    expectError(service.updateAppearance(negativeGlossiness), ServiceErrorCode::updateFailed,
+        "Tattoo glossiness must be finite and non-negative");
+    expectError(service.updateAppearance(nanGlossiness), ServiceErrorCode::updateFailed,
+        "Tattoo glossiness must be finite and non-negative");
+    expectError(service.updateAppearance(infiniteGlossiness), ServiceErrorCode::updateFailed,
+        "Tattoo glossiness must be finite and non-negative");
+    expectError(service.updateAppearance(negativeSpecular), ServiceErrorCode::updateFailed,
+        "Tattoo specular strength must be finite and non-negative");
+    expectError(service.updateAppearance(nanSpecular), ServiceErrorCode::updateFailed,
+        "Tattoo specular strength must be finite and non-negative");
+    expectError(service.updateAppearance(infiniteSpecular), ServiceErrorCode::updateFailed,
+        "Tattoo specular strength must be finite and non-negative");
+    expectError(service.updateAppearance(negativeEmissive), ServiceErrorCode::updateFailed,
+        "Tattoo emissive multiplier must be finite and non-negative");
+    expectError(service.updateAppearance(nanEmissive), ServiceErrorCode::updateFailed,
+        "Tattoo emissive multiplier must be finite and non-negative");
+    expectError(service.updateAppearance(infiniteEmissive), ServiceErrorCode::updateFailed,
+        "Tattoo emissive multiplier must be finite and non-negative");
+    expect(runtime.updateCount == 0, "invalid material values must not reach the appearance runtime");
 }
 
 void appearanceBoundariesAreForwardedUnchanged() {
@@ -602,6 +672,9 @@ void appearanceBoundariesAreForwardedUnchanged() {
     expect(runtime.updateCount == 2, "expected both appearance boundaries forwarded");
     expect(runtime.updatedRequest.color == 0xFFFFFF && runtime.updatedRequest.alpha == 1.0F,
         "expected white and opaque appearance forwarded unchanged");
+    expect(runtime.updatedRequest.glow == 0x102030 && runtime.updatedRequest.glossiness == 2.5F &&
+            runtime.updatedRequest.specularStrength == 1.25F && runtime.updatedRequest.emissiveMult == 3.0F,
+        "expected advanced appearance values forwarded unchanged");
 }
 
 void synchronizeOnlyAppearanceRequestIsForwardedUnchanged() {
@@ -626,6 +699,27 @@ void synchronizeOnlyAppearanceRequestIsForwardedUnchanged() {
         "expected synchronization appearance mode and values forwarded unchanged");
     expect(result->actorFormId == 0x14 && result->runtimeHandle == 0,
         "expected synchronization runtime result returned unchanged");
+}
+
+void synchronizeOnlyAppearanceBypassesAppearanceValueValidation() {
+    FakeTattooRuntime runtime;
+    SlaveTatsService service(runtime);
+    const auto request = UpdateTattooAppearanceRequest{
+        .actorFormId = 0x14,
+        .runtimeHandle = 0,
+        .color = -1,
+        .alpha = std::numeric_limits<float>::quiet_NaN(),
+        .glow = 0x1000000,
+        .glossiness = -1.0F,
+        .specularStrength = std::numeric_limits<float>::infinity(),
+        .emissiveMult = -1.0F,
+        .mode = UpdateTattooAppearanceMode::synchronizeOnly,
+    };
+
+    const auto result = service.updateAppearance(request);
+
+    expect(result.has_value(), "expected synchronization-only request to bypass appearance-value validation");
+    expect(runtime.updateCount == 1, "expected synchronization-only request forwarded despite stale values");
 }
 
 template <class Test>
@@ -674,7 +768,10 @@ int main() {
     failures += run("zero appearance handle is rejected for full update", zeroAppearanceHandleIsRejectedForFullUpdate);
     failures += run("out-of-range appearance color is rejected", outOfRangeAppearanceColorIsRejected);
     failures += run("out-of-range appearance alpha is rejected", outOfRangeAppearanceAlphaIsRejected);
+    failures += run("invalid appearance glow is rejected", invalidAppearanceGlowIsRejected);
+    failures += run("invalid appearance material values are rejected", invalidAppearanceMaterialValuesAreRejected);
     failures += run("appearance boundaries are forwarded unchanged", appearanceBoundariesAreForwardedUnchanged);
     failures += run("synchronize-only appearance request is forwarded unchanged", synchronizeOnlyAppearanceRequestIsForwardedUnchanged);
+    failures += run("synchronize-only appearance bypasses appearance validation", synchronizeOnlyAppearanceBypassesAppearanceValueValidation);
     return failures == 0 ? 0 : 1;
 }

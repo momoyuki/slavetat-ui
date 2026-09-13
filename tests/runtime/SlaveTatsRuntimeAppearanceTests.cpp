@@ -1,12 +1,22 @@
+#define ENABLE_COMMONLIBSSE_TESTING
+
 #include "runtime/SlaveTatsRuntime.h"
 
-#include <cmath>
+#include "jcontainers_mini.h"
+
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <map>
+#include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -17,6 +27,237 @@ using stui::core::UpdateTattooAppearanceMode;
 using stui::core::UpdateTattooAppearanceRequest;
 using stui::runtime::SlaveTatsAppearanceBindings;
 using stui::runtime::SlaveTatsRuntime;
+
+using TattooFieldKey = std::pair<std::int32_t, std::string>;
+
+struct IntegerRead {
+    std::int32_t handle{};
+    std::string key;
+    std::int32_t fallback{};
+};
+
+struct FloatRead {
+    std::int32_t handle{};
+    std::string key;
+    float fallback{};
+};
+
+struct StringRead {
+    std::int32_t handle{};
+    std::string key;
+    std::string fallback;
+};
+
+struct QueryState {
+    void* actor{reinterpret_cast<void*>(0x1234)};
+    std::int32_t nextArrayHandle{900};
+    std::int32_t availableTattoo{};
+    std::int32_t slotTattoo{};
+    std::map<std::int32_t, std::vector<std::int32_t>> objectArrays;
+    std::map<std::int32_t, std::vector<std::int32_t>> integerArrays;
+    std::map<TattooFieldKey, std::int32_t> integers;
+    std::map<TattooFieldKey, float> floats;
+    std::map<TattooFieldKey, std::string> strings;
+    std::vector<IntegerRead> integerReads;
+    std::vector<FloatRead> floatReads;
+    std::vector<StringRead> stringReads;
+};
+
+QueryState* g_queryState{};
+std::vector<std::unique_ptr<std::byte[]>> g_fixedStringStorage;
+
+void expect(bool condition, std::string_view message);
+
+RE::BSFixedString* fixedStringConstructor(RE::BSFixedString* self, const char* value) {
+    const auto length = std::strlen(value);
+    auto storage = std::make_unique<std::byte[]>(sizeof(RE::BSStringPool::Entry) + length + 1);
+    std::memset(storage.get(), 0, sizeof(RE::BSStringPool::Entry) + length + 1);
+    auto* entry = reinterpret_cast<RE::BSStringPool::Entry*>(storage.get());
+    entry->_flags = RE::BSStringPool::Entry::kRefCountMask;
+    entry->_length = static_cast<std::uint32_t>(length);
+    auto* data = reinterpret_cast<char*>(entry + 1);
+    std::memcpy(data, value, length + 1);
+    *reinterpret_cast<const char**>(self) = data;
+    g_fixedStringStorage.push_back(std::move(storage));
+    return self;
+}
+
+void fixedStringRelease(const char*& value) {
+    value = nullptr;
+}
+
+class CommonLibTestHostGuard {
+public:
+    CommonLibTestHostGuard() {
+        const auto constructor = reinterpret_cast<std::uintptr_t>(&fixedStringConstructor);
+        const auto release = reinterpret_cast<std::uintptr_t>(&fixedStringRelease);
+        const auto base = std::min(constructor, release) & ~std::uintptr_t{0xFFFFFFFF};
+
+        expect(REL::Module::mock(
+                   REL::Version{1, 6, 999, 0},
+                   REL::Module::Runtime::AE,
+                   L"SkyrimSE.exe",
+                   base),
+            "expected CommonLib test module mock to initialize");
+
+        m_databasePath = std::filesystem::temp_directory_path()
+            / ("slavetats-ui-runtime-query-addresses-" +
+                std::to_string(reinterpret_cast<std::uintptr_t>(this)) + ".csv");
+        std::ofstream database(m_databasePath, std::ios::trunc);
+        database << "id,offset\n";
+        database << "2,1.6.999.0\n";
+        database << "69161," << std::hex << constructor - base << '\n';
+        database << "69192," << std::hex << release - base << '\n';
+        database.close();
+
+        expect(REL::IDDatabase::inject(
+                   m_databasePath.wstring(),
+                   REL::IDDatabase::Format::VR,
+                   REL::Version{1, 6, 999, 0}),
+            "expected CommonLib test address database to initialize");
+    }
+
+    ~CommonLibTestHostGuard() {
+        REL::IDDatabase::reset();
+        REL::Module::reset();
+        g_fixedStringStorage.clear();
+        std::error_code ignored;
+        std::filesystem::remove(m_databasePath, ignored);
+    }
+
+private:
+    std::filesystem::path m_databasePath;
+};
+
+std::int32_t arrayObject(void*) {
+    return g_queryState->nextArrayHandle++;
+}
+
+std::int32_t arrayCount(void*, std::int32_t array) {
+    if (const auto objects = g_queryState->objectArrays.find(array);
+        objects != g_queryState->objectArrays.end()) {
+        return static_cast<std::int32_t>(objects->second.size());
+    }
+    if (const auto integers = g_queryState->integerArrays.find(array);
+        integers != g_queryState->integerArrays.end()) {
+        return static_cast<std::int32_t>(integers->second.size());
+    }
+    return 0;
+}
+
+std::int32_t arrayGetObject(
+    void*, std::int32_t array, std::int32_t index, std::int32_t fallback) {
+    const auto found = g_queryState->objectArrays.find(array);
+    if (found == g_queryState->objectArrays.end() || index < 0 ||
+        static_cast<std::size_t>(index) >= found->second.size()) {
+        return fallback;
+    }
+    return found->second[static_cast<std::size_t>(index)];
+}
+
+std::int32_t arrayGetInteger(
+    void*, std::int32_t array, std::int32_t index, std::int32_t fallback) {
+    const auto found = g_queryState->integerArrays.find(array);
+    if (found == g_queryState->integerArrays.end() || index < 0 ||
+        static_cast<std::size_t>(index) >= found->second.size()) {
+        return fallback;
+    }
+    return found->second[static_cast<std::size_t>(index)];
+}
+
+std::int32_t addToPool(void*, std::int32_t object, RE::BSFixedString) {
+    return object;
+}
+
+void cleanPool(void*, RE::BSFixedString) {}
+
+std::int32_t mapGetInteger(
+    void*, std::int32_t handle, RE::BSFixedString key, std::int32_t fallback) {
+    g_queryState->integerReads.push_back(IntegerRead{handle, key.c_str(), fallback});
+    const auto found = g_queryState->integers.find({handle, key.c_str()});
+    return found == g_queryState->integers.end() ? fallback : found->second;
+}
+
+float mapGetFloat(void*, std::int32_t handle, RE::BSFixedString key, float fallback) {
+    g_queryState->floatReads.push_back(FloatRead{handle, key.c_str(), fallback});
+    const auto found = g_queryState->floats.find({handle, key.c_str()});
+    return found == g_queryState->floats.end() ? fallback : found->second;
+}
+
+RE::BSFixedString mapGetString(
+    void*, std::int32_t handle, RE::BSFixedString key, RE::BSFixedString fallback) {
+    g_queryState->stringReads.push_back(StringRead{handle, key.c_str(), fallback.c_str()});
+    const auto found = g_queryState->strings.find({handle, key.c_str()});
+    return found == g_queryState->strings.end()
+        ? fallback
+        : RE::BSFixedString(found->second.c_str());
+}
+
+bool queryAvailableTattoos(
+    std::int32_t, std::int32_t matches, std::int32_t, RE::BSFixedString) {
+    g_queryState->objectArrays[matches] = {g_queryState->availableTattoo};
+    return false;
+}
+
+bool queryExternalSlots(RE::Actor*, RE::BSFixedString, std::int32_t matches) {
+    g_queryState->integerArrays[matches] = {};
+    return false;
+}
+
+std::int32_t getAppliedTattooInSlot(RE::Actor*, RE::BSFixedString, std::int32_t slot) {
+    return slot == 0 ? g_queryState->slotTattoo : 0;
+}
+
+const slavetats::interface::Addresses& queryApi() {
+    static const slavetats::interface::Addresses api{
+        .current_version = slavetats::interface::Addresses::version,
+        .query_available_tattoos = queryAvailableTattoos,
+        .get_applied_tattoo_in_slot = getAppliedTattooInSlot,
+        .external_slots = queryExternalSlots,
+    };
+    return api;
+}
+
+struct JcminiPointerGuard {
+    void* domain{jcmini::g_domain};
+    decltype(jcmini::fn_jarr_object) arrayObject{jcmini::fn_jarr_object};
+    decltype(jcmini::fn_jarr_count) arrayCount{jcmini::fn_jarr_count};
+    decltype(jcmini::fn_jarr_getObj) arrayGetObject{jcmini::fn_jarr_getObj};
+    decltype(jcmini::fn_jarr_getInt) arrayGetInteger{jcmini::fn_jarr_getInt};
+    decltype(jcmini::fn_jmap_getStr) mapGetString{jcmini::fn_jmap_getStr};
+    decltype(jcmini::fn_jmap_getInt) mapGetInteger{jcmini::fn_jmap_getInt};
+    decltype(jcmini::fn_jmap_getFlt) mapGetFloat{jcmini::fn_jmap_getFlt};
+    decltype(jcmini::fn_jval_addToPool) addToPool{jcmini::fn_jval_addToPool};
+    decltype(jcmini::fn_jval_cleanPool) cleanPool{jcmini::fn_jval_cleanPool};
+
+    explicit JcminiPointerGuard(QueryState& state) {
+        g_queryState = &state;
+        jcmini::g_domain = &state;
+        jcmini::fn_jarr_object = ::arrayObject;
+        jcmini::fn_jarr_count = ::arrayCount;
+        jcmini::fn_jarr_getObj = ::arrayGetObject;
+        jcmini::fn_jarr_getInt = ::arrayGetInteger;
+        jcmini::fn_jmap_getStr = ::mapGetString;
+        jcmini::fn_jmap_getInt = ::mapGetInteger;
+        jcmini::fn_jmap_getFlt = ::mapGetFloat;
+        jcmini::fn_jval_addToPool = ::addToPool;
+        jcmini::fn_jval_cleanPool = ::cleanPool;
+    }
+
+    ~JcminiPointerGuard() {
+        jcmini::g_domain = domain;
+        jcmini::fn_jarr_object = arrayObject;
+        jcmini::fn_jarr_count = arrayCount;
+        jcmini::fn_jarr_getObj = arrayGetObject;
+        jcmini::fn_jarr_getInt = arrayGetInteger;
+        jcmini::fn_jmap_getStr = mapGetString;
+        jcmini::fn_jmap_getInt = mapGetInteger;
+        jcmini::fn_jmap_getFlt = mapGetFloat;
+        jcmini::fn_jval_addToPool = addToPool;
+        jcmini::fn_jval_cleanPool = cleanPool;
+        g_queryState = nullptr;
+    }
+};
 
 struct BindingState {
     void* actor{reinterpret_cast<void*>(0x1234)};
@@ -32,11 +273,11 @@ struct BindingState {
     int synchronizeCount{};
     bool synchronizedSilently{true};
     std::vector<std::int32_t> handles{73};
-    std::unordered_map<std::int32_t, std::int32_t> integers;
-    std::unordered_map<std::int32_t, float> floats;
+    std::map<TattooFieldKey, std::int32_t> integers;
+    std::map<TattooFieldKey, float> floats;
+    std::vector<std::string> appearanceWriteKeys;
+    std::string ineffectiveReadbackKey;
     std::int32_t updatedValue{};
-    std::string integerKey;
-    std::string floatKey;
     std::string updatedPath;
 };
 
@@ -58,20 +299,29 @@ SlaveTatsAppearanceBindings bindingsFor(BindingState& state) {
         },
         .setTattooInt = [&state](std::int32_t handle, const char* key, std::int32_t value) {
             ++state.integerWriteCount;
-            state.integerKey = key;
-            state.integers[handle] = value;
+            state.appearanceWriteKeys.emplace_back(key);
+            state.integers[{handle, key}] = value;
         },
-        .getTattooInt = [&state](std::int32_t handle, const char*, std::int32_t fallback) {
-            const auto found = state.integers.find(handle);
+        .getTattooInt = [&state](
+                            std::int32_t handle,
+                            const char* key,
+                            std::int32_t fallback) {
+            if (state.ineffectiveReadbackKey == key) {
+                return fallback;
+            }
+            const auto found = state.integers.find({handle, key});
             return found == state.integers.end() ? fallback : found->second;
         },
         .setTattooFloat = [&state](std::int32_t handle, const char* key, float value) {
             ++state.floatWriteCount;
-            state.floatKey = key;
-            state.floats[handle] = value;
+            state.appearanceWriteKeys.emplace_back(key);
+            state.floats[{handle, key}] = value;
         },
-        .getTattooFloat = [&state](std::int32_t handle, const char*, float fallback) {
-            const auto found = state.floats.find(handle);
+        .getTattooFloat = [&state](std::int32_t handle, const char* key, float fallback) {
+            if (state.ineffectiveReadbackKey == key) {
+                return fallback;
+            }
+            const auto found = state.floats.find({handle, key});
             return found == state.floats.end() ? fallback : found->second;
         },
         .setActorInt = [&state](void* actor, const char* path, std::int32_t value) {
@@ -101,8 +351,147 @@ UpdateTattooAppearanceRequest request(UpdateTattooAppearanceMode mode =
         .runtimeHandle = 73,
         .color = 0x123456,
         .alpha = 0.35F,
+        .glow = 0x102030,
+        .glossiness = 2.5F,
+        .specularStrength = 1.25F,
+        .emissiveMult = 3.0F,
         .mode = mode,
     };
+}
+
+void seedBaseTattoo(QueryState& state, std::int32_t handle) {
+    state.strings[{handle, "domain"}] = "default";
+    state.strings[{handle, "section"}] = "Test Section";
+    state.strings[{handle, "name"}] = "Test Tattoo";
+    state.strings[{handle, "texture"}] = "textures\\actors\\character\\test.dds";
+    state.strings[{handle, "area"}] = "BODY";
+    state.integers[{handle, "slot"}] = 0;
+    state.integers[{handle, "color"}] = 0xA0B0C0;
+    state.floats[{handle, "invertedAlpha"}] = 0.25F;
+}
+
+void seedAdvancedTattoo(QueryState& state, std::int32_t handle) {
+    seedBaseTattoo(state, handle);
+    state.integers[{handle, "glow"}] = 0x102030;
+    state.floats[{handle, "glossiness"}] = 2.5F;
+    state.floats[{handle, "specularStrength"}] = 1.25F;
+    state.strings[{handle, "bump"}] = "textures\\packs\\exact-bump_n.dds";
+    state.strings[{handle, "glowTexture"}] = "textures\\packs\\exact-glow_g.dds";
+    state.floats[{handle, "emissiveMult"}] = 3.75F;
+}
+
+void expectAdvancedSnapshot(const stui::core::TattooEntry& tattoo) {
+    expect(tattoo.glow == 0x102030, "expected exact glow RGB in runtime snapshot");
+    expect(tattoo.glossiness == 2.5F, "expected exact glossiness in runtime snapshot");
+    expect(tattoo.specularStrength == 1.25F,
+        "expected exact specular strength in runtime snapshot");
+    expect(tattoo.bump == "textures\\packs\\exact-bump_n.dds",
+        "expected bump path preserved without derivation or normalization");
+    expect(tattoo.glowTexture == "textures\\packs\\exact-glow_g.dds",
+        "expected glow texture path preserved without derivation or normalization");
+    expect(tattoo.emissiveMult == 3.75F,
+        "expected exact emissive multiplier in runtime snapshot");
+}
+
+void expectAdvancedDefaults(const stui::core::TattooEntry& tattoo) {
+    expect(tattoo.glow == 0, "expected missing glow to default to zero");
+    expect(tattoo.glossiness == 0.0F,
+        "expected missing glossiness to default to zero");
+    expect(tattoo.specularStrength == 0.0F,
+        "expected missing specular strength to default to zero");
+    expect(tattoo.bump.empty(), "expected missing bump path to remain empty");
+    expect(tattoo.glowTexture.empty(),
+        "expected missing glow texture path to remain empty");
+    expect(tattoo.emissiveMult == 1.0F,
+        "expected missing emissive multiplier to default to one");
+}
+
+void expectAdvancedKeysReadWithDefaults(const QueryState& state, std::int32_t handle) {
+    const auto hasIntegerRead = [&](std::string_view key, std::int32_t fallback) {
+        for (const auto& read : state.integerReads) {
+            if (read.handle == handle && read.key == key && read.fallback == fallback) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto hasFloatRead = [&](std::string_view key, float fallback) {
+        for (const auto& read : state.floatReads) {
+            if (read.handle == handle && read.key == key && read.fallback == fallback) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto hasStringRead = [&](std::string_view key) {
+        for (const auto& read : state.stringReads) {
+            if (read.handle == handle && read.key == key && read.fallback.empty()) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    expect(hasIntegerRead("glow", 0), "expected glow read with zero default");
+    expect(hasFloatRead("glossiness", 0.0F),
+        "expected glossiness read with zero default");
+    expect(hasFloatRead("specularStrength", 0.0F),
+        "expected specular strength read with zero default");
+    expect(hasStringRead("bump"), "expected bump read with empty default");
+    expect(hasStringRead("glowTexture"),
+        "expected glow texture read with empty default");
+    expect(hasFloatRead("emissiveMult", 1.0F),
+        "expected emissive multiplier read with one default");
+}
+
+void runtimeQueriesPreserveAdvancedSnapshotFields() {
+    CommonLibTestHostGuard hostGuard;
+    QueryState queryState;
+    JcminiPointerGuard guard(queryState);
+    BindingState bindingState;
+    SlaveTatsRuntime runtime(bindingsFor(bindingState));
+    runtime.bindSlaveTats(&queryApi());
+
+    queryState.availableTattoo = 73;
+    queryState.slotTattoo = 74;
+    seedAdvancedTattoo(queryState, queryState.availableTattoo);
+    seedAdvancedTattoo(queryState, queryState.slotTattoo);
+
+    const auto available = runtime.queryAvailable("default");
+    expect(available && available->size() == 1,
+        "expected one available tattoo snapshot");
+    expectAdvancedSnapshot(available->front());
+
+    const auto slots = runtime.querySlots(0x14, stui::core::TattooArea::body);
+    expect(slots && !slots->slots.empty() && slots->slots.front().tattoo.has_value(),
+        "expected occupied slot tattoo snapshot");
+    expectAdvancedSnapshot(*slots->slots.front().tattoo);
+}
+
+void runtimeQueriesReadMissingAdvancedKeysWithDocumentedDefaults() {
+    CommonLibTestHostGuard hostGuard;
+    QueryState queryState;
+    JcminiPointerGuard guard(queryState);
+    BindingState bindingState;
+    SlaveTatsRuntime runtime(bindingsFor(bindingState));
+    runtime.bindSlaveTats(&queryApi());
+
+    queryState.availableTattoo = 81;
+    queryState.slotTattoo = 82;
+    seedBaseTattoo(queryState, queryState.availableTattoo);
+    seedBaseTattoo(queryState, queryState.slotTattoo);
+
+    const auto available = runtime.queryAvailable("default");
+    expect(available && available->size() == 1,
+        "expected legacy available tattoo snapshot");
+    expectAdvancedDefaults(available->front());
+    expectAdvancedKeysReadWithDefaults(queryState, queryState.availableTattoo);
+
+    const auto slots = runtime.querySlots(0x14, stui::core::TattooArea::body);
+    expect(slots && !slots->slots.empty() && slots->slots.front().tattoo.has_value(),
+        "expected legacy occupied slot tattoo snapshot");
+    expectAdvancedDefaults(*slots->slots.front().tattoo);
+    expectAdvancedKeysReadWithDefaults(queryState, queryState.slotTattoo);
 }
 
 void productionDelegationQueriesRequestedActorAndWritesExactAppearance() {
@@ -114,12 +503,24 @@ void productionDelegationQueriesRequestedActorAndWritesExactAppearance() {
     expect(result.has_value(), "expected production runtime update to succeed");
     expect(state.queryCount == 1 && state.queriedActor == state.actor,
         "expected actor-specific applied-tattoo query");
-    expect(state.integerWriteCount == 1 && state.integerKey == "color" &&
-            state.integers[73] == 0x123456,
-        "expected exact RGB write and readback");
-    expect(state.floatWriteCount == 1 && state.floatKey == "invertedAlpha" &&
-            std::abs(state.floats[73] - 0.65F) < 0.0001F,
-        "expected exact inverted-alpha write and readback");
+    expect(state.integerWriteCount == 2 && state.integers[{73, "color"}] == 0x123456 &&
+            state.integers[{73, "glow"}] == 0x102030,
+        "expected exact diffuse and glow RGB writes with readback");
+    expect(state.floatWriteCount == 4 &&
+            state.floats[{73, "invertedAlpha"}] == 0.65F &&
+            state.floats[{73, "glossiness"}] == 2.5F &&
+            state.floats[{73, "specularStrength"}] == 1.25F &&
+            state.floats[{73, "emissiveMult"}] == 3.0F,
+        "expected exact alpha and material float writes with readback");
+    expect(state.appearanceWriteKeys == std::vector<std::string>{
+            "color",
+            "invertedAlpha",
+            "glow",
+            "glossiness",
+            "specularStrength",
+            "emissiveMult",
+        },
+        "expected stable sequential appearance write order");
     expect(state.updatedWriteCount == 1 && state.updatedActor == state.actor &&
             state.updatedPath == ".SlaveTats.updated" && state.updatedValue == 1,
         "expected truthful actor updated marker");
@@ -166,11 +567,8 @@ void missingActorStopsBeforeQueryOrMutation() {
 void ineffectiveAppearanceReadbacksStopBeforeUpdatedMarkerAndSynchronization() {
     {
         BindingState state;
-        auto bindings = bindingsFor(state);
-        bindings.getTattooInt = [](std::int32_t, const char*, std::int32_t fallback) {
-            return fallback;
-        };
-        SlaveTatsRuntime runtime(std::move(bindings));
+        state.ineffectiveReadbackKey = "color";
+        SlaveTatsRuntime runtime(bindingsFor(state));
 
         const auto result = runtime.updateAppearance(request());
         expect(!result && result.error().code == ServiceErrorCode::updateFailed,
@@ -183,8 +581,8 @@ void ineffectiveAppearanceReadbacksStopBeforeUpdatedMarkerAndSynchronization() {
     {
         BindingState state;
         auto bindings = bindingsFor(state);
-        bindings.getTattooFloat = [](std::int32_t, const char*, float) {
-            return 0.650001F;
+        bindings.getTattooFloat = [](std::int32_t, const char* key, float fallback) {
+            return std::string_view(key) == "invertedAlpha" ? 0.650001F : fallback;
         };
         SlaveTatsRuntime runtime(std::move(bindings));
 
@@ -194,6 +592,37 @@ void ineffectiveAppearanceReadbacksStopBeforeUpdatedMarkerAndSynchronization() {
         expect(state.integerWriteCount == 1 && state.floatWriteCount == 1 &&
                 state.updatedWriteCount == 0 && state.synchronizeCount == 0,
             "expected alpha readback failure to stop updated marker and synchronization");
+    }
+
+    struct FailureCase {
+        std::string_view key;
+        std::vector<std::string> expectedStoredKeys;
+    };
+    const std::vector<FailureCase> failureCases{
+        {"glow", {"color", "invertedAlpha", "glow"}},
+        {"glossiness", {"color", "invertedAlpha", "glow", "glossiness"}},
+        {"specularStrength",
+            {"color", "invertedAlpha", "glow", "glossiness", "specularStrength"}},
+        {"emissiveMult",
+            {"color", "invertedAlpha", "glow", "glossiness", "specularStrength",
+                "emissiveMult"}},
+    };
+    for (const auto& failureCase : failureCases) {
+        BindingState state;
+        state.ineffectiveReadbackKey = failureCase.key;
+        SlaveTatsRuntime runtime(bindingsFor(state));
+
+        const auto result = runtime.updateAppearance(request());
+
+        expect(!result && result.error().code == ServiceErrorCode::updateFailed,
+            "expected ineffective material readback to return updateFailed");
+        expect(state.appearanceWriteKeys == failureCase.expectedStoredKeys,
+            "expected sequential writes to stop at the first failed material readback");
+        expect(state.integers.size() + state.floats.size() ==
+                failureCase.expectedStoredKeys.size(),
+            "expected earlier sequential writes to remain stored after readback failure");
+        expect(state.updatedWriteCount == 0 && state.synchronizeCount == 0,
+            "expected material readback failure not to mark or synchronize");
     }
 }
 
@@ -206,7 +635,7 @@ void failedUpdatedReadbackStopsBeforeSynchronization() {
 
     expect(!result && result.error().code == ServiceErrorCode::updateFailed,
         "expected stable updateFailed when updated marker does not stick");
-    expect(state.integerWriteCount == 1 && state.floatWriteCount == 1 &&
+    expect(state.integerWriteCount == 2 && state.floatWriteCount == 4 &&
             state.updatedWriteCount == 1 && state.synchronizeCount == 0,
         "expected updated readback failure to stop before synchronization");
 }
@@ -243,6 +672,10 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("runtime queries preserve advanced snapshot fields",
+        runtimeQueriesPreserveAdvancedSnapshotFields);
+    failures += run("runtime queries read missing advanced keys with documented defaults",
+        runtimeQueriesReadMissingAdvancedKeysWithDocumentedDefaults);
     failures += run("production delegation queries actor and writes exact appearance",
         productionDelegationQueriesRequestedActorAndWritesExactAppearance);
     failures += run("stale handles never mutate or synchronize",

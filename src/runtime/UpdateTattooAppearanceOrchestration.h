@@ -19,8 +19,7 @@ public:
         queryAppliedTattooHandles(ActorHandle actor) = 0;
     [[nodiscard]] virtual bool writeAppearance(
         std::int32_t runtimeHandle,
-        std::int32_t color,
-        float invertedAlpha) = 0;
+        const core::UpdateTattooAppearanceRequest& request) = 0;
     [[nodiscard]] virtual bool markActorUpdated(ActorHandle actor) = 0;
     [[nodiscard]] virtual bool synchronize(ActorHandle actor) = 0;
 };

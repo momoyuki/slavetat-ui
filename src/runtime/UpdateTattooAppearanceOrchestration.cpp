@@ -1,7 +1,6 @@
 #include "runtime/UpdateTattooAppearanceOrchestration.h"
 
 #include "runtime/AppliedTattooHandleMembership.h"
-#include "runtime/SlaveTatsAlpha.h"
 
 #include <expected>
 
@@ -31,10 +30,7 @@ core::UpdateTattooAppearanceResult updateTattooAppearance(
             });
         }
 
-        if (!backend.writeAppearance(
-                request.runtimeHandle,
-                request.color,
-                toSlaveTatsInvertedAlpha(request.alpha))) {
+        if (!backend.writeAppearance(request.runtimeHandle, request)) {
             return std::unexpected(core::ServiceError{
                 core::ServiceErrorCode::updateFailed,
                 "Failed to update tattoo appearance",
