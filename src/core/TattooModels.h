@@ -22,6 +22,12 @@ struct TattooEntry {
     std::int32_t color{0xFFFFFF};
     bool locked{false};
     float alpha{1.0F};
+    std::int32_t glow{0};
+    float glossiness{0.0F};
+    float specularStrength{0.0F};
+    std::string bump;
+    std::string glowTexture;
+    float emissiveMult{1.0F};
 
     bool operator==(const TattooEntry&) const = default;
 };
@@ -99,6 +105,10 @@ struct UpdateTattooAppearanceRequest {
     std::int32_t runtimeHandle{};
     std::int32_t color{0xFFFFFF};
     float alpha{1.0F};
+    std::int32_t glow{0};
+    float glossiness{0.0F};
+    float specularStrength{0.0F};
+    float emissiveMult{1.0F};
     UpdateTattooAppearanceMode mode{
         UpdateTattooAppearanceMode::updateAndSynchronize};
 };

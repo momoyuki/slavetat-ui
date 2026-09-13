@@ -1,5 +1,6 @@
 #include "core/SlaveTatsService.h"
 
+#include <cmath>
 #include <utility>
 
 namespace stui::core {
@@ -195,18 +196,48 @@ UpdateTattooAppearanceResult SlaveTatsService::updateAppearance(
         });
     }
 
-    if (request.color < 0 || request.color > 0xFFFFFF) {
-        return std::unexpected(ServiceError{
-            ServiceErrorCode::updateFailed,
-            "Tattoo color must be between 0 and 0xFFFFFF",
-        });
-    }
+    if (request.mode == UpdateTattooAppearanceMode::updateAndSynchronize) {
+        if (request.color < 0 || request.color > 0xFFFFFF) {
+            return std::unexpected(ServiceError{
+                ServiceErrorCode::updateFailed,
+                "Tattoo color must be between 0 and 0xFFFFFF",
+            });
+        }
 
-    if (!(request.alpha >= 0.0F && request.alpha <= 1.0F)) {
-        return std::unexpected(ServiceError{
-            ServiceErrorCode::updateFailed,
-            "Tattoo alpha must be between 0 and 1",
-        });
+        if (!std::isfinite(request.alpha) || request.alpha < 0.0F || request.alpha > 1.0F) {
+            return std::unexpected(ServiceError{
+                ServiceErrorCode::updateFailed,
+                "Tattoo alpha must be between 0 and 1",
+            });
+        }
+
+        if (request.glow < 0 || request.glow > 0xFFFFFF) {
+            return std::unexpected(ServiceError{
+                ServiceErrorCode::updateFailed,
+                "Tattoo glow must be between 0 and 0xFFFFFF",
+            });
+        }
+
+        if (!std::isfinite(request.glossiness) || request.glossiness < 0.0F) {
+            return std::unexpected(ServiceError{
+                ServiceErrorCode::updateFailed,
+                "Tattoo glossiness must be finite and non-negative",
+            });
+        }
+
+        if (!std::isfinite(request.specularStrength) || request.specularStrength < 0.0F) {
+            return std::unexpected(ServiceError{
+                ServiceErrorCode::updateFailed,
+                "Tattoo specular strength must be finite and non-negative",
+            });
+        }
+
+        if (!std::isfinite(request.emissiveMult) || request.emissiveMult < 0.0F) {
+            return std::unexpected(ServiceError{
+                ServiceErrorCode::updateFailed,
+                "Tattoo emissive multiplier must be finite and non-negative",
+            });
+        }
     }
 
     return m_runtime.updateAppearance(request);

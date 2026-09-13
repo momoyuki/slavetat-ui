@@ -45,12 +45,10 @@ public:
 
     bool writeAppearance(
         std::int32_t runtimeHandle,
-        std::int32_t color,
-        float invertedAlpha) override {
+        const UpdateTattooAppearanceRequest& request) override {
         ++writeCount;
         writtenHandle = runtimeHandle;
-        writtenColor = color;
-        writtenInvertedAlpha = invertedAlpha;
+        writtenRequest = request;
         return writeSucceeds;
     }
 
@@ -79,8 +77,7 @@ public:
     int synchronizeCount{};
     std::uint32_t resolvedActorFormId{};
     std::int32_t writtenHandle{};
-    std::int32_t writtenColor{};
-    float writtenInvertedAlpha{};
+    UpdateTattooAppearanceRequest writtenRequest{};
     int actorStorage{};
     ActorHandle queriedActor{};
     ActorHandle updatedActor{};
@@ -93,6 +90,10 @@ UpdateTattooAppearanceRequest validRequest() {
         .runtimeHandle = 73,
         .color = 0x123456,
         .alpha = 0.25F,
+        .glow = 0x102030,
+        .glossiness = 2.5F,
+        .specularStrength = 1.25F,
+        .emissiveMult = 3.0F,
         .mode = UpdateTattooAppearanceMode::updateAndSynchronize,
     };
 }
@@ -178,9 +179,14 @@ void validHandleWritesAppearanceMarksUpdatedAndSynchronizesOnce() {
         "success must preserve actor and handle identity");
     expect(backend.queryCount == 1 && backend.writeCount == 1,
         "valid update must query membership and write once");
-    expect(backend.writtenHandle == 73 && backend.writtenColor == 0x123456 &&
-            backend.writtenInvertedAlpha == 0.75F,
-        "valid update must write exact RGB and SlaveTats inverted alpha");
+    expect(backend.writtenHandle == 73 &&
+            backend.writtenRequest.color == 0x123456 &&
+            backend.writtenRequest.alpha == 0.25F &&
+            backend.writtenRequest.glow == 0x102030 &&
+            backend.writtenRequest.glossiness == 2.5F &&
+            backend.writtenRequest.specularStrength == 1.25F &&
+            backend.writtenRequest.emissiveMult == 3.0F,
+        "valid update must forward the complete editable appearance request");
     expect(backend.markUpdatedCount == 1 && backend.synchronizeCount == 1,
         "valid update must mark updated and synchronize exactly once");
     expect(backend.updatedActor == backend.queriedActor &&
