@@ -22,6 +22,11 @@ struct TattooDefinition {
     std::optional<std::int32_t> glow;
     std::optional<bool> inBsa;
     std::optional<std::string> credit;
+    std::optional<std::string> glowTexture;
+    std::optional<float> emissiveMult;
+    std::optional<float> glossiness;
+    std::optional<float> specularStrength;
+    std::optional<std::string> bump;
 };
 
 struct TattooParseIssue {

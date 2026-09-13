@@ -1,5 +1,6 @@
 #include "repository/TattooSourceParser.h"
 
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <nlohmann/json.hpp>
@@ -23,6 +24,44 @@ bool readRequiredString(
     }
 
     value = item->get<std::string>();
+    return true;
+}
+
+bool readOptionalStringField(
+    const Json& entry,
+    std::string_view field,
+    std::optional<std::string>& value,
+    std::string& error) {
+    const auto item = entry.find(field);
+    if (item == entry.end()) return true;
+    if (!item->is_string()) {
+        error = "field '" + std::string(field) + "' must be a string";
+        return false;
+    }
+
+    value = item->get<std::string>();
+    return true;
+}
+
+bool readOptionalMaterialFloatField(
+    const Json& entry,
+    std::string_view field,
+    std::optional<float>& value,
+    std::string& error) {
+    const auto item = entry.find(field);
+    if (item == entry.end()) return true;
+    if (!item->is_number()) {
+        error = "field '" + std::string(field) + "' must be a finite non-negative number";
+        return false;
+    }
+
+    const float parsedValue = item->get<float>();
+    if (!std::isfinite(parsedValue) || parsedValue < 0.0F) {
+        error = "field '" + std::string(field) + "' must be a finite non-negative number";
+        return false;
+    }
+
+    value = parsedValue;
     return true;
 }
 
@@ -59,6 +98,14 @@ bool readOptionalFields(const Json& entry, TattooDefinition& definition, std::st
             return false;
         }
         definition.credit = credit->get<std::string>();
+    }
+
+    if (!readOptionalStringField(entry, "glowTexture", definition.glowTexture, error) ||
+        !readOptionalMaterialFloatField(entry, "emissiveMult", definition.emissiveMult, error) ||
+        !readOptionalMaterialFloatField(entry, "glossiness", definition.glossiness, error) ||
+        !readOptionalMaterialFloatField(entry, "specularStrength", definition.specularStrength, error) ||
+        !readOptionalStringField(entry, "bump", definition.bump, error)) {
+        return false;
     }
 
     return true;

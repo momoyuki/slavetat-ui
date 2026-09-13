@@ -46,6 +46,11 @@ void ordersDefinitionsDeterministicallyAndPreservesMetadata() {
     alpha.glow = 123;
     alpha.inBsa = true;
     alpha.credit = "Artist";
+    alpha.glowTexture = "Pack\\Alpha\\alpha_g.dds";
+    alpha.emissiveMult = 3.75F;
+    alpha.glossiness = 2.5F;
+    alpha.specularStrength = 1.25F;
+    alpha.bump = "Pack\\Alpha\\alpha_n.dds";
     std::vector<TattooDefinition> definitions{
         definition("z.json", "Pack B", "Marks", "Zulu", "z.dds", "Body"),
         definition("a.json", "pack a", "Marks", "Beta", "b.dds", "Body", 5),
@@ -67,6 +72,12 @@ void ordersDefinitionsDeterministicallyAndPreservesMetadata() {
     expect(page.entries[0].glow == 123 && page.entries[0].inBsa == true &&
             page.entries[0].credit == "Artist",
         "expected optional metadata preserved");
+    expect(page.entries[0].glowTexture == "Pack\\Alpha\\alpha_g.dds" &&
+            page.entries[0].emissiveMult == 3.75F &&
+            page.entries[0].glossiness == 2.5F &&
+            page.entries[0].specularStrength == 1.25F &&
+            page.entries[0].bump == "Pack\\Alpha\\alpha_n.dds",
+        "expected advanced optional metadata preserved exactly");
     expect(page.totalEntries == 3 && page.matchedEntries == 3,
         "expected total and match counts");
     expect(page.pageIndex == 0 && page.pageSize == 24 && page.pageCount == 1,

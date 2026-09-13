@@ -48,7 +48,7 @@ void expect(bool condition, std::string_view message) {
 }
 
 void parserPreservesSourceAndOptionalMetadata() {
-    TemporaryJsonFile file(R"([{"name":"Mark","section":"Marks","texture":"Pack\\mark.dds","area":"Body","glow":16777215,"in_bsa":1,"credit":"Artist"}])");
+    TemporaryJsonFile file(R"([{"name":"Mark","section":"Marks","texture":"Pack\\mark.dds","area":"Body","glow":16777215,"in_bsa":1,"credit":"Artist","glowTexture":"Pack\\mark_g.dds","bump":"Pack\\mark_n.dds","emissiveMult":3.75,"glossiness":2.5,"specularStrength":1.25}])");
 
     const auto report = parseTattooSource(file.source());
 
@@ -64,6 +64,26 @@ void parserPreservesSourceAndOptionalMetadata() {
     expect(tattoo.glow == 16777215, "expected optional glow");
     expect(tattoo.inBsa == true, "expected integer in_bsa normalized to bool");
     expect(tattoo.credit == "Artist", "expected optional credit");
+    expect(tattoo.glowTexture == "Pack\\mark_g.dds", "expected glow texture metadata");
+    expect(tattoo.bump == "Pack\\mark_n.dds", "expected bump metadata");
+    expect(tattoo.emissiveMult == 3.75F, "expected emissive multiplier metadata");
+    expect(tattoo.glossiness == 2.5F, "expected glossiness metadata");
+    expect(tattoo.specularStrength == 1.25F, "expected specular strength metadata");
+}
+
+void legacyEntryLeavesAdvancedMaterialMetadataAbsent() {
+    TemporaryJsonFile file(R"([{"name":"Legacy","section":"Marks","texture":"Pack\\legacy.dds","area":"Body"}])");
+
+    const auto report = parseTattooSource(file.source());
+
+    expect(report.issues.empty(), "expected legacy source without issues");
+    expect(report.definitions.size() == 1, "expected one legacy definition");
+    const auto& tattoo = report.definitions.front();
+    expect(!tattoo.glowTexture.has_value(), "expected absent legacy glow texture metadata");
+    expect(!tattoo.bump.has_value(), "expected absent legacy bump metadata");
+    expect(!tattoo.emissiveMult.has_value(), "expected absent legacy emissive multiplier metadata");
+    expect(!tattoo.glossiness.has_value(), "expected absent legacy glossiness metadata");
+    expect(!tattoo.specularStrength.has_value(), "expected absent legacy specular strength metadata");
 }
 
 void malformedSiblingIsSkippedWithoutDiscardingValidEntry() {
@@ -109,6 +129,45 @@ void invalidOptionalFieldDoesNotDiscardValidSibling() {
     expect(report.issues.front().entryIndex == 0, "expected invalid optional field entry index");
 }
 
+void malformedAdvancedMaterialFieldDoesNotDiscardValidSibling(std::string_view malformedField) {
+    const std::string json =
+        "[{\"name\":\"Bad\",\"section\":\"Pack\",\"texture\":\"Pack\\\\bad.dds\",\"area\":\"Body\"," +
+        std::string(malformedField) +
+        "},{\"name\":\"Good\",\"section\":\"Pack\",\"texture\":\"Pack\\\\good.dds\",\"area\":\"Body\"}]";
+    TemporaryJsonFile file(json);
+
+    const auto report = parseTattooSource(file.source());
+
+    expect(report.definitions.size() == 1, "expected valid sibling after malformed advanced material field");
+    expect(report.definitions.front().name == "Good", "expected valid advanced material sibling");
+    expect(report.issues.size() == 1, "expected one advanced material field issue");
+    expect(report.issues.front().entryIndex == 0, "expected malformed advanced material field entry index");
+}
+
+void invalidGlowTextureDoesNotDiscardValidSibling() {
+    malformedAdvancedMaterialFieldDoesNotDiscardValidSibling("\"glowTexture\":17");
+}
+
+void invalidBumpDoesNotDiscardValidSibling() {
+    malformedAdvancedMaterialFieldDoesNotDiscardValidSibling("\"bump\":false");
+}
+
+void negativeEmissiveMultiplierDoesNotDiscardValidSibling() {
+    malformedAdvancedMaterialFieldDoesNotDiscardValidSibling("\"emissiveMult\":-0.1");
+}
+
+void invalidGlossinessDoesNotDiscardValidSibling() {
+    malformedAdvancedMaterialFieldDoesNotDiscardValidSibling("\"glossiness\":\"high\"");
+}
+
+void invalidSpecularStrengthDoesNotDiscardValidSibling() {
+    malformedAdvancedMaterialFieldDoesNotDiscardValidSibling("\"specularStrength\":null");
+}
+
+void overflowingMaterialFloatDoesNotDiscardValidSibling() {
+    malformedAdvancedMaterialFieldDoesNotDiscardValidSibling("\"emissiveMult\":1e100");
+}
+
 void missingSourceProducesSourceIssue() {
     TattooSourceFile source{
         .sourceId = "textures/actors/character/slavetats/missing.json",
@@ -152,10 +211,17 @@ int run(std::string_view name, Test&& test) {
 int main() {
     int failures = 0;
     failures += run("parser preserves source and optional metadata", parserPreservesSourceAndOptionalMetadata);
+    failures += run("legacy entry leaves advanced material metadata absent", legacyEntryLeavesAdvancedMaterialMetadataAbsent);
     failures += run("malformed sibling does not discard valid entry", malformedSiblingIsSkippedWithoutDiscardingValidEntry);
     failures += run("invalid root produces source issue", invalidRootProducesSourceIssue);
     failures += run("invalid JSON produces source issue", invalidJsonProducesSourceIssue);
     failures += run("invalid optional field does not discard valid sibling", invalidOptionalFieldDoesNotDiscardValidSibling);
+    failures += run("invalid glow texture does not discard valid sibling", invalidGlowTextureDoesNotDiscardValidSibling);
+    failures += run("invalid bump does not discard valid sibling", invalidBumpDoesNotDiscardValidSibling);
+    failures += run("negative emissive multiplier does not discard valid sibling", negativeEmissiveMultiplierDoesNotDiscardValidSibling);
+    failures += run("invalid glossiness does not discard valid sibling", invalidGlossinessDoesNotDiscardValidSibling);
+    failures += run("invalid specular strength does not discard valid sibling", invalidSpecularStrengthDoesNotDiscardValidSibling);
+    failures += run("overflowing material float does not discard valid sibling", overflowingMaterialFloatDoesNotDiscardValidSibling);
     failures += run("missing source produces source issue", missingSourceProducesSourceIssue);
     failures += run("non-object entry does not discard valid sibling", nonObjectEntryDoesNotDiscardValidSibling);
     return failures == 0 ? 0 : 1;
