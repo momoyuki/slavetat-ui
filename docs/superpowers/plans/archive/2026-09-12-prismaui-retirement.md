@@ -1,5 +1,7 @@
 # PrismaUI Retirement Implementation Plan
 
+> **Archive note:** This completed plan now lives under `docs/superpowers/plans/archive/`. Paths and add/modify instructions below describe the repository layout when the plan was executed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the SKSE Menu Framework workflow SlaveTatsUI's only frontend and remove every shipped PrismaUI dependency and artifact.

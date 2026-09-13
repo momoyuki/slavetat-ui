@@ -99,26 +99,7 @@ Avoid broad refactors unless they are required to implement or verify the active
 
 ## Current priority
 
-The current roadmap priority is **vNext.1 — Full SlaveTatsNG 0.8 Appearance**.
-
-Read:
-
-`docs/superpowers/specs/2026-09-13-native-advanced-appearance-design.md`
-
-There is currently no active implementation plan for vNext.1. Do not treat an archived plan as its substitute. Create a focused plan under `docs/superpowers/plans/active/` only when implementation is ready to begin.
-
-The important distinction is that SlaveTatsNG material/emission properties are separate values:
-
-- `glow` — emissive color
-- `glowTexture` — glow/detail texture metadata
-- `emissiveMult` — emissive strength
-- `glossiness`
-- `specularStrength`
-- `bump` — bump/normal texture metadata
-
-Do not collapse Glow into a single boolean control.
-
-Pack-defined advanced fields should survive normal Apply behavior. The vNext.1 work is primarily about representing, inspecting, editing, validating, and testing those fields after application without replacing SlaveTatsNG's template semantics.
+Read `ROADMAP.md` for the current priority, then follow its linked design and active implementation plan. Do not copy milestone-specific requirements into this guide or treat an archived plan as a substitute.
 
 ## Testing expectations
 

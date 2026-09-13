@@ -35,7 +35,7 @@ The current Edit Appearance design intentionally limited the editor to color and
 - No automatic rollback after a synchronization failure.
 - No direct JContainers or SlaveTatsNG calls from the workflow model or ImGui adapter.
 
-Lock/unlock support is related but orthogonal to material appearance. It may be implemented in a follow-up or in this work only if it remains a small, independently tested extension.
+Lock/unlock support is related but orthogonal to material appearance and remains deferred to a follow-up milestone.
 
 ## SlaveTatsNG Appearance Fields
 
