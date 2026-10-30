@@ -12,6 +12,10 @@ $ciPath = Join-Path $repositoryRoot '.github/workflows/ci.yml'
 $releasePath = Join-Path $repositoryRoot '.github/workflows/release.yml'
 
 $script:failures = [System.Collections.Generic.List[string]]::new()
+$notices = Get-Content -LiteralPath (Join-Path $repositoryRoot 'THIRD_PARTY_NOTICES.md') -Raw
+if ($notices -notmatch '(?s)alandtse/CommonLibSSE-NG.*?11\.0\.0.*?GPL-3\.0-or-later') {
+    $script:failures.Add('CommonLib notice must identify the selected fork, version, and license.')
+}
 
 function Get-RequiredContent {
     param([Parameter(Mandatory)][string] $Path)

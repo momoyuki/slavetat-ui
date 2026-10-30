@@ -5,8 +5,9 @@ projects remain governed by their own license terms.
 
 ## Build dependencies
 
-- [CommonLibSSE-NG](https://github.com/CharmedBaryon/CommonLibSSE-NG), version
-  3.7.0 — MIT License.
+- [CommonLibSSE-NG](https://github.com/alandtse/CommonLibSSE-NG), version
+  11.0.0 — GPL-3.0-or-later. The overlay port installs the upstream
+  `COPYING.txt` license notice.
 - [nlohmann/json](https://github.com/nlohmann/json) — MIT License.
 - [DirectXTex](https://github.com/microsoft/DirectXTex) — MIT License.
 

@@ -28,7 +28,9 @@ jobs:
       - name: Validate release tag
         id: metadata
         shell: pwsh
-        run: ./scripts/release/Validate-ReleaseTag.ps1 -Tag '${{ github.ref_name }}'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./scripts/release/Validate-ReleaseTag.ps1 -Tag $env:RELEASE_TAG
 
       - name: Verify tag is on main
         shell: pwsh
@@ -106,7 +108,8 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./scripts/release/Assert-ReleaseAbsent.ps1 -Repository '${{ github.repository }}' -Tag '${{ github.ref_name }}'
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./scripts/release/Assert-ReleaseAbsent.ps1 -Repository '${{ github.repository }}' -Tag $env:RELEASE_TAG
 
       - name: Publish GitHub Release
         shell: pwsh

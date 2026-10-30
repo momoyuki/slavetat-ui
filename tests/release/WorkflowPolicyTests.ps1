@@ -75,6 +75,14 @@ if (-not (Test-Path -LiteralPath $releasePath -PathType Leaf)) {
 }
 
 $releaseContent = Get-Content -LiteralPath $releasePath -Raw
+if ($releaseContent -match '-Tag\s+''\$\{\{\s*github\.ref_name\s*\}\}''') {
+    $script:failures.Add('Release tag arguments must use environment data, not script interpolation.')
+}
+foreach ($command in @('Validate-ReleaseTag', 'Assert-ReleaseAbsent')) {
+    if ($releaseContent -notmatch ($command + '\.ps1[^\r\n]*-Tag \$env:RELEASE_TAG')) {
+        $script:failures.Add("$command must receive the release tag through the environment.")
+    }
+}
 $requiredReleasePatterns = @(
     @{ Pattern = '(?ms)^on:\s*.*?push:\s*.*?tags:\s*\[''v\*''\]'; Because = 'version tags trigger releases' },
     @{ Pattern = '(?m)^\s+fetch-depth:\s*0\s*$'; Because = 'release checkout fetches full history' },
