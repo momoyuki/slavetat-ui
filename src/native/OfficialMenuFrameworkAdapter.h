@@ -9,6 +9,7 @@
 #include "core/TattooModels.h"
 #include "core/ITattooRuntime.h"
 #include "runtime/MenuSideSetting.h"
+#include "runtime/ThumbnailCacheSetting.h"
 
 #include <array>
 #include <cstddef>
@@ -604,6 +605,7 @@ public:
         runtime::MenuSide side = runtime::MenuSide::left) noexcept;
     [[nodiscard]] static bool renderLauncher(
         runtime::HotkeyBinding& hotkey, runtime::MenuSideSetting& menuSide,
+        runtime::ThumbnailCacheSetting& cacheSetting,
         NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog);
     static void renderFoundation(
         NativeSlotWorkflowModel& workflow,

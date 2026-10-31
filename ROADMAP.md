@@ -263,7 +263,10 @@ no session view is remembered; later openings recall that side's last view.
 published; Beta 2 release preparation remains. The
 focused [integration plan](docs/superpowers/plans/active/2026-10-18-vnext5-integration-beta2.md)
 tracks branch review, a pull request, hosted CI, separate merge and tag approval,
-and a smoke test of the hosted artifact. This delivery adds no new UI setting.
+and a smoke test of the hosted artifact. The user-approved 2026-10-31 follow-up adds a bounded Thumbnail disk cache limit
+(128/256/512/1024 MiB, default 256), Reset to default, and scheduled pruning; GPU
+budgets stay unchanged. See the [design](docs/superpowers/specs/2026-10-31-thumbnail-disk-cache-limit-design.md)
+and [active plan](docs/superpowers/plans/active/2026-10-31-thumbnail-disk-cache-limit.md).
 
 ---
 

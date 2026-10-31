@@ -2878,6 +2878,7 @@ std::string_view launcherModVersionLabel() noexcept {
 
 bool OfficialMenuFrameworkAdapter::renderLauncher(
     runtime::HotkeyBinding& hotkey, runtime::MenuSideSetting& menuSide,
+    runtime::ThumbnailCacheSetting& cacheSetting,
     NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog) {
     ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
     ImGuiMCP::TextUnformatted(launcherModVersionLabel().data());
@@ -2943,10 +2944,39 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     if (cameraPanSaveFailed) {
         ImGuiMCP::TextUnformatted("Could not save the initial camera Pan.");
     }
+    auto limitState = thumbnails.diskCacheLimitState();
+    const auto requestLimit = [&thumbnails, &cacheSetting](std::uint32_t limit) {
+        (void)thumbnails.requestDiskCacheLimit(limit, [&cacheSetting](std::uint32_t selected) {
+            return cacheSetting.select(selected);
+        });
+    };
+    const auto appliedLimit = thumbnails.diskCacheLimitMiB();
+    const bool maintenanceBusy = thumbnails.diskCacheBuildStatus().active ||
+        thumbnails.diskCacheClearState() == ThumbnailCacheClearState::pending ||
+        limitState == ThumbnailCacheClearState::pending;
+    ImGuiMCP::BeginDisabled(maintenanceBusy);
+    const auto limitLabel = std::to_string(appliedLimit) + " MiB";
+    if (ImGuiMCP::BeginCombo("Thumbnail disk cache limit", limitLabel.c_str())) {
+        for (const auto limit : runtime::ThumbnailCacheSetting::limitsMiB) {
+            const auto label = std::to_string(limit) + " MiB";
+            if (ImGuiMCP::Selectable(label.c_str(), limit == appliedLimit)) requestLimit(limit);
+            if (limit == appliedLimit) ImGuiMCP::SetItemDefaultFocus();
+        }
+        ImGuiMCP::EndCombo();
+    }
+    if (ImGuiMCP::Button("Reset to default##thumbnailDiskCacheLimit"))
+        requestLimit(runtime::ThumbnailCacheSetting::defaultLimitMiB);
+    ImGuiMCP::EndDisabled();
+    limitState = thumbnails.diskCacheLimitState();
+    if (limitState == ThumbnailCacheClearState::pending)
+        ImGuiMCP::TextUnformatted("Applying thumbnail disk cache limit...");
+    else if (limitState == ThumbnailCacheClearState::failed)
+        ImGuiMCP::TextUnformatted("Could not apply or save the disk cache limit. Select a limit to retry.");
     static bool cacheBuildUnavailable = false;
     auto buildStatus = thumbnails.diskCacheBuildStatus();
     auto clearState = thumbnails.diskCacheClearState();
     if (!buildStatus.active && clearState != ThumbnailCacheClearState::pending &&
+        limitState != ThumbnailCacheClearState::pending &&
         ImGuiMCP::Button("Build Thumbnail Cache")) {
         auto paths = catalog.diskCacheBuildPaths();
         cacheBuildUnavailable = paths.empty();
@@ -2969,9 +2999,11 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     }
     if (cacheBuildUnavailable)
         ImGuiMCP::TextUnformatted("No tattoo textures found. Thumbnail Cache was not built.");
-    ImGuiMCP::Text("Thumbnail Cache: %.1f MiB used",
-        static_cast<double>(thumbnails.diskCacheBytes()) / (1024.0 * 1024.0));
+    ImGuiMCP::Text("Thumbnail Cache: %.1f / %u MiB used",
+        static_cast<double>(thumbnails.diskCacheBytes()) / (1024.0 * 1024.0),
+        thumbnails.diskCacheLimitMiB());
     if (!buildStatus.active && clearState != ThumbnailCacheClearState::pending &&
+        limitState != ThumbnailCacheClearState::pending &&
         ImGuiMCP::Button("Clear Thumbnail Cache")) {
         if (!thumbnails.requestDiskCacheClear())
             clearState = ThumbnailCacheClearState::failed;
@@ -2985,7 +3017,7 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     else if (clearState == ThumbnailCacheClearState::succeeded)
         ImGuiMCP::TextUnformatted("Thumbnail cache cleared.");
     return !buildStatus.active && clearState != ThumbnailCacheClearState::pending &&
-        ImGuiMCP::Button("Open Tattoo Browser");
+        limitState != ThumbnailCacheClearState::pending && ImGuiMCP::Button("Open Tattoo Browser");
 }
 
 void OfficialMenuFrameworkAdapter::renderFoundation(

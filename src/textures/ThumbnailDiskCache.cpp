@@ -148,12 +148,23 @@ void ThumbnailDiskCache::store(std::string_view texturePath,
     if (!error) {
         m_estimatedBytes -= std::min(m_estimatedBytes, previousBytes);
         m_estimatedBytes += ddsBytes.size();
-        if (m_estimatedBytes > m_maxBytes) prune();
+        if (m_estimatedBytes > m_maxBytes) (void)prune(m_maxBytes);
     }
 }
 
-void ThumbnailDiskCache::prune() {
+bool ThumbnailDiskCache::setMaxBytes(std::uintmax_t maxBytes) {
+    if (maxBytes == 0 || m_directory.empty()) return false;
+    if (!prune(maxBytes)) return false;
+    m_maxBytes = maxBytes;
+    return true;
+}
+
+bool ThumbnailDiskCache::prune(std::uintmax_t maxBytes) {
     std::error_code error;
+    if (!std::filesystem::exists(m_directory, error)) {
+        if (!error) m_estimatedBytes = 0;
+        return !error;
+    }
     std::vector<std::pair<std::filesystem::path, std::filesystem::file_time_type>> files;
     std::uintmax_t total = 0;
     for (std::filesystem::directory_iterator it(m_directory, error), end;
@@ -165,10 +176,12 @@ void ThumbnailDiskCache::prune() {
         files.emplace_back(it->path(), it->last_write_time(error));
         if (error) break;
     }
-    if (error || total <= m_maxBytes) return;
+    if (error) return false;
+    m_estimatedBytes = total;
+    if (total <= maxBytes) return true;
     std::ranges::sort(files, {}, &std::pair<std::filesystem::path,
         std::filesystem::file_time_type>::second);
-    const auto target = m_maxBytes >= 1024 * 1024 ? m_maxBytes * 3 / 4 : m_maxBytes;
+    const auto target = maxBytes >= 1024 * 1024 ? maxBytes * 3 / 4 : maxBytes;
     for (const auto& [path, time] : files) {
         if (total <= target) break;
         const auto size = std::filesystem::file_size(path, error);
@@ -177,6 +190,7 @@ void ThumbnailDiskCache::prune() {
         if (error) break;
     }
     m_estimatedBytes = total;
+    return !error && total <= maxBytes;
 }
 
 bool ThumbnailDiskCache::clear() {

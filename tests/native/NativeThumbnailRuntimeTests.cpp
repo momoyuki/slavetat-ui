@@ -129,6 +129,14 @@ public:
         return isAvailable;
     }
 
+    bool setDiskCacheLimit(std::uintmax_t bytes) override {
+        limitRequests.push_back(bytes);
+        if (throwOnLimit) throw std::runtime_error("limit failure");
+        return limitSucceeds;
+    }
+    bool limitSucceeds{true};
+    bool throwOnLimit{};
+    std::vector<std::uintmax_t> limitRequests;
     bool isAvailable{true};
     bool throwOnLoad{};
     bool throwOnDiskClear{};
@@ -396,6 +404,71 @@ void clearDiskCacheReportsSchedulerAndSourceFailures() {
         "source exception should report failure without escaping the task");
 }
 
+void failedRollbackReportsActualAppliedBudget() {
+    RuntimeFixture fixture;
+    expect(fixture.runtime->requestDiskCacheLimit(128, [&](auto) {
+        fixture.source->limitSucceeds = false;
+        return false;
+    }), "rollback failure fixture should schedule");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitState() == stui::native::ThumbnailCacheClearState::failed &&
+        fixture.runtime->diskCacheLimitMiB() == 128,
+        "failed rollback must report actual source budget even though persistence failed");
+}
+
+void limitChangesAreScheduledExclusiveAndRetryable() {
+    RuntimeFixture fixture;
+    using State = stui::native::ThumbnailCacheClearState;
+    unsigned saved = 0;
+    expect(fixture.runtime->requestDiskCacheLimit(128, [&](auto value) {
+        saved = value; return true;
+    }), "limit request should be accepted");
+    expect(fixture.scheduled.size() == 1 && fixture.source->limitRequests.empty() && saved == 0 &&
+        fixture.runtime->diskCacheLimitMiB() == 256 && fixture.runtime->diskCacheLimitState() == State::pending,
+        "render intent must not write config or delete cache files");
+    expect(!fixture.runtime->requestDiskCacheClear() && !fixture.runtime->requestDiskCacheLimit(512),
+        "pending limit must block clear and duplicate limits");
+    fixture.runtime->startDiskCacheBuild({"a.dds"});
+    expect(!fixture.runtime->diskCacheBuildStatus().active, "pending limit blocks build");
+    fixture.scheduled.back()();
+    expect(saved == 128 && fixture.runtime->diskCacheLimitMiB() == 128 &&
+        fixture.source->limitRequests.back() == 128ULL * 1024 * 1024 &&
+        fixture.runtime->diskCacheLimitState() == State::succeeded,
+        "scheduled limit must publish applied value after source and save succeed");
+    expect(fixture.runtime->requestDiskCacheLimit(512, [](auto) { return false; }),
+        "save failure fixture should schedule");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitMiB() == 128 &&
+        fixture.runtime->diskCacheLimitState() == State::failed &&
+        fixture.source->limitRequests.back() == 128ULL * 1024 * 1024,
+        "save failure must restore previous source budget and report failure");
+    fixture.source->limitSucceeds = false;
+    saved = 0;
+    expect(fixture.runtime->requestDiskCacheLimit(512, [&](auto value) { saved = value; return true; }),
+        "source failure fixture should schedule");
+    fixture.scheduled.back()();
+    expect(saved == 0 && fixture.runtime->diskCacheLimitState() == State::failed,
+        "source failure must not persist desired value");
+    fixture.source->limitSucceeds = true;
+    fixture.source->throwOnLimit = true;
+    expect(fixture.runtime->requestDiskCacheLimit(512), "source exception fixture should schedule");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitState() == State::failed, "source exception releases guard");
+    fixture.source->throwOnLimit = false;
+    fixture.schedulerThrows = true;
+    expect(!fixture.runtime->requestDiskCacheLimit(512) &&
+        fixture.runtime->diskCacheLimitState() == State::failed, "scheduler exception reports failure");
+    expect(fixture.runtime->requestDiskCacheLimit(512), "failed operation should allow retry");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitMiB() == 512, "startup/no-save operation applies loaded budget");
+    expect(!fixture.runtime->requestDiskCacheLimit(257), "invalid limit must not schedule");
+    fixture.runtime->startDiskCacheBuild({"a.dds"});
+    expect(!fixture.runtime->requestDiskCacheLimit(128), "active build blocks limit");
+    fixture.runtime->reset();
+    expect(fixture.runtime->requestDiskCacheClear(), "clear fixture should schedule");
+    expect(!fixture.runtime->requestDiskCacheLimit(128), "pending clear blocks limit");
+}
+
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -412,6 +485,8 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("failed rollback reports actual budget", failedRollbackReportsActualAppliedBudget);
+    failures += run("limit changes are scheduled exclusive and retryable", limitChangesAreScheduledExclusiveAndRetryable);
     failures += run("synchronizes presentation-neutral visible paths", synchronizesPresentationNeutralVisiblePaths);
     failures += run("schedules only one request at a time", schedulesOnlyOneRequestAtATime);
     failures += run("does not schedule cache hits", doesNotScheduleCacheHits);

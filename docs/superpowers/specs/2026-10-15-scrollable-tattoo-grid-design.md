@@ -39,7 +39,12 @@ The Outfit Gallery video shared on 2026-10-15 is a visual reference for the over
   reduced DDS files; other DDS files up to 2 MiB are cached unchanged under
   the SKSE log directory. The disk cache skips
   source archive reads and resizing on subsequent visits, retains at most
-  256 MiB, and evicts least recently used files. Source path plus loose-file
+  the configured 128/256/512/1024 MiB (default 256 MiB), and evicts least recently
+  used files. The launcher exposes the disk-only limit, Reset to default, and
+  used/limit usage. Changes and startup application are scheduled outside render
+  and serialize through the source mutex; build, clear, and limit changes cannot
+  overlap. Failure permits retry by selecting a limit again. The focused contract
+  is in `2026-10-31-thumbnail-disk-cache-limit-design.md`. Source path plus loose-file
   or archive metadata stamps select the cache entry. Invalid cached images
   fall back to the original DDS. The SKSE launcher has a Clear Thumbnail Cache
   button that removes only files in this dedicated cache directory. Clearing is

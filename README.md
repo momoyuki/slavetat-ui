@@ -79,6 +79,10 @@ The scrolling gallery requests thumbnails near visible rows. The launcher can
 prebuild reduced DDS thumbnails for large textures into a bounded disk cache,
 show build progress and disk usage, and clear that cache. The GPU cache is also
 bounded; missing textures render a placeholder rather than blocking the menu.
+**Thumbnail disk cache limit** selects 128, 256, 512, or 1024 MiB of disk
+storage; **Reset to default** restores 256 MiB. The setting persists between
+game sessions. Reducing the limit evicts older cached files when needed;
+it does not change the GPU cache budget or the installed tattoo textures.
 
 ## Pack-Declared Material Texture Choices
 

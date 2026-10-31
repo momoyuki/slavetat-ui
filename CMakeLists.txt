@@ -115,6 +115,7 @@ set(headers
     src/runtime/SlaveTatsAlpha.h
     src/runtime/ApplicationRuntime.h
     src/runtime/HotkeyBinding.h
+    src/runtime/ThumbnailCacheSetting.h
     src/runtime/MenuSideSetting.h
     src/runtime/PluginConfigFile.h
     src/runtime/FavoriteStore.h
@@ -165,6 +166,7 @@ set(sources
     src/runtime/OverlaySlotConfiguration.cpp
     src/runtime/ApplicationRuntime.cpp
     src/runtime/HotkeyBinding.cpp
+    src/runtime/ThumbnailCacheSetting.cpp
     src/runtime/MenuSideSetting.cpp
     src/runtime/PluginConfigFile.cpp
     src/runtime/FavoriteStore.cpp
@@ -246,6 +248,15 @@ if(BUILD_TESTING)
     )
     target_include_directories(BrowserCameraSessionTests PRIVATE src)
     add_test(NAME BrowserCameraSessionTests COMMAND BrowserCameraSessionTests)
+
+    add_executable(ThumbnailCacheSettingTests
+        src/runtime/ThumbnailCacheSetting.cpp
+        src/runtime/PluginConfigFile.cpp
+        tests/runtime/ThumbnailCacheSettingTests.cpp
+    )
+    target_include_directories(ThumbnailCacheSettingTests PRIVATE src)
+    target_link_libraries(ThumbnailCacheSettingTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME ThumbnailCacheSettingTests COMMAND ThumbnailCacheSettingTests)
 
     add_executable(MenuSideSettingTests
         src/runtime/MenuSideSetting.cpp
@@ -418,6 +429,7 @@ if(BUILD_TESTING)
         src/native/OfficialMenuFrameworkAdapter.cpp
         src/native/CatalogPreviewModel.cpp
         src/runtime/HotkeyBinding.cpp
+        src/runtime/ThumbnailCacheSetting.cpp
         src/runtime/MenuSideSetting.cpp
         src/runtime/PluginConfigFile.cpp
         src/native/NativeCatalogBrowserModel.cpp

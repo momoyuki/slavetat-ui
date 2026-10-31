@@ -73,10 +73,10 @@ NativeThumbnailLoadResult D3D11NativeThumbnailSource::load(
         return cached;
     }
     if (m_diskCache) {
+        std::scoped_lock lock(m_mutex);
         const auto lookupStart = std::chrono::steady_clock::now();
         if (auto bytes = m_diskCache->load(texturePath)) {
             report(NativeThumbnailTimingStage::diskLookup, lookupStart);
-            std::scoped_lock lock(m_mutex);
             if (isCurrent && !isCurrent())
                 return std::unexpected(NativeThumbnailFailure::cancelled);
             const auto uploadStart = std::chrono::steady_clock::now();
@@ -154,6 +154,11 @@ void D3D11NativeThumbnailSource::pruneExpired(textures::TextureCacheTimePoint no
 void D3D11NativeThumbnailSource::clear() {
     std::scoped_lock lock(m_mutex);
     m_manager.clear();
+}
+
+bool D3D11NativeThumbnailSource::setDiskCacheLimit(std::uintmax_t bytes) {
+    const std::scoped_lock lock(m_mutex);
+    return m_diskCache && m_diskCache->setMaxBytes(bytes);
 }
 
 bool D3D11NativeThumbnailSource::clearDiskCache() {

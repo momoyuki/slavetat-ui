@@ -54,6 +54,7 @@ public:
     void pruneExpired(textures::TextureCacheTimePoint now) override;
     void clear() override;
     [[nodiscard]] bool clearDiskCache() override;
+    [[nodiscard]] bool setDiskCacheLimit(std::uintmax_t bytes) override;
     [[nodiscard]] bool prepareDiskCache(std::string_view texturePath) override;
     [[nodiscard]] std::uintmax_t diskCacheBytes() const override;
     [[nodiscard]] bool available() const noexcept override;

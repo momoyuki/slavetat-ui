@@ -19,11 +19,12 @@ public:
         std::string_view texturePath) const;
     void store(std::string_view texturePath, std::span<const std::uint8_t> ddsBytes);
     [[nodiscard]] bool clear();
+    [[nodiscard]] bool setMaxBytes(std::uintmax_t maxBytes);
     [[nodiscard]] std::uintmax_t bytes() const noexcept { return m_estimatedBytes; }
 
 private:
     [[nodiscard]] std::filesystem::path entryPath(std::string_view texturePath) const;
-    void prune();
+    [[nodiscard]] bool prune(std::uintmax_t maxBytes);
 
     std::filesystem::path m_directory;
     std::filesystem::path m_looseRoot;

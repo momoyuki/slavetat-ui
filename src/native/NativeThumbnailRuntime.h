@@ -31,6 +31,7 @@ public:
         textures::TextureCacheTimePoint now) = 0;
     virtual void pruneExpired(textures::TextureCacheTimePoint now) = 0;
     virtual void clear() = 0;
+    [[nodiscard]] virtual bool setDiskCacheLimit(std::uintmax_t) { return false; }
     [[nodiscard]] virtual bool clearDiskCache() { return false; }
     [[nodiscard]] virtual bool prepareDiskCache(std::string_view) { return false; }
     [[nodiscard]] virtual std::uintmax_t diskCacheBytes() const { return 0; }
@@ -67,6 +68,10 @@ public:
     void pump();
     [[nodiscard]] std::vector<NativeThumbnailView> views() const;
     void reset();
+    [[nodiscard]] bool requestDiskCacheLimit(
+        std::uint32_t limitMiB, std::function<bool(std::uint32_t)> persist = {});
+    [[nodiscard]] ThumbnailCacheClearState diskCacheLimitState() const;
+    [[nodiscard]] std::uint32_t diskCacheLimitMiB() const;
     [[nodiscard]] bool requestDiskCacheClear();
     [[nodiscard]] ThumbnailCacheClearState diskCacheClearState() const;
     void startDiskCacheBuild(std::vector<std::string> texturePaths);
@@ -85,6 +90,8 @@ private:
     std::vector<std::string> m_buildPaths;
     ThumbnailCacheBuildStatus m_buildStatus;
     ThumbnailCacheClearState m_clearState{ThumbnailCacheClearState::idle};
+    ThumbnailCacheClearState m_limitState{ThumbnailCacheClearState::idle};
+    std::uint32_t m_diskCacheLimitMiB{256};
     bool m_buildInFlight{};
     std::uint64_t m_buildGeneration{};
 };

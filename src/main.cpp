@@ -21,6 +21,7 @@
 #include "runtime/TattooLoadoutStore.h"
 #include "runtime/HotkeyBinding.h"
 #include "runtime/MenuSideSetting.h"
+#include "runtime/ThumbnailCacheSetting.h"
 #include "runtime/PluginConfigFile.h"
 #include "runtime/FavoriteStore.h"
 #include "runtime/RecentTattooStore.h"
@@ -207,6 +208,7 @@ native::BrowserCameraCoordinator g_browserCameraCoordinator(
 native::FlickLauncher* g_flickLauncher{};
 std::unique_ptr<runtime::HotkeyBinding> g_hotkeyBinding;
 std::unique_ptr<runtime::MenuSideSetting> g_menuSideSetting;
+std::unique_ptr<runtime::ThumbnailCacheSetting> g_thumbnailCacheSetting;
 SKSEMenuFramework::Model::InputEvent* g_hotkeyInputEvent{};
 SKSEMenuFramework::Model::Event* g_menuLifecycleEvent{};
 
@@ -413,8 +415,12 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                         taskInterface->AddTask(std::move(task));
                     },
                     [] { return textures::TextureCacheClock::now(); });
+                if (!g_nativeThumbnailRuntime->requestDiskCacheLimit(g_thumbnailCacheSetting->limitMiB())) {
+                    logger::warn("SlaveTatsUI: could not schedule stored thumbnail disk cache limit");
+                }
                 logger::info(
-                    "SlaveTatsUI: native thumbnail runtime initialized (capacity=64, vramCacheBudget=16MiB, diskCacheBudget=256MiB, ttl=2m)");
+                    "SlaveTatsUI: native thumbnail runtime initialized (capacity=64, vramCacheBudget=16MiB, requestedDiskCacheBudget={}MiB, ttl=2m)",
+                    g_thumbnailCacheSetting->limitMiB());
             }
         }
         g_nativeSlotWorkflow.start();
@@ -505,6 +511,10 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
     if (!g_hotkeyBinding->load()) {
         logger::warn("SlaveTatsUI: failed to load hotkey configuration; hotkey disabled");
     }
+    g_thumbnailCacheSetting = std::make_unique<runtime::ThumbnailCacheSetting>(g_pluginConfig);
+    if (!g_thumbnailCacheSetting->load()) {
+        logger::warn("SlaveTatsUI: invalid/unavailable thumbnail disk cache setting; using 256 MiB");
+    }
     g_menuSideSetting = std::make_unique<runtime::MenuSideSetting>(g_pluginConfig);
     if (!g_menuSideSetting->load()) {
         logger::warn("SlaveTatsUI: failed to load browser position; defaulting to left");
@@ -549,7 +559,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
             [] { return g_browserCameraPort.currentPan(); });
     }, [] {
         return native::OfficialMenuFrameworkAdapter::renderLauncher(
-            *g_hotkeyBinding, *g_menuSideSetting, *g_nativeThumbnailRuntime,
+            *g_hotkeyBinding, *g_menuSideSetting, *g_thumbnailCacheSetting, *g_nativeThumbnailRuntime,
             g_nativeCatalogBrowser);
     });
     nativeMenu.setOpenGuard([] {

@@ -12,6 +12,8 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <future>
+#include <thread>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -390,6 +392,38 @@ void reportsDiskLookupAndUploadTiming() {
         "cache hit should report disk read and GPU upload separately");
 }
 
+void diskLookupSerializesLimitPruning() {
+    TemporaryDirectory directory;
+    const auto device = createDevice();
+    const auto dds = makeDds(2, 3);
+    std::promise<void> started;
+    std::promise<bool> completed;
+    auto result = completed.get_future();
+    std::jthread limiter;
+    bool serialized = false;
+    D3D11NativeThumbnailSource* sourcePointer = nullptr;
+    D3D11NativeThumbnailSource source(directory.path() / "loose", device.Get(),
+        12, 2min, [&](std::string_view) { return TextureBytesResult(dds); },
+        {}, directory.path() / "cache",
+        [&](std::string_view, stui::native::NativeThumbnailTimingStage stage, double) {
+            if (stage != stui::native::NativeThumbnailTimingStage::diskLookup) return;
+            limiter = std::jthread([&] {
+                started.set_value();
+                completed.set_value(sourcePointer->setDiskCacheLimit(128ULL * 1024 * 1024));
+            });
+            started.get_future().wait();
+            serialized = result.wait_for(100ms) == std::future_status::timeout;
+        });
+    sourcePointer = &source;
+    expect(source.prepareDiskCache("Pack/serialized.dds"), "disk fixture should prebuild");
+    const auto loaded = source.load("Pack/serialized.dds", [] { return true; }, {});
+    limiter.join();
+    expect(loaded.has_value() && result.get(), "load and deferred prune should both succeed");
+    expect(serialized, "disk lookup and prune must hold the same source mutex");
+    expect(source.find("Pack/serialized.dds", {}) == *loaded,
+        "disk limit changes must preserve ready GPU textures");
+}
+
 void prebuiltBc7LoadsSmallTextureWithoutSecondArchiveRead() {
     TemporaryDirectory directory;
     const auto device = createDevice();
@@ -423,6 +457,31 @@ void diskCacheEvictsOldestFilesAtByteBudget() {
     expect(!cache.load("a.dds"), "disk budget should evict oldest thumbnail");
     expect(cache.load("b.dds") == bytes && cache.load("c.dds") == bytes,
         "disk budget should retain two recent thumbnails");
+}
+
+void diskCacheShrinkPrunesImmediatelyAndReportsFailures() {
+    TemporaryDirectory directory;
+    const auto cacheDirectory = directory.path() / "cache";
+    stui::textures::ThumbnailDiskCache cache(cacheDirectory, directory.path() / "loose", 16);
+    const std::vector<std::uint8_t> bytes{1, 2, 3, 4};
+    cache.store("a.dds", bytes);
+    for (const auto& entry : fs::directory_iterator(cacheDirectory))
+        fs::last_write_time(entry.path(), fs::file_time_type::clock::now() - 1h);
+    cache.store("b.dds", bytes);
+    cache.store("c.dds", bytes);
+    { std::ofstream output(cacheDirectory / "keep.txt"); output << "keep"; }
+    expect(cache.setMaxBytes(8), "shrinking should prune immediately");
+    expect(cache.bytes() == 8 && !cache.load("a.dds") && cache.load("b.dds") == bytes &&
+        cache.load("c.dds") == bytes, "shrink must evict oldest entry and update usage");
+    expect(fs::exists(cacheDirectory / "keep.txt"), "shrink must preserve unrelated files");
+    expect(cache.setMaxBytes(16) && cache.bytes() == 8, "increase retains entries");
+    expect(!cache.setMaxBytes(0), "zero budget should be rejected");
+    const auto notDirectory = directory.path() / "file";
+    { std::ofstream output(notDirectory); output << "blocked"; }
+    stui::textures::ThumbnailDiskCache broken(notDirectory, directory.path(), 16);
+    expect(!broken.setMaxBytes(8), "filesystem failures must be reported");
+    stui::textures::ThumbnailDiskCache missing(directory.path() / "missing", directory.path());
+    expect(missing.setMaxBytes(128), "absent empty cache should accept a limit");
 }
 
 void clearRemovesCacheEntries() {
@@ -476,6 +535,7 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("disk lookup serializes limit pruning", diskLookupSerializesLimitPruning);
     failures += run("loose file wins without archive read", looseFileWinsWithoutArchiveRead);
     failures += run("loose miss falls back to canonical archive path", looseMissFallsBackToCanonicalArchivePath);
     failures += run("invalid path maps to broken", invalidPathMapsToBroken);
@@ -501,6 +561,7 @@ int main() {
         prebuiltBc7LoadsSmallTextureWithoutSecondArchiveRead);
     failures += run("disk cache evicts oldest files at byte budget",
         diskCacheEvictsOldestFilesAtByteBudget);
+    failures += run("disk cache shrinks safely", diskCacheShrinkPrunesImmediatelyAndReportsFailures);
     failures += run("clear removes cache entries", clearRemovesCacheEntries);
     failures += run(
         "null device constructs unavailable placeholder source without archive read",
