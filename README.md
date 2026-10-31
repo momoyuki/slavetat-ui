@@ -55,6 +55,8 @@ Choose **SlaveTatsUI > Tattoo Browser** in SKSE Menu Framework. With FLICK
 installed, choose the same tool in its sidebar. In the launcher, set the
 browser position to Left or Right and press **Open Tattoo Browser**. A hotkey
 can be configured in the launcher; it defaults to **None**.
+The hotkey list includes punctuation keys `, . / ; ' [ ] - =` and
+`BACKSLASH` (`\`). These bindings use physical keyboard scan codes.
 
 Choose the Player or use **Choose NPC** to select a nearby loaded Actor, then
 manage that Actor Target's current slots:

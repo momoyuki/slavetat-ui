@@ -153,6 +153,25 @@ int main() {
         missingConfigurationDefaultsToNoHotkey();
         std::cout << "PASS missing configuration defaults to no hotkey\n";
         dropdownOptionsStartWithNoneAndExposeKeyboardKeys();
+        for (const auto expected : {
+                 stui::runtime::HotkeyOption{",", 0x33}, {".", 0x34},
+                 {"/", 0x35}, {";", 0x27}, {"'", 0x28},
+                 {"[", 0x1A}, {"]", 0x1B}, {"-", 0x0C}, {"=", 0x0D},
+                 {"BACKSLASH", 0x2B}}) {
+            bool found = false;
+            for (const auto option : stui::runtime::hotkeyOptions()) {
+                if (option.label == expected.label && option.key == expected.key) found = true;
+            }
+            expect(found, "expected punctuation key with its DirectInput scan code");
+            TemporaryDirectory directory;
+            const auto path = directory.path() / "SlaveTatsUI.json";
+            stui::runtime::HotkeyBinding binding(path);
+            expect(binding.select(expected.key), "expected punctuation key to save");
+            stui::runtime::HotkeyBinding reloaded(path);
+            expect(reloaded.load() && reloaded.matches(*expected.key) &&
+                reloaded.label() == expected.label,
+                "expected punctuation hotkey to match and retain its label after reload");
+        }
         std::cout << "PASS dropdown options start with None and expose keyboard keys\n";
         selectedDropdownOptionIsSavedImmediately();
         std::cout << "PASS selected dropdown option is saved immediately\n";
