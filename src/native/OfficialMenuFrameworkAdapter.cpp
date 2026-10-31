@@ -1120,6 +1120,25 @@ void orchestrateEditAppearanceFrame(
     }
 }
 
+std::string fitCatalogCardName(
+    std::string_view name, float width,
+    const std::function<float(std::string_view)>& measure) {
+    if (!(width > 0.0F)) return {};
+    if (measure(name) <= width) return std::string(name);
+    constexpr std::string_view suffix = "...";
+    if (measure(suffix) > width) return {};
+    auto end = name.size();
+    while (end > 0) {
+        --end;
+        while (end > 0 &&
+            (static_cast<unsigned char>(name[end]) & 0xC0) == 0x80) --end;
+        auto candidate = std::string(name.substr(0, end));
+        candidate += suffix;
+        if (measure(candidate) <= width) return candidate;
+    }
+    return std::string(suffix);
+}
+
 std::string formatCatalogTattooTooltip(
     std::string_view tattooName,
     const std::vector<std::int32_t>& inUseSlots) {
@@ -3598,7 +3617,13 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                         ImGuiMCP::ImGuiChildFlags_None,
                         ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
                             ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
-                    ImGuiMCP::TextUnformatted(tattoo.name.c_str());
+                    const auto displayName = fitCatalogCardName(
+                        tattoo.name, ImGuiMCP::GetContentRegionAvail().x,
+                        [](std::string_view text) {
+                            return ImGuiMCP::CalcTextSize(
+                                text.data(), text.data() + text.size()).x;
+                        });
+                    ImGuiMCP::TextUnformatted(displayName.c_str());
                     if (ImGuiMCP::IsItemHovered()) {
                         ImGuiMCP::SetTooltip("%s", tattoo.name.c_str());
                     }

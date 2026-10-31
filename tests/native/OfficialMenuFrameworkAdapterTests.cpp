@@ -1808,6 +1808,24 @@ int main() {
         std::cout << "PASS Current Slot color swatch uses owned tattoo color\n";
         currentSlotColorSwatchSkipsEmptyAndExternalSlots();
         std::cout << "PASS Current Slot color swatch skips empty and external slots\n";
+        const auto measure = [](std::string_view value) {
+            return static_cast<float>(value.size());
+        };
+        expect(stui::native::fitCatalogCardName("Short", 5, measure) == "Short",
+            "fitting names should remain unchanged");
+        expect(stui::native::fitCatalogCardName("Long name", 6, measure) == "Lon...",
+            "long names should reserve space for ellipsis");
+        expect(stui::native::fitCatalogCardName("Long", 2, measure).empty(),
+            "narrow cards must not overflow even with ellipsis");
+        const auto proportionalMeasure = [](std::string_view value) {
+            float width = 0.0F;
+            for (const auto character : value) width += character == 'W' ? 4.0F : 1.0F;
+            return width;
+        };
+        expect(stui::native::fitCatalogCardName("WWiii", 8, proportionalMeasure) == "W...",
+            "name fitting must use measured glyph widths rather than character count");
+        expect(stui::native::fitCatalogCardName("\xE0\xB8\x81\xE0\xB8\x82xyz", 7, measure) ==
+                "\xE0\xB8\x81...", "truncation must preserve UTF-8 boundaries");
         catalogTooltipIncludesInUseSlotDetails();
         std::cout << "PASS catalog tooltip includes In Use Slot details\n";
         pageInputKeepsPendingEditsUntilEnterOrFocusLoss();

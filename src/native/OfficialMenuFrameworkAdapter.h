@@ -26,6 +26,10 @@ class HotkeyBinding;
 
 namespace stui::native {
 
+[[nodiscard]] std::string fitCatalogCardName(
+    std::string_view name, float width,
+    const std::function<float(std::string_view)>& measure);
+
 struct LoadoutAreaSummary {
     std::size_t add{};
     std::size_t replace{};
