@@ -25,7 +25,7 @@ Scanning loaded Actors...	読み込み済みアクターを検索中...
 No loaded followers found.	読み込み済みのフォロワーが見つかりません。
 No loaded NPC matches the search.	検索に一致する読み込み済みNPCがいません。
 Target: None	対象: なし
-Target: 	対象: 
+Target:\s	対象:\s
 Scanning nearby Actors...	周囲のアクターを検索中...
 No nearby Actor found	周囲のアクターが見つかりません
 Unavailable	利用できません
@@ -46,21 +46,21 @@ HANDS	手
 FEET	足
 No active Actor	有効なアクターがいません
 {} / {} / Slot {}	{} / {} / スロット {}
-Retry Slot 	スロットを再試行 
-Apply to Slot 	適用先スロット 
+Retry Slot\s	スロットを再試行\s
+Apply to Slot\s	適用先スロット\s
 Save	保存
 Preview pending...	プレビューを待機中...
 Updating preview...	プレビューを更新中...
 Preview applied	プレビューを適用しました
 Restoring original appearance...	元の外観を復元中...
- - 	 - 
+ -\s	 -\s
 Retry Restore Sync	復元の同期を再試行
 Retry Restore	復元を再試行
 Retry Preview Sync	プレビューの同期を再試行
 Retry Preview	プレビューを再試行
-Remove from Slot 	除去するスロット 
-Retry Remove Slot 	除去を再試行するスロット 
-Retry Sync Slot 	同期を再試行するスロット 
+Remove from Slot\s	除去するスロット\s
+Retry Remove Slot\s	除去を再試行するスロット\s
+Retry Sync Slot\s	同期を再試行するスロット\s
 Unlock tattoo	タトゥーのロックを解除
 Lock tattoo	タトゥーをロック
 All Domains	すべてのドメイン
@@ -72,7 +72,7 @@ Current (unlisted)	現在の値（一覧にありません）
 No appearance presets saved.	保存された外観プリセットはありません。
 20 preset limit reached	プリセット数の上限（20個）です
 Updating appearance presets...	外観プリセットを更新中...
-\nIn use: Slots 	\n使用中のスロット 
+\nIn use: Slots\s	\n使用中のスロット\s
 Loading	読み込み中
 Missing	見つかりません
 Broken	破損しています
@@ -91,7 +91,7 @@ Search	検索
 Refresh NPC List	NPC一覧を更新
 Close NPC Picker	NPC選択を閉じる
 Retry NPC Scan	NPC検索を再試行
-Loadouts: 	構成: 
+Loadouts:\s	構成:\s
 Retry	再試行
 Loadout	構成
 Select loadout	構成を選択

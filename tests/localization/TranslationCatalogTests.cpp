@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
                "Unsafe %s\t危険 %d\nInjected\t悪用###id\nBlank\t\n"
                "Duplicate\t一\nDuplicate\t二\n"
                "Target: \t対象: \nLine\\nTwo\t行\\n二\n"
+               "Suffix\\s\tFin\\s\n"
                "Bad {}\t不正 {\nPositional {}\t不正 {0}\n"
                "BadRowWithoutTab\n";
         expect(!catalog.load(dir), "partial/missing dictionaries reported");
@@ -32,6 +33,7 @@ int main(int argc, char** argv) {
         expect(std::string(catalog.text(Language::japanese, "Blank")) == "Blank", "empty translation falls back");
         expect(std::string(catalog.text(Language::japanese, "Duplicate")) == "一", "first duplicate wins deterministically");
         expect(std::string(catalog.text(Language::japanese, "Target: ")) == "対象: ", "trailing spaces preserved");
+        expect(std::string(catalog.text(Language::japanese, "Suffix ")) == "Fin ", "escaped trailing spaces preserved");
         expect(std::string(catalog.text(Language::japanese, "Line\nTwo")) == "行\n二", "escaped newlines decoded");
         expect(std::string(catalog.text(Language::japanese, "Bad {}")) == "Bad {}", "broken format rejected");
         expect(std::string(catalog.text(Language::japanese, "Positional {}")) == "Positional {}", "format argument order protected");

@@ -165,7 +165,8 @@ Catalogs are UTF-8, one **English source text**, a literal tab, and one
 **translation** per line. Lines beginning with `#` are comments. Preserve spaces,
 all printf placeholders (`%s`, `%d`, `%zu`, `%.1f`, etc.) and all C++ format
 fields (`{}`, `{:.0f}`, etc.) in their original order. Use `\n` for a newline,
-`\t` for a tab and `\\` for a literal backslash. Empty translations, invalid
+`\t` for a tab, `\s` for a space (especially at the end of a field), and `\\`
+for a literal backslash. Empty translations, invalid
 UTF-8, duplicate keys, changed placeholders and `##` widget-ID delimiters are
 rejected and reported in the startup log; valid rows remain usable.
 

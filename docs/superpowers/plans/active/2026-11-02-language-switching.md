@@ -79,3 +79,47 @@ French discovery, per-key fallback, stable widget ID and persistence checks;
 release fixture includes a fifth catalog. No additional translations are claimed.
 
 Follow-up verification: discovery/parser tests and locale persistence (including externally added French) passed with GCC; adapter syntax check passed with temporary platform declaration shims. Windows/PowerShell/game checks remain pending; do not wait for CI.
+
+## PR review fixes — 2026-11-02
+
+- Keep `TextUnformatted` as a raw renderer boundary. Translate fixed captions
+  explicitly before output; composed Actor/slot/preset text is never looked up
+  again. The regression records the real `igTextUnformatted` export arguments
+  through a test-only Menu Framework DLL, including a dictionary key that matches
+  a complete rendered identity and a translated caption that is also a key.
+- Support `\s` in TSV fields and encode the four catalogs' trailing spaces without
+  changing decoded keys or translations. Document the escape and the package's
+  required/discovered translation layout. The package fixture also rejects
+  accidental inclusion of the test renderer DLL through its exact ZIP assertion.
+- Verification: both new regression cases failed against the original production
+  code and passed after the fix with MSVC. All five PowerShell release-tool suites
+  passed. Native MSVC Debug and Release DLL builds passed, with 57/57 CTest tests
+  passing in each configuration and no skipped-test markers in either log. Existing
+  locally installed dependencies were reused without dependency installation.
+  All 988 decoded key/translation pairs match the pre-fix catalogs; both the scoped
+  diff and the cumulative PR diff pass `git diff --check`. An independent source
+  review found no actionable issue in the fixes.
+- CJK fonts, layout and in-game acceptance remain pending. These review fixes do
+  not authorize a commit, push, merge, deployment or release.
+
+## Rebase preparation — 2026-11-06
+
+- User authorized rebasing PR #23 and updating its existing branch; keep it draft
+  while the Windows/in-game testers report back.
+- Replayed the three localization commits on `main` at `669490ca1620c497f9f33aa0fccef1cffc815fac`.
+  Resolved CMake, launcher wiring, adapter declarations/rendering and presentation
+  test conflicts while preserving PR #24's cache limit, saved Player views,
+  persistent thumbnail background and read-only External thumbnails.
+- Routed new fixed captions through localization without changing runtime data.
+  Captions introduced by PR #24 use English fallback where the existing catalogs
+  have no translation; additional wording is follow-up work.
+- Passed: GCC catalog tests in Debug and optimized builds; language persistence
+  tests in Debug and optimized builds with a temporary POSIX rename shim; full
+  adapter presentation suite with temporary Windows/D3D declarations and the
+  recording renderer. Temporary shims and downloaded headers are not committed.
+- Passed: cumulative `git diff --check`, scoped history/diff review, and unchanged
+  files outside the original PR's 24-file scope. The vendored framework still has
+  its pre-existing missing-return warning.
+- Pending for this rebased revision: native MSVC Debug/Release DLL builds,
+  Windows CTest/PowerShell packaging checks and in-game CJK/layout/persistence
+  acceptance. Prior Windows results above apply to the pre-rebase revision.

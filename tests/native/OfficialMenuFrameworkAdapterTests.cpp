@@ -1,4 +1,6 @@
 #include "textures/TextureResolver.h"
+#include <RE/Skyrim.h>
+
 #include "localization/TranslationCatalog.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
 #include "native/NativeCatalogBrowserModel.h"
@@ -7,12 +9,19 @@
 #include "native/NativeSlotWorkflowRuntime.h"
 #include "core/TattooModels.h"
 
+#include "native/LocalizedImGui.h"
+
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <regex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
+extern "C" __declspec(dllimport) const char* recordedUnformattedText();
 
 namespace {
 
@@ -1749,6 +1758,43 @@ void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
 
 }  // namespace
 
+void unformattedRenderingPreservesComposedActorAndPresetText() {
+    using namespace stui;
+    const auto directory = std::filesystem::temp_directory_path() / "stui-rendered-translation-tests";
+    std::filesystem::create_directories(directory);
+    {
+        std::ofstream output(directory / "fr.tsv", std::ios::binary);
+        output << "Save\tEnregistrer\n"
+                  "Enregistrer\tTranslated twice\n"
+                  "Target: Alice [0x00000014]\tDifferent Actor\n"
+                  "Alice / BODY / Slot 2\tDifferent slot\n"
+                  "Delete 'My preset' permanently?\tDifferent preset\n";
+    }
+    expect(localization::catalog().load(directory), "expected valid community render fixture");
+    localization::selectLanguage("fr");
+    const native::ActorTarget actor{
+        .kind = native::ActorTargetKind::player, .formId = 0x14, .displayName = "Alice"};
+    const auto identity = native::actorTargetTitle(&actor);
+    native::localizedUi::TextUnformatted(identity.c_str());
+    expect(std::string_view(recordedUnformattedText()) == "Target: Alice [0x00000014]",
+        "renderer must preserve the composed Actor identity without another lookup");
+    const auto slot = native::formatSlotTargetLabel(&actor, core::TattooArea::body, 2);
+    native::localizedUi::TextUnformatted(slot.c_str());
+    expect(std::string_view(recordedUnformattedText()) == "Alice / BODY / Slot 2",
+        "renderer must preserve the Actor name in a composed slot label");
+    const std::string presetName{"My preset"};
+    const auto confirmation = std::vformat(
+        localization::tr("Delete '{}' permanently?"), std::make_format_args(presetName));
+    native::localizedUi::TextUnformatted(confirmation.c_str());
+    expect(std::string_view(recordedUnformattedText()) == "Delete 'My preset' permanently?",
+        "renderer must preserve a preset name after formatting");
+    native::localizedUi::TextUnformatted(localization::tr("Save"));
+    expect(std::string_view(recordedUnformattedText()) == "Enregistrer",
+        "a translated literal must reach the renderer without being translated again");
+    localization::selectLanguage(localization::Language::english);
+    std::filesystem::remove_all(directory);
+}
+
 void localizedPresentationPreservesRuntimeIdentifiers() {
     using namespace stui;
     expect(localization::catalog().load(SLAVETATSUI_TRANSLATIONS_DIR), "expected valid shipped translations");
@@ -1912,6 +1958,7 @@ int main() {
         std::cout << "PASS Picker visible paths follow six rendered cards\n";
         nullSnapshotModelHasSafeEmptyPageWithoutImGui();
         localizedPresentationPreservesRuntimeIdentifiers();
+        unformattedRenderingPreservesComposedActorAndPresetText();
         std::cout << "PASS null snapshot model has safe empty page without ImGui\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL " << error.what() << '\n';

@@ -1425,11 +1425,11 @@ void renderSlotImage(
         return;
     }
     if (slot.occupancy == core::SlotOccupancy::external && !slot.externalThumbnail) {
-        ui::TextUnformatted("Unavailable");
+        ui::TextUnformatted(tr("Unavailable"));
         return;
     }
     if (slot.occupancy == core::SlotOccupancy::slaveTats && (!slot.tattoo || slot.tattoo->texturePath.empty())) {
-        ui::TextUnformatted("No thumbnail");
+        ui::TextUnformatted(tr("No thumbnail"));
         return;
     }
 
@@ -1469,14 +1469,14 @@ void renderSlotImage(
         return;
     }
     if (slot.occupancy == core::SlotOccupancy::external) {
-        ImGuiMCP::TextUnformatted(!thumbnail || thumbnail->status == NativeThumbnailStatus::placeholder ||
-            thumbnail->status == NativeThumbnailStatus::loading ? "Loading" : "Unavailable");
+        ui::TextUnformatted(tr(!thumbnail || thumbnail->status == NativeThumbnailStatus::placeholder ||
+            thumbnail->status == NativeThumbnailStatus::loading ? "Loading" : "Unavailable"));
         return;
     }
     if (thumbnail) {
         const auto label = catalogThumbnailStatusLabel(thumbnail->status);
         if (!label.empty()) {
-            ui::TextUnformatted(label.data());
+            ui::TextUnformatted(tr(label.data()));
         }
     }
 }
@@ -1510,7 +1510,7 @@ bool renderActorTargetHeader(
     if (workflow.explicitNpcPickerOpen()) {
         const auto pickerTitle = actorPickerTitle(workflow.actorPickerMode());
         ImGuiMCP::Separator();
-        ui::TextUnformatted(pickerTitle.data());
+        ui::TextUnformatted(tr(pickerTitle.data()));
         ImGuiMCP::BeginDisabled(workflow.isActorTargetResolutionInFlight());
         auto search = workflow.explicitNpcSearch();
         if (inputTextString("Search##ExplicitNpc", search)) {
@@ -1568,7 +1568,7 @@ bool renderActorTargetHeader(
 
 void renderLoadoutStoreStatus(NativeSlotWorkflowModel& workflow) {
     const auto status = loadoutStatusMessage(workflow.tattooLoadouts().size(), workflow.tattooLoadoutStorePending());
-    if (!status.empty()) ui::TextUnformatted(status.data());
+    if (!status.empty()) ui::TextUnformatted(tr(status.data()));
     if (const auto* error = workflow.tattooLoadoutStoreError()) {
         const auto message = tr("Loadouts: ") + error->message;
         ui::TextWrapped("%s", message.c_str());
@@ -1607,7 +1607,7 @@ void renderLoadoutControls(NativeSlotWorkflowModel& workflow) {
     ImGuiMCP::BeginDisabled(pending || !selected || workflow.isMutationInFlight());
     if (ui::Button("Manage##Loadouts")) (void)workflow.applyTattooLoadoutIntent(TattooLoadoutIntent::manage);
     ImGuiMCP::EndDisabled();
-    if (workflow.tattooLoadoutActorPending()) ui::TextUnformatted("Reading fresh Actor state...");
+    if (workflow.tattooLoadoutActorPending()) ui::TextUnformatted(tr("Reading fresh Actor state..."));
     renderLoadoutStoreStatus(workflow);
 }
 
@@ -1629,7 +1629,7 @@ void renderLoadoutScreen(NativeSlotWorkflowModel& workflow, const std::function<
     if (renderActorTargetHeader(workflow)) {
         ImGuiMCP::End(); ImGuiMCP::PopStyleVar(); return;
     }
-    ui::TextUnformatted("Saved Tattoo Loadouts");
+    ui::TextUnformatted(tr("Saved Tattoo Loadouts"));
     const auto selected = workflow.selectedTattooLoadout();
     if (selected) ImGuiMCP::TextUnformatted(workflow.tattooLoadouts()[*selected].name.c_str());
     const float startY = ImGuiMCP::GetCursorPosY();
@@ -1640,7 +1640,7 @@ void renderLoadoutScreen(NativeSlotWorkflowModel& workflow, const std::function<
         renderLoadoutStoreStatus(workflow);
         if (const auto* error = workflow.error()) ui::TextWrapped("%s", error->message.c_str());
         if (screen == TattooLoadoutScreen::captureSummary) {
-            ui::TextUnformatted("Save managed tattoos from all four areas. External overlays are omitted.");
+            ui::TextUnformatted(tr("Save managed tattoos from all four areas. External overlays are omitted."));
             if (const auto* capture = workflow.tattooLoadoutCapture()) {
                 const auto counts = loadoutCaptureCounts(*capture);
                 for (std::size_t index = 0; index < counts.size(); ++index)
@@ -1673,17 +1673,17 @@ void renderLoadoutScreen(NativeSlotWorkflowModel& workflow, const std::function<
                     ui::Text("Appearance: %zu / Unchanged: %zu / Preserved: %zu", area.appearance, area.unchanged, area.preserved);
                 }
             } else if (preview) {
-                ui::TextUnformatted("Preflight rejected. Resolve these conflicts and run Load again:");
+                ui::TextUnformatted(tr("Preflight rejected. Resolve these conflicts and run Load again:"));
                 for (const auto& blocker : preview->blockers) {
                     const auto reason = formatLoadoutSlotReason(blocker.area, blocker.slot, blocker.message);
                     ui::TextWrapped("%s", reason.c_str());
                 }
             }
         } else if (screen == TattooLoadoutScreen::restoring) {
-            ui::TextUnformatted("Restoring loadout... Please wait.");
+            ui::TextUnformatted(tr("Restoring loadout... Please wait."));
         } else if (screen == TattooLoadoutScreen::result) {
             if (const auto* result = workflow.tattooLoadoutResult()) {
-                ui::TextUnformatted(loadoutResultLabel(result->state).data());
+                ui::TextUnformatted(tr(loadoutResultLabel(result->state).data()));
                 if (result->state == core::TattooLoadoutRestoreState::rollbackComplete)
                     ui::TextWrapped("Restore failed. The original managed tattoos were recovered and verified.");
                 if (result->state == core::TattooLoadoutRestoreState::rollbackIncomplete)
@@ -1851,7 +1851,7 @@ void renderCurrentSlots(
                     const auto status = actorTargetStatusLabel(
                         workflow.isActorTargetResolutionInFlight(), workflow.actorTarget());
                     ui::TextUnformatted(
-                        status.empty() ? "Loading tattoo slots..." : status.data());
+                        tr(status.empty() ? "Loading tattoo slots..." : status.data()));
                 }
                 ImGuiMCP::EndChild();
             } else if (ImGuiMCP::BeginTable(
@@ -1980,7 +1980,7 @@ void renderCurrentSlots(
             }
             ImGuiMCP::EndDisabled();
             ImGuiMCP::SameLine();
-            ui::TextUnformatted("Page");
+            ui::TextUnformatted(tr("Page"));
             ImGuiMCP::SameLine();
             static CatalogBrowserPageInputState slotPageInputState;
             slotPageInputState.synchronize(page.pageIndex, page.pageCount);
@@ -2078,7 +2078,7 @@ void renderSlotActions(
         workflow.screen() == SlotWorkflowScreen::removeConfirmation;
     const bool removing = workflow.screen() == SlotWorkflowScreen::removing;
     ui::TextUnformatted(
-        confirming || removing ? "Remove Tattoo?" : "Tattoo Slot Actions");
+        tr(confirming || removing ? "Remove Tattoo?" : "Tattoo Slot Actions"));
     if (target) {
         const auto targetLabel = formatSlotTargetLabel(
             workflow.actorTarget(), workflow.selectedArea(), *target);
@@ -2093,9 +2093,9 @@ void renderSlotActions(
     if (const auto* error = workflow.error()) {
         ui::TextUnformatted(error->message.c_str());
     } else if (removing) {
-        ui::TextUnformatted("Removing tattoo...");
+        ui::TextUnformatted(tr("Removing tattoo..."));
     } else if (confirming) {
-        ui::TextUnformatted("This will clear the selected SlaveTats slot.");
+        ui::TextUnformatted(tr("This will clear the selected SlaveTats slot."));
     }
 
     const float footerHeight = ImGuiMCP::GetFrameHeightWithSpacing();
@@ -2263,7 +2263,7 @@ void renderPreview(
     thumbnails.synchronize(std::move(epoch), paths);
     thumbnails.pump();
     const auto thumbnailViews = thumbnails.views();
-    ui::TextUnformatted("Preview Tattoo");
+    ui::TextUnformatted(tr("Preview Tattoo"));
     if (target) {
         const auto targetLabel = formatSlotTargetLabel(
             workflow.actorTarget(), workflow.selectedArea(), *target);
@@ -2276,7 +2276,7 @@ void renderPreview(
     if (const auto* error = workflow.error()) {
         ui::TextUnformatted(error->message.c_str());
     } else if (applying) {
-        ui::TextUnformatted("Applying tattoo...");
+        ui::TextUnformatted(tr("Applying tattoo..."));
     }
 
     TattooColorComponents colorComponents =
@@ -2465,7 +2465,7 @@ void renderEditAppearance(
     thumbnails.pump();
     const auto thumbnailViews = thumbnails.views();
     const bool saving = workflow.screen() == SlotWorkflowScreen::savingAppearance;
-    ui::TextUnformatted("Edit Appearance");
+    ui::TextUnformatted(tr("Edit Appearance"));
     if (session) {
         const auto targetLabel = formatSlotTargetLabel(
             workflow.actorTarget(), session->area, session->slot);
@@ -2490,7 +2490,7 @@ void renderEditAppearance(
     if (const auto* error = workflow.error()) {
         ui::TextUnformatted(error->message.c_str());
     } else if (saving) {
-        ui::TextUnformatted("Saving appearance...");
+        ui::TextUnformatted(tr("Saving appearance..."));
     }
 
     TattooColorComponents colorComponents =
@@ -2575,7 +2575,7 @@ void renderEditAppearance(
 
     const auto statusMessage = appearancePresetStatusMessage(presetState);
     if (!statusMessage.empty()) {
-        ui::TextUnformatted(statusMessage.data());
+        ui::TextUnformatted(tr(statusMessage.data()));
     }
     if (appearancePresetError) {
         const auto message = translatedFormat(
@@ -2590,7 +2590,7 @@ void renderEditAppearance(
     }
 
     if (ui::BeginPopupModal("Save Appearance Preset")) {
-        ui::TextUnformatted("Save the current appearance values as:");
+        ui::TextUnformatted(tr("Save the current appearance values as:"));
         ImGuiMCP::SetNextItemWidth(320.0F);
         (void)inputTextString("Name##SaveAppearancePreset", presetName);
         auto candidateName = std::string_view(presetName);
@@ -2757,7 +2757,7 @@ void renderEditAppearance(
                                                auto select) {
             const auto presentation = materialTextureSelectorPresentation(options, selectedPath, glow);
             if (!presentation.visible) return;
-            ui::TextUnformatted(label);
+            ui::TextUnformatted(tr(label));
             ImGuiMCP::SameLine();
             ImGuiMCP::BeginDisabled(!targetActionsEnabled ||
                 !isAppearanceEditingEnabled(workflow.screen(), workflow.editAppearance()));
@@ -2788,19 +2788,19 @@ void renderEditAppearance(
         if (session->edited.glow != 0 || !session->edited.glowTexture.empty() ||
             session->edited.emissiveMult != 1.0F) {
             ImGuiMCP::SameLine();
-            ui::TextUnformatted("Glow");
+            ui::TextUnformatted(tr("Glow"));
         }
         if (!session->edited.bump.empty()) {
             ImGuiMCP::SameLine();
-            ui::TextUnformatted("Bump");
+            ui::TextUnformatted(tr("Bump"));
         }
         if (shouldShowAppearanceTextureMetadata(session->edited.glowTexture)) {
-            ui::TextUnformatted("Glow Texture:");
+            ui::TextUnformatted(tr("Glow Texture:"));
             ImGuiMCP::SameLine();
             ImGuiMCP::TextUnformatted(appearanceTextureMetadata(*session, true).data());
         }
         if (shouldShowAppearanceTextureMetadata(session->edited.bump)) {
-            ui::TextUnformatted("Bump Texture:");
+            ui::TextUnformatted(tr("Bump Texture:"));
             ImGuiMCP::SameLine();
             ImGuiMCP::TextUnformatted(appearanceTextureMetadata(*session, false).data());
         }
@@ -2945,10 +2945,10 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
             }
             ImGuiMCP::EndCombo();
         }
-        if (languageSaveFailed) ui::TextUnformatted("Could not save the language setting.");
+        if (languageSaveFailed) ui::TextUnformatted(tr("Could not save the language setting."));
         ui::TextWrapped("Enable Chinese, Korean and Japanese glyphs and choose a compatible font in SKSE Menu Framework settings.");
     }
-    ui::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
+    ui::TextUnformatted(tr("Open SlaveTatsUI when you are ready to browse tattoos."));
     ui::TextUnformatted(launcherModVersionLabel().data());
     const auto hotkeyLabel = hotkey.label();
     static bool hotkeySaveFailed = false;
@@ -2966,7 +2966,7 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
         ImGuiMCP::EndCombo();
     }
     if (hotkeySaveFailed) {
-        ui::TextUnformatted("Could not save the hotkey setting.");
+        ui::TextUnformatted(tr("Could not save the hotkey setting."));
     }
     static bool menuSideSaveFailed = false;
     const auto selectedSide = menuSide.side();
@@ -2983,7 +2983,7 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
         ImGuiMCP::EndCombo();
     }
     if (menuSideSaveFailed) {
-        ui::TextUnformatted("Could not save the browser position.");
+        ui::TextUnformatted(tr("Could not save the browser position."));
     }
     static bool cameraOffsetSaveFailed = false;
     for (const auto side : {runtime::MenuSide::left, runtime::MenuSide::right}) {
@@ -2996,7 +2996,7 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
         }
     }
     if (cameraOffsetSaveFailed) {
-        ui::TextUnformatted("Could not save the initial camera position.");
+        ui::TextUnformatted(tr("Could not save the initial camera position."));
     }
     static bool cameraPanSaveFailed = false;
     for (const auto side : {runtime::MenuSide::left, runtime::MenuSide::right}) {
@@ -3010,16 +3010,16 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
         if (changed) cameraPanSaveFailed = !menuSide.setInitialCameraPan(side, pan);
     }
     if (cameraPanSaveFailed) {
-        ui::TextUnformatted("Could not save the initial camera Pan.");
+        ui::TextUnformatted(tr("Could not save the initial camera Pan."));
     }
     if (clearSavedCameraViews) {
         static std::optional<bool> savedCameraViewsCleared;
         if (ui::Button("Reset saved Player views"))
             savedCameraViewsCleared = clearSavedCameraViews();
         if (savedCameraViewsCleared.has_value()) {
-            ImGuiMCP::TextUnformatted(*savedCameraViewsCleared
+            ui::TextUnformatted(tr(*savedCameraViewsCleared
                 ? "Saved Player views cleared. Initial framing applies next opening."
-                : "Unable to clear saved Player views.");
+                : "Unable to clear saved Player views."));
         }
     }
     auto limitState = thumbnails.diskCacheLimitState();
@@ -3047,9 +3047,9 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     ImGuiMCP::EndDisabled();
     limitState = thumbnails.diskCacheLimitState();
     if (limitState == ThumbnailCacheClearState::pending)
-        ui::TextUnformatted("Applying thumbnail disk cache limit...");
+        ui::TextUnformatted(tr("Applying thumbnail disk cache limit..."));
     else if (limitState == ThumbnailCacheClearState::failed)
-        ui::TextUnformatted("Could not apply or save the disk cache limit. Select a limit to retry.");
+        ui::TextUnformatted(tr("Could not apply or save the disk cache limit. Select a limit to retry."));
     static bool cacheBuildUnavailable = false;
     auto buildStatus = thumbnails.diskCacheBuildStatus();
     auto clearState = thumbnails.diskCacheClearState();
@@ -3067,16 +3067,16 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     if (buildStatus.active) {
         ui::Text("Building Thumbnail Cache: %zu / %zu", buildStatus.completed,
             buildStatus.total);
-        ui::TextUnformatted("Please keep this menu open until the build is complete.");
+        ui::TextUnformatted(tr("Please keep this menu open until the build is complete."));
     } else if (buildStatus.total > 0) {
         if (buildStatus.failed == 0)
-            ui::TextUnformatted("Thumbnail Cache ready. You can open the Tattoo Browser.");
+            ui::TextUnformatted(tr("Thumbnail Cache ready. You can open the Tattoo Browser."));
         else
             ui::Text("Thumbnail Cache build complete: %zu / %zu (%zu failed)",
                 buildStatus.completed, buildStatus.total, buildStatus.failed);
     }
     if (cacheBuildUnavailable)
-        ui::TextUnformatted("No tattoo textures found. Thumbnail Cache was not built.");
+        ui::TextUnformatted(tr("No tattoo textures found. Thumbnail Cache was not built."));
     ui::Text("Thumbnail Cache: %.1f / %u MiB used",
         static_cast<double>(thumbnails.diskCacheBytes()) / (1024.0 * 1024.0),
         thumbnails.diskCacheLimitMiB());
@@ -3089,11 +3089,11 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
             clearState = thumbnails.diskCacheClearState();
     }
     if (clearState == ThumbnailCacheClearState::pending)
-        ui::TextUnformatted("Clearing thumbnail cache...");
+        ui::TextUnformatted(tr("Clearing thumbnail cache..."));
     else if (clearState == ThumbnailCacheClearState::failed)
-        ui::TextUnformatted("Could not clear the thumbnail cache.");
+        ui::TextUnformatted(tr("Could not clear the thumbnail cache."));
     else if (clearState == ThumbnailCacheClearState::succeeded)
-        ui::TextUnformatted("Thumbnail cache cleared.");
+        ui::TextUnformatted(tr("Thumbnail cache cleared."));
     return !buildStatus.active && clearState != ThumbnailCacheClearState::pending &&
         limitState != ThumbnailCacheClearState::pending && ui::Button("Open Tattoo Browser");
 }
@@ -3205,7 +3205,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                                 ui::SetTooltip("Applies when this side has no remembered session view.");
                             }
                             if (panSaveFailed) {
-                                ui::TextUnformatted("Could not save initial Pan.");
+                                ui::TextUnformatted(tr("Could not save initial Pan."));
                             }
                         }
                     }
@@ -3299,7 +3299,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     ui::Text("%zu tattoos", model.scrollPage().matchedEntries);
 
     if (backgroundSaveFailed)
-        ui::TextUnformatted("Could not save the thumbnail background.");
+        ui::TextUnformatted(tr("Could not save the thumbnail background."));
 
     constexpr std::size_t searchCapacity = 256;
     std::array<char, searchCapacity> searchBuffer{};
@@ -3364,7 +3364,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Applied");
+        ui::TextUnformatted(tr("Applied"));
         ImGuiMCP::TableSetColumnIndex(1);
         bool appliedOnly = workflow.appliedOnly();
         if (ui::Checkbox("Applied only", &appliedOnly)) {
@@ -3374,7 +3374,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Favorites");
+        ui::TextUnformatted(tr("Favorites"));
         ImGuiMCP::TableSetColumnIndex(1);
         bool favoritesOnly = workflow.favoritesOnly();
         if (ui::Checkbox("Favorites only", &favoritesOnly)) {
@@ -3384,7 +3384,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Recent");
+        ui::TextUnformatted(tr("Recent"));
         ImGuiMCP::TableSetColumnIndex(1);
         bool recentlyUsedOnly = workflow.recentlyUsedOnly();
         if (ui::Checkbox("Recently used only", &recentlyUsedOnly)) {
@@ -3394,7 +3394,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Material");
+        ui::TextUnformatted(tr("Material"));
         ImGuiMCP::TableSetColumnIndex(1);
         const float materialRowRight =
             ImGuiMCP::GetCursorScreenPos().x + ImGuiMCP::GetContentRegionAvail().x;
@@ -3435,7 +3435,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Domain");
+        ui::TextUnformatted(tr("Domain"));
         ImGuiMCP::TableSetColumnIndex(1);
         ImGuiMCP::SetNextItemWidth(-1.0F);
         if (ui::Combo(
@@ -3449,7 +3449,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Search");
+        ui::TextUnformatted(tr("Search"));
         ImGuiMCP::TableSetColumnIndex(1);
         ImGuiMCP::SetNextItemWidth(-1.0F);
         if (ui::InputText("##Search", searchBuffer.data(), searchBuffer.size())) {
@@ -3459,7 +3459,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Source");
+        ui::TextUnformatted(tr("Source"));
         ImGuiMCP::TableSetColumnIndex(1);
         ImGuiMCP::SetNextItemWidth(-1.0F);
         if (ui::Combo(
@@ -3474,7 +3474,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         ImGuiMCP::TableNextRow();
         ImGuiMCP::TableSetColumnIndex(0);
         ImGuiMCP::AlignTextToFramePadding();
-        ui::TextUnformatted("Section");
+        ui::TextUnformatted(tr("Section"));
         ImGuiMCP::TableSetColumnIndex(1);
         ImGuiMCP::SetNextItemWidth(-1.0F);
         if (ui::Combo(
@@ -3531,7 +3531,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                 ImGuiMCP::ImGuiChildFlags_None,
                 ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
                     ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
-            ui::TextUnformatted(catalogBrowserEmptyMessage(emptyState).data());
+            ui::TextUnformatted(tr(catalogBrowserEmptyMessage(emptyState).data()));
         }
         ImGuiMCP::EndChild();
     } else {
@@ -3626,7 +3626,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                     } else if (thumbnail) {
                         const auto label = catalogThumbnailStatusLabel(thumbnail->status);
                         if (!label.empty()) {
-                            ui::TextUnformatted(label.data());
+                            ui::TextUnformatted(tr(label.data()));
                         }
                     }
 
@@ -3773,7 +3773,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
         } else if (selected) {
             ui::Text("Selected: %s - not saved", selected->name.c_str());
         } else {
-            ui::TextUnformatted("Click a tattoo to preview and select.");
+            ui::TextUnformatted(tr("Click a tattoo to preview and select."));
         }
         const auto displayed = slotRuntime.catalogPreviewDisplay();
         const auto ink = tattooColorComponents(displayed ? displayed->color : 0x000000);
@@ -3800,7 +3800,7 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
             slotRuntime.setCatalogPreviewGlossy(glossy);
         }
     } else if (slotRuntime.catalogPreviewStarting()) {
-        ui::TextUnformatted("Preparing live preview...");
+        ui::TextUnformatted(tr("Preparing live preview..."));
     } else if (const auto* error = slotRuntime.catalogPreviewError()) {
         ui::Text("Live preview unavailable: %s", error->message.c_str());
     }

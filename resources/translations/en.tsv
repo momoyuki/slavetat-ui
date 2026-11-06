@@ -25,7 +25,7 @@ Scanning loaded Actors...	Scanning loaded Actors...
 No loaded followers found.	No loaded followers found.
 No loaded NPC matches the search.	No loaded NPC matches the search.
 Target: None	Target: None
-Target: 	Target: 
+Target:\s	Target:\s
 Scanning nearby Actors...	Scanning nearby Actors...
 No nearby Actor found	No nearby Actor found
 Unavailable	Unavailable
@@ -46,21 +46,21 @@ HANDS	HANDS
 FEET	FEET
 No active Actor	No active Actor
 {} / {} / Slot {}	{} / {} / Slot {}
-Retry Slot 	Retry Slot 
-Apply to Slot 	Apply to Slot 
+Retry Slot\s	Retry Slot\s
+Apply to Slot\s	Apply to Slot\s
 Save	Save
 Preview pending...	Preview pending...
 Updating preview...	Updating preview...
 Preview applied	Preview applied
 Restoring original appearance...	Restoring original appearance...
- - 	 - 
+ -\s	 -\s
 Retry Restore Sync	Retry Restore Sync
 Retry Restore	Retry Restore
 Retry Preview Sync	Retry Preview Sync
 Retry Preview	Retry Preview
-Remove from Slot 	Remove from Slot 
-Retry Remove Slot 	Retry Remove Slot 
-Retry Sync Slot 	Retry Sync Slot 
+Remove from Slot\s	Remove from Slot\s
+Retry Remove Slot\s	Retry Remove Slot\s
+Retry Sync Slot\s	Retry Sync Slot\s
 Unlock tattoo	Unlock tattoo
 Lock tattoo	Lock tattoo
 All Domains	All Domains
@@ -72,7 +72,7 @@ Current (unlisted)	Current (unlisted)
 No appearance presets saved.	No appearance presets saved.
 20 preset limit reached	20 preset limit reached
 Updating appearance presets...	Updating appearance presets...
-\nIn use: Slots 	\nIn use: Slots 
+\nIn use: Slots\s	\nIn use: Slots\s
 Loading	Loading
 Missing	Missing
 Broken	Broken
@@ -91,7 +91,7 @@ Search	Search
 Refresh NPC List	Refresh NPC List
 Close NPC Picker	Close NPC Picker
 Retry NPC Scan	Retry NPC Scan
-Loadouts: 	Loadouts: 
+Loadouts:\s	Loadouts:\s
 Retry	Retry
 Loadout	Loadout
 Select loadout	Select loadout

@@ -67,6 +67,7 @@ function New-PackageFixture {
     'notice marker' | Set-Content -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Encoding utf8
     'readme marker' | Set-Content -LiteralPath (Join-Path $root 'README.md') -Encoding utf8
     'debug symbols' | Set-Content -LiteralPath (Join-Path $dllDirectory 'SlaveTatsUI.pdb') -Encoding utf8
+    'test renderer' | Set-Content -LiteralPath (Join-Path $dllDirectory 'SKSEMenuFramework.dll') -Encoding utf8
     'runtime log' | Set-Content -LiteralPath (Join-Path $root 'SlaveTatsUI.log') -Encoding utf8
     '{"hotkey":67}' | Set-Content -LiteralPath (Join-Path $root 'SlaveTatsUI.json') -Encoding utf8
     $translations = Join-Path $root 'resources/translations'

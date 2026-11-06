@@ -25,7 +25,7 @@ Scanning loaded Actors...	로드된 액터 검색 중...
 No loaded followers found.	로드된 동료가 없습니다.
 No loaded NPC matches the search.	검색과 일치하는 로드된 NPC가 없습니다.
 Target: None	대상: 없음
-Target: 	대상: 
+Target:\s	대상:\s
 Scanning nearby Actors...	주변 액터 검색 중...
 No nearby Actor found	주변 액터를 찾지 못했습니다
 Unavailable	사용 불가
@@ -46,21 +46,21 @@ HANDS	손
 FEET	발
 No active Actor	활성 액터 없음
 {} / {} / Slot {}	{} / {} / 슬롯 {}
-Retry Slot 	슬롯 재시도 
-Apply to Slot 	적용할 슬롯 
+Retry Slot\s	슬롯 재시도\s
+Apply to Slot\s	적용할 슬롯\s
 Save	저장
 Preview pending...	미리보기 대기 중...
 Updating preview...	미리보기 갱신 중...
 Preview applied	미리보기 적용됨
 Restoring original appearance...	원래 외형 복원 중...
- - 	 - 
+ -\s	 -\s
 Retry Restore Sync	복원 동기화 재시도
 Retry Restore	복원 재시도
 Retry Preview Sync	미리보기 동기화 재시도
 Retry Preview	미리보기 재시도
-Remove from Slot 	제거할 슬롯 
-Retry Remove Slot 	제거 재시도 슬롯 
-Retry Sync Slot 	동기화 재시도 슬롯 
+Remove from Slot\s	제거할 슬롯\s
+Retry Remove Slot\s	제거 재시도 슬롯\s
+Retry Sync Slot\s	동기화 재시도 슬롯\s
 Unlock tattoo	문신 잠금 해제
 Lock tattoo	문신 잠금
 All Domains	모든 도메인
@@ -72,7 +72,7 @@ Current (unlisted)	현재 값 (목록에 없음)
 No appearance presets saved.	저장된 외형 프리셋이 없습니다.
 20 preset limit reached	프리셋 20개 제한에 도달했습니다
 Updating appearance presets...	외형 프리셋 갱신 중...
-\nIn use: Slots 	\n사용 중인 슬롯 
+\nIn use: Slots\s	\n사용 중인 슬롯\s
 Loading	로드 중
 Missing	없음
 Broken	손상됨
@@ -91,7 +91,7 @@ Search	검색
 Refresh NPC List	NPC 목록 새로고침
 Close NPC Picker	NPC 선택 닫기
 Retry NPC Scan	NPC 검색 재시도
-Loadouts: 	구성: 
+Loadouts:\s	구성:\s
 Retry	재시도
 Loadout	구성
 Select loadout	구성 선택

@@ -1,12 +1,15 @@
 #pragma once
 
-// Presentation-only adapters. Call ImGuiMCP directly for pack/user-provided
-// captions: actor/tattoo/preset/loadout names and texture paths are data.
+// Presentation-only adapters. Unformatted text is already rendered data;
+// translate fixed captions explicitly before passing them to TextUnformatted.
+// Pack/user-provided captions and texture paths are data, not translation keys.
 #include "localization/TranslationCatalog.h"
 #include "SKSEMenuFramework.h"
 #include <utility>
 
 namespace stui::native::localizedUi {
+using ImGuiMCP::TextUnformatted;
+
 inline bool Button(const char* source, const ImGuiMCP::ImVec2& size = {0.0F, 0.0F}) {
     const auto label = localization::widgetLabel(source);
     return ImGuiMCP::Button(label.c_str(), size);
@@ -38,7 +41,6 @@ STUI_LOCALIZED_WIDGET(BeginPopupModal)
     }
 STUI_LOCALIZED_TEXT(Text)
 STUI_LOCALIZED_TEXT(TextWrapped)
-STUI_LOCALIZED_TEXT(TextUnformatted)
 STUI_LOCALIZED_TEXT(SetTooltip)
 STUI_LOCALIZED_TEXT(SeparatorText)
 STUI_LOCALIZED_TEXT(CalcTextSize)

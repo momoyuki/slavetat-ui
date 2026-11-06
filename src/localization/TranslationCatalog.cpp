@@ -68,6 +68,7 @@ std::optional<std::string> decode(std::string_view value) {
             if (++i == value.size()) return std::nullopt;
             if (value[i] == 'n') result += '\n';
             else if (value[i] == 't') result += '\t';
+            else if (value[i] == 's') result += ' ';
             else if (value[i] == '\\') result += '\\';
             else return std::nullopt;
         }

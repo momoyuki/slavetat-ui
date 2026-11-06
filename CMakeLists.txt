@@ -470,6 +470,9 @@ if(BUILD_TESTING)
     target_include_directories(FlickLauncherTests PRIVATE src)
     add_test(NAME FlickLauncherTests COMMAND FlickLauncherTests)
 
+    add_library(RecordingMenuFramework SHARED tests/support/RecordingMenuFramework.cpp)
+    set_target_properties(RecordingMenuFramework PROPERTIES OUTPUT_NAME "SKSEMenuFramework")
+
     add_executable(OfficialMenuFrameworkAdapterTests
         src/textures/TextureResolver.cpp
         src/runtime/LanguageSetting.cpp
@@ -494,7 +497,7 @@ if(BUILD_TESTING)
         SLAVETATSUI_GIT_REVISION="${SLAVETATSUI_GIT_REVISION}"
         SLAVETATSUI_TRANSLATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources/translations"
     )
-    target_link_libraries(OfficialMenuFrameworkAdapterTests PRIVATE CommonLibSSE::CommonLibSSE nlohmann_json::nlohmann_json SlaveTatsUILocalization)
+    target_link_libraries(OfficialMenuFrameworkAdapterTests PRIVATE CommonLibSSE::CommonLibSSE nlohmann_json::nlohmann_json SlaveTatsUILocalization RecordingMenuFramework)
     if(MSVC)
         target_compile_options(OfficialMenuFrameworkAdapterTests PRIVATE /utf-8)
     endif()

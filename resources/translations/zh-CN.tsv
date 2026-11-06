@@ -25,7 +25,7 @@ Scanning loaded Actors...	扫描已载入角色...
 No loaded followers found.	无已载入随从。
 No loaded NPC matches the search.	无已载入NPC匹配搜索。
 Target: None	目标: 无
-Target: 	目标: 
+Target:\s	目标:\s
 Scanning nearby Actors...	扫描附近角色...
 No nearby Actor found	未找到附近角色
 Unavailable	不可用
@@ -46,21 +46,21 @@ HANDS	双手
 FEET	双脚
 No active Actor	无当前角色
 {} / {} / Slot {}	{} / {} / 槽位 {}
-Retry Slot 	重试槽位 
-Apply to Slot 	应用到槽位 
+Retry Slot\s	重试槽位\s
+Apply to Slot\s	应用到槽位\s
 Save	存
 Preview pending...	预览待处理...
 Updating preview...	正在更新预览...
 Preview applied	已应用预览
 Restoring original appearance...	正在恢复原始外观...
- - 	 - 
+ -\s	 -\s
 Retry Restore Sync	重试恢复同步
 Retry Restore	重试恢复
 Retry Preview Sync	重试预览同步
 Retry Preview	重试预览
-Remove from Slot 	从槽位移除 
-Retry Remove Slot 	重试移除槽 
-Retry Sync Slot 	重试同步槽 
+Remove from Slot\s	从槽位移除\s
+Retry Remove Slot\s	重试移除槽\s
+Retry Sync Slot\s	重试同步槽\s
 Unlock tattoo	解锁纹身
 Lock tattoo	锁纹身
 All Domains	全部域
@@ -72,7 +72,7 @@ Current (unlisted)	当前(未列出)
 No appearance presets saved.	尚未保存外观预设。
 20 preset limit reached	已达20预设上限
 Updating appearance presets...	正在更新外观预设...
-\nIn use: Slots 	\n占用槽位: 
+\nIn use: Slots\s	\n占用槽位:\s
 Loading	载入
 Missing	缺失
 Broken	损坏
@@ -91,7 +91,7 @@ Search	搜索
 Refresh NPC List	刷新NPC列表
 Close NPC Picker	关闭NPC选择
 Retry NPC Scan	重扫NPC
-Loadouts: 	配置: 
+Loadouts:\s	配置:\s
 Retry	重试
 Loadout	配置
 Select loadout	选择配置
