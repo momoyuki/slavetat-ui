@@ -55,6 +55,8 @@ Choose **SlaveTatsUI > Tattoo Browser** in SKSE Menu Framework. With FLICK
 installed, choose the same tool in its sidebar. In the launcher, set the
 browser position to Left or Right and press **Open Tattoo Browser**. A hotkey
 can be configured in the launcher; it defaults to **None**.
+The hotkey list includes punctuation keys `, . / ; ' [ ] - =` and
+`BACKSLASH` (`\`). These bindings use physical keyboard scan codes.
 
 Choose the Player or use **Choose NPC** to select a nearby loaded Actor, then
 manage that Actor Target's current slots:
@@ -77,6 +79,10 @@ The scrolling gallery requests thumbnails near visible rows. The launcher can
 prebuild reduced DDS thumbnails for large textures into a bounded disk cache,
 show build progress and disk usage, and clear that cache. The GPU cache is also
 bounded; missing textures render a placeholder rather than blocking the menu.
+**Thumbnail disk cache limit** selects 128, 256, 512, or 1024 MiB of disk
+storage; **Reset to default** restores 256 MiB. The setting persists between
+game sessions. Reducing the limit evicts older cached files when needed;
+it does not change the GPU cache budget or the installed tattoo textures.
 
 ## Pack-Declared Material Texture Choices
 

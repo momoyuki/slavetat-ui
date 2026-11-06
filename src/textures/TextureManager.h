@@ -61,6 +61,20 @@ public:
         return resource;
     }
 
+    [[nodiscard]] std::shared_ptr<Resource> find(const TextureResource& resource, std::uint64_t revision,
+        TextureCacheTimePoint now = TextureCacheClock::now()) {
+        return m_cache.get(resourceKey(resource, revision), now);
+    }
+
+    template <class Uploader>
+    std::expected<std::shared_ptr<Resource>, TextureManagerError> getOrLoad(
+        const TextureResource& resource, std::uint64_t revision, std::span<const std::uint8_t> bytes,
+        Uploader&& uploader, TextureCacheTimePoint now = TextureCacheClock::now()) {
+        auto loaded = m_cache.getOrLoad(resourceKey(resource, revision),
+            [&]() { return std::invoke(std::forward<Uploader>(uploader), bytes); }, now);
+        if (!loaded) return std::unexpected(TextureManagerError::uploadFailed);
+        return loaded;
+    }
     void pruneExpired(TextureCacheTimePoint now = TextureCacheClock::now()) {
         m_cache.pruneExpired(now);
     }
@@ -70,6 +84,10 @@ public:
     [[nodiscard]] std::size_t size() const noexcept { return m_cache.size(); }
 
 private:
+    [[nodiscard]] static std::string resourceKey(const TextureResource& resource, std::uint64_t revision) {
+        return std::string(":resource:") + std::to_string(static_cast<int>(resource.kind())) + ":" +
+            std::to_string(resource.path().size()) + ":" + resource.path() + ":" + std::to_string(revision);
+    }
     [[nodiscard]] static std::expected<std::string, TextureManagerError> normalizePath(
         std::string_view texturePath) {
         auto normalized = TextureResolver::normalize(texturePath);

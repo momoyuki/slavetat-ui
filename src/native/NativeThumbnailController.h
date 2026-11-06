@@ -2,6 +2,7 @@
 
 #include "repository/TattooCatalogStore.h"
 #include "textures/D3D11TextureUploader.h"
+#include "core/TextureResource.h"
 
 #include <cstdint>
 #include <expected>
@@ -36,6 +37,7 @@ enum class NativeThumbnailFailure {
 struct NativeThumbnailRequest {
     std::uint64_t generation{};
     std::string texturePath;
+    std::optional<core::TextureResource> resource;
 };
 
 using NativeThumbnailLoadResult = std::expected<
@@ -46,6 +48,7 @@ struct NativeThumbnailView {
     std::string texturePath;
     NativeThumbnailStatus status{NativeThumbnailStatus::placeholder};
     std::shared_ptr<textures::D3D11Texture> texture;
+    std::optional<core::TextureResource> resource;
 };
 
 using NativeThumbnailCacheLookup =
@@ -62,6 +65,7 @@ public:
         repository::TattooCatalogSnapshot snapshot,
         std::span<const repository::TattooDefinition> entries,
         const NativeThumbnailCacheLookup& lookup);
+    void synchronizeResources(NativeThumbnailEpoch epoch, std::span<const core::TextureResource> resources);
     [[nodiscard]] std::optional<NativeThumbnailRequest> takeNextRequest();
     [[nodiscard]] bool isCurrent(const NativeThumbnailRequest& request) const;
     void complete(NativeThumbnailRequest request, NativeThumbnailLoadResult result);
@@ -77,6 +81,7 @@ private:
 
     mutable std::mutex m_mutex;
     NativeThumbnailEpoch m_epoch;
+    std::unordered_map<std::string, core::TextureResource> m_resources;
     std::uint64_t m_generation{};
     std::uint64_t m_synchronizationRevision{};
     NativeThumbnailEpoch m_pendingEpoch;

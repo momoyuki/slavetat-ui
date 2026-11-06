@@ -5,6 +5,8 @@
 
 namespace stui::runtime {
 
+void collectExternalTextures(core::TattooSlots& slots, skee::OverrideInterface* interface);
+
 CatalogPreviewVisualBindings makeSkyrimCatalogPreviewBindings(
     skee::OverrideInterface* interface);
 

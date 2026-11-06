@@ -1548,7 +1548,9 @@ void NativeSlotWorkflowModel::completeSlotQuery(
         return;
     }
     const auto completedArea = completed.area;
-    m_areaStates[areaIndex(completedArea)].slots = std::move(completed);
+    auto& areaState = m_areaStates[areaIndex(completedArea)];
+    areaState.slots = std::move(completed);
+    areaState.thumbnailEpoch = std::make_shared<int>(0);
     if (completedArea == m_selectedArea) {
         updateAppliedTattooIdentities();
     }
@@ -1881,6 +1883,10 @@ SlotWorkflowScreen NativeSlotWorkflowModel::screen() const noexcept {
 
 core::TattooArea NativeSlotWorkflowModel::selectedArea() const noexcept {
     return m_selectedArea;
+}
+
+std::shared_ptr<const void> NativeSlotWorkflowModel::slotThumbnailEpoch() const noexcept {
+    return selectedState().thumbnailEpoch;
 }
 
 const core::TattooSlots* NativeSlotWorkflowModel::slots() const noexcept {

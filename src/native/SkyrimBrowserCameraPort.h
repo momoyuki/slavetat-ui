@@ -6,6 +6,7 @@
 
 namespace stui::native {
 
+class BrowserCameraPreferenceStore;
 class SkyrimBrowserCameraPort final : public BrowserCameraPort {
 public:
     SkyrimBrowserCameraPort();
@@ -15,6 +16,8 @@ public:
     SkyrimBrowserCameraPort& operator=(const SkyrimBrowserCameraPort&) = delete;
 
     void setSmoothCamInterface(void* interfaceInstance, int version) noexcept;
+    void setPreferenceStore(std::shared_ptr<BrowserCameraPreferenceStore> store);
+    void discard() override;
     void rememberView(std::uint32_t formId, bool menuOnRight) override;
     [[nodiscard]] bool begin(std::uint32_t formId, bool menuOnRight) override;
     [[nodiscard]] bool isTargetLoaded(std::uint32_t formId) override;

@@ -1,4 +1,5 @@
 #include "native/OfficialMenuFrameworkAdapter.h"
+#include "textures/TextureResolver.h"
 #include "runtime/HotkeyBinding.h"
 
 #include <RE/Skyrim.h>
@@ -373,6 +374,39 @@ std::string_view slotAreaLabel(core::TattooArea area) noexcept {
         return "FEET";
     }
     return "BODY";
+}
+
+std::optional<std::size_t> findSlotThumbnailViewIndex(const core::TattooSlot& slot,
+    const std::vector<NativeThumbnailView>& views) {
+    std::optional<core::TextureResource> identity;
+    if (slot.occupancy == core::SlotOccupancy::external) identity = slot.externalThumbnail;
+    else if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo) {
+        auto resource = textures::TextureResolver::resource(core::TextureResourceKind::catalog, slot.tattoo->texturePath);
+        if (resource) identity = std::move(*resource);
+    }
+    if (!identity) return std::nullopt;
+    for (std::size_t index = 0; index < views.size(); ++index) {
+        if (views[index].resource && *views[index].resource == *identity) return index;
+    }
+    if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo)
+        return findCatalogThumbnailViewIndex(slot.tattoo->texturePath, views);
+    return std::nullopt;
+}
+
+std::vector<core::TextureResource> collectVisibleSlotResources(const core::TattooSlots& slots,
+    std::size_t pageIndex, std::size_t pageSize) {
+    const auto page = calculateSlotPage(slots.slots.size(), pageIndex, pageSize);
+    std::vector<core::TextureResource> resources;
+    for (std::size_t index = page.begin; index < page.end; ++index) {
+        const auto& slot = slots.slots[index];
+        if (slot.occupancy == core::SlotOccupancy::external && slot.externalThumbnail) {
+            resources.push_back(*slot.externalThumbnail);
+        } else if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo) {
+            auto resource = textures::TextureResolver::resource(core::TextureResourceKind::catalog, slot.tattoo->texturePath);
+            if (resource) resources.push_back(std::move(*resource));
+        }
+    }
+    return resources;
 }
 
 std::vector<std::string> collectVisibleSlotTexturePaths(
@@ -1120,6 +1154,25 @@ void orchestrateEditAppearanceFrame(
     }
 }
 
+std::string fitCatalogCardName(
+    std::string_view name, float width,
+    const std::function<float(std::string_view)>& measure) {
+    if (!(width > 0.0F)) return {};
+    if (measure(name) <= width) return std::string(name);
+    constexpr std::string_view suffix = "...";
+    if (measure(suffix) > width) return {};
+    auto end = name.size();
+    while (end > 0) {
+        --end;
+        while (end > 0 &&
+            (static_cast<unsigned char>(name[end]) & 0xC0) == 0x80) --end;
+        auto candidate = std::string(name.substr(0, end));
+        candidate += suffix;
+        if (measure(candidate) <= width) return candidate;
+    }
+    return std::string(suffix);
+}
+
 std::string formatCatalogTattooTooltip(
     std::string_view tattooName,
     const std::vector<std::int32_t>& inUseSlots) {
@@ -1361,17 +1414,16 @@ void renderSlotImage(
     if (slot.occupancy == core::SlotOccupancy::empty) {
         return;
     }
-    if (slot.occupancy == core::SlotOccupancy::external) {
+    if (slot.occupancy == core::SlotOccupancy::external && !slot.externalThumbnail) {
+        ImGuiMCP::TextUnformatted("Unavailable");
         return;
     }
-    if (!slot.tattoo || slot.tattoo->texturePath.empty()) {
+    if (slot.occupancy == core::SlotOccupancy::slaveTats && (!slot.tattoo || slot.tattoo->texturePath.empty())) {
         ImGuiMCP::TextUnformatted("No thumbnail");
         return;
     }
 
-    const auto thumbnailIndex = findCatalogThumbnailViewIndex(
-        slot.tattoo->texturePath,
-        thumbnailViews);
+    const auto thumbnailIndex = findSlotThumbnailViewIndex(slot, thumbnailViews);
     const NativeThumbnailView* thumbnail = thumbnailIndex
         ? &thumbnailViews[*thumbnailIndex]
         : nullptr;
@@ -1404,6 +1456,11 @@ void renderSlotImage(
             {bounds.left, bounds.top},
             {bounds.right, bounds.bottom},
             tint);
+        return;
+    }
+    if (slot.occupancy == core::SlotOccupancy::external) {
+        ImGuiMCP::TextUnformatted(!thumbnail || thumbnail->status == NativeThumbnailStatus::placeholder ||
+            thumbnail->status == NativeThumbnailStatus::loading ? "Loading" : "Unavailable");
         return;
     }
     if (thumbnail) {
@@ -1753,11 +1810,11 @@ void renderCurrentSlots(
 
             // Read the new area's snapshot only after processing tab selection.
             const auto* slots = workflow.slots();
-            const auto paths = slots
-                ? collectVisibleSlotTexturePaths(
+            const auto resources = slots
+                ? collectVisibleSlotResources(
                       *slots, workflow.slotPageIndex(), NativeSlotWorkflowModel::kPageSize)
-                : std::vector<std::string>{};
-            thumbnails.synchronize(slotThumbnailEpoch(workflow.selectedArea()), paths);
+                : std::vector<core::TextureResource>{};
+            thumbnails.synchronizeResources(workflow.slotThumbnailEpoch(), resources);
             thumbnails.pump();
             const auto thumbnailViews = thumbnails.views();
             page = slots
@@ -1872,7 +1929,7 @@ void renderCurrentSlots(
                     if (ImGuiMCP::IsItemHovered(ImGuiMCP::ImGuiHoveredFlags_AllowWhenDisabled)) {
                         if (slot.occupancy == core::SlotOccupancy::external) {
                             ImGuiMCP::SetTooltip(
-                                "Slot %d - Read Only: managed by another overlay mod", slot.index);
+                                "Slot %d - Read Only: managed by another overlay mod. Thumbnail shows the source image.", slot.index);
                         } else if (slot.tattoo) {
                             ImGuiMCP::SetTooltip("Slot %d - %s", slot.index, slot.tattoo->name.c_str());
                         } else {
@@ -2859,7 +2916,9 @@ std::string_view launcherModVersionLabel() noexcept {
 
 bool OfficialMenuFrameworkAdapter::renderLauncher(
     runtime::HotkeyBinding& hotkey, runtime::MenuSideSetting& menuSide,
-    NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog) {
+    runtime::ThumbnailCacheSetting& cacheSetting,
+    NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog,
+    const std::function<bool()>& clearSavedCameraViews) {
     ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
     ImGuiMCP::TextUnformatted(launcherModVersionLabel().data());
     const auto hotkeyLabel = hotkey.label();
@@ -2924,10 +2983,49 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     if (cameraPanSaveFailed) {
         ImGuiMCP::TextUnformatted("Could not save the initial camera Pan.");
     }
+    if (clearSavedCameraViews) {
+        static std::optional<bool> savedCameraViewsCleared;
+        if (ImGuiMCP::Button("Reset saved Player views"))
+            savedCameraViewsCleared = clearSavedCameraViews();
+        if (savedCameraViewsCleared.has_value()) {
+            ImGuiMCP::TextUnformatted(*savedCameraViewsCleared
+                ? "Saved Player views cleared. Initial framing applies next opening."
+                : "Unable to clear saved Player views.");
+        }
+    }
+    auto limitState = thumbnails.diskCacheLimitState();
+    const auto requestLimit = [&thumbnails, &cacheSetting](std::uint32_t limit) {
+        (void)thumbnails.requestDiskCacheLimit(limit, [&cacheSetting](std::uint32_t selected) {
+            return cacheSetting.select(selected);
+        });
+    };
+    const auto appliedLimit = thumbnails.diskCacheLimitMiB();
+    const bool maintenanceBusy = thumbnails.diskCacheBuildStatus().active ||
+        thumbnails.diskCacheClearState() == ThumbnailCacheClearState::pending ||
+        limitState == ThumbnailCacheClearState::pending;
+    ImGuiMCP::BeginDisabled(maintenanceBusy);
+    const auto limitLabel = std::to_string(appliedLimit) + " MiB";
+    if (ImGuiMCP::BeginCombo("Thumbnail disk cache limit", limitLabel.c_str())) {
+        for (const auto limit : runtime::ThumbnailCacheSetting::limitsMiB) {
+            const auto label = std::to_string(limit) + " MiB";
+            if (ImGuiMCP::Selectable(label.c_str(), limit == appliedLimit)) requestLimit(limit);
+            if (limit == appliedLimit) ImGuiMCP::SetItemDefaultFocus();
+        }
+        ImGuiMCP::EndCombo();
+    }
+    if (ImGuiMCP::Button("Reset to default##thumbnailDiskCacheLimit"))
+        requestLimit(runtime::ThumbnailCacheSetting::defaultLimitMiB);
+    ImGuiMCP::EndDisabled();
+    limitState = thumbnails.diskCacheLimitState();
+    if (limitState == ThumbnailCacheClearState::pending)
+        ImGuiMCP::TextUnformatted("Applying thumbnail disk cache limit...");
+    else if (limitState == ThumbnailCacheClearState::failed)
+        ImGuiMCP::TextUnformatted("Could not apply or save the disk cache limit. Select a limit to retry.");
     static bool cacheBuildUnavailable = false;
     auto buildStatus = thumbnails.diskCacheBuildStatus();
     auto clearState = thumbnails.diskCacheClearState();
     if (!buildStatus.active && clearState != ThumbnailCacheClearState::pending &&
+        limitState != ThumbnailCacheClearState::pending &&
         ImGuiMCP::Button("Build Thumbnail Cache")) {
         auto paths = catalog.diskCacheBuildPaths();
         cacheBuildUnavailable = paths.empty();
@@ -2950,9 +3048,11 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     }
     if (cacheBuildUnavailable)
         ImGuiMCP::TextUnformatted("No tattoo textures found. Thumbnail Cache was not built.");
-    ImGuiMCP::Text("Thumbnail Cache: %.1f MiB used",
-        static_cast<double>(thumbnails.diskCacheBytes()) / (1024.0 * 1024.0));
+    ImGuiMCP::Text("Thumbnail Cache: %.1f / %u MiB used",
+        static_cast<double>(thumbnails.diskCacheBytes()) / (1024.0 * 1024.0),
+        thumbnails.diskCacheLimitMiB());
     if (!buildStatus.active && clearState != ThumbnailCacheClearState::pending &&
+        limitState != ThumbnailCacheClearState::pending &&
         ImGuiMCP::Button("Clear Thumbnail Cache")) {
         if (!thumbnails.requestDiskCacheClear())
             clearState = ThumbnailCacheClearState::failed;
@@ -2966,7 +3066,7 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     else if (clearState == ThumbnailCacheClearState::succeeded)
         ImGuiMCP::TextUnformatted("Thumbnail cache cleared.");
     return !buildStatus.active && clearState != ThumbnailCacheClearState::pending &&
-        ImGuiMCP::Button("Open Tattoo Browser");
+        limitState != ThumbnailCacheClearState::pending && ImGuiMCP::Button("Open Tattoo Browser");
 }
 
 void OfficialMenuFrameworkAdapter::renderFoundation(
@@ -2978,9 +3078,14 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     const std::function<void(std::uint32_t, BrowserCameraPointerInput)>& cameraIntent,
     const std::function<void()>& close,
     runtime::MenuSideSetting* panSettings,
-    const std::function<std::optional<BrowserCameraPan>()>& currentPan) {
+    const std::function<std::optional<BrowserCameraPan>()>& currentPan,
+    runtime::ThumbnailBackgroundSetting* backgroundSetting) {
     g_renderMenuSide = side;
-    static ThumbnailBackgroundMode backgroundMode = ThumbnailBackgroundMode::black;
+    static ThumbnailBackgroundMode sessionBackgroundMode = ThumbnailBackgroundMode::black;
+    auto backgroundMode = backgroundSetting
+        ? (backgroundSetting->white() ? ThumbnailBackgroundMode::white : ThumbnailBackgroundMode::black)
+        : sessionBackgroundMode;
+    static bool backgroundSaveFailed = false;
     slotRuntime.pump();
     if (dispatchMenuCloseRequest(workflow, close)) {
         return;
@@ -3153,10 +3258,19 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     if (ImGuiMCP::Button(backgroundMode == ThumbnailBackgroundMode::black
                 ? "Thumbnail BG: Black"
                 : "Thumbnail BG: White")) {
-        backgroundMode = toggledThumbnailBackgroundMode(backgroundMode);
+        const auto nextMode = toggledThumbnailBackgroundMode(backgroundMode);
+        backgroundSaveFailed = backgroundSetting &&
+            !backgroundSetting->select(nextMode == ThumbnailBackgroundMode::white);
+        if (!backgroundSaveFailed) {
+            backgroundMode = nextMode;
+            if (!backgroundSetting) sessionBackgroundMode = nextMode;
+        }
     }
     ImGuiMCP::SameLine();
     ImGuiMCP::Text("%zu tattoos", model.scrollPage().matchedEntries);
+
+    if (backgroundSaveFailed)
+        ImGuiMCP::TextUnformatted("Could not save the thumbnail background.");
 
     constexpr std::size_t searchCapacity = 256;
     std::array<char, searchCapacity> searchBuffer{};
@@ -3598,7 +3712,13 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
                         ImGuiMCP::ImGuiChildFlags_None,
                         ImGuiMCP::ImGuiWindowFlags_NoScrollbar |
                             ImGuiMCP::ImGuiWindowFlags_NoScrollWithMouse)) {
-                    ImGuiMCP::TextUnformatted(tattoo.name.c_str());
+                    const auto displayName = fitCatalogCardName(
+                        tattoo.name, ImGuiMCP::GetContentRegionAvail().x,
+                        [](std::string_view text) {
+                            return ImGuiMCP::CalcTextSize(
+                                text.data(), text.data() + text.size()).x;
+                        });
+                    ImGuiMCP::TextUnformatted(displayName.c_str());
                     if (ImGuiMCP::IsItemHovered()) {
                         ImGuiMCP::SetTooltip("%s", tattoo.name.c_str());
                     }

@@ -1,3 +1,4 @@
+#include "textures/TextureResolver.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
 #include "native/NativeCatalogBrowserModel.h"
 #include "native/NativeThumbnailController.h"
@@ -1538,6 +1539,34 @@ void slotAreaLabelsMatchSlaveTatsAreaNames() {
         "expected FEET tab label");
 }
 
+void slotThumbnailLookupSeparatesKinds() {
+    using namespace stui;
+    const auto external = textures::TextureResolver::resource(core::TextureResourceKind::external, "textures/actors/character/slavetats/mark.dds");
+    const auto catalog = textures::TextureResolver::resource(core::TextureResourceKind::catalog, "mark.dds");
+    expect(external && catalog, "valid identities");
+    const core::TattooSlot slot{.index = 1, .occupancy = core::SlotOccupancy::external, .externalThumbnail = *external};
+    const std::vector<native::NativeThumbnailView> views{
+        {.texturePath = "same", .resource = *catalog}, {.texturePath = "same", .resource = *external}};
+    expect(native::findSlotThumbnailViewIndex(slot, views) == 1, "external must not display managed image with same Data path");
+    const core::TattooSlot missing{.index = 2, .occupancy = core::SlotOccupancy::external};
+    expect(!native::findSlotThumbnailViewIndex(missing, views), "missing metadata must remain unavailable");
+}
+void visibleSlotResourcesIncludeReadOnlyExternalImages() {
+    using namespace stui;
+    const auto image = textures::TextureResolver::resource(core::TextureResourceKind::external, "textures/other/mark.dds");
+    expect(image.has_value(), "valid external resource");
+    const core::TattooSlots slots{.actorFormId = 0x14, .area = core::TattooArea::body, .slots = {
+        {.index = 0, .occupancy = core::SlotOccupancy::external, .externalThumbnail = *image},
+        {.index = 1, .occupancy = core::SlotOccupancy::external},
+        {.index = 2, .occupancy = core::SlotOccupancy::slaveTats, .tattoo = core::TattooEntry{.texturePath = "owned/a.dds"}},
+        {.index = 3, .occupancy = core::SlotOccupancy::external, .externalThumbnail = *image},
+    }};
+    const auto first = native::collectVisibleSlotResources(slots, 0, 3);
+    expect(first.size() == 2 && first[0] == *image && first[1].kind() == core::TextureResourceKind::catalog,
+        "visible resource collection must include available external and managed images only");
+    expect(native::collectVisibleSlotResources(slots, 1, 3) == std::vector<core::TextureResource>{*image},
+        "off-page resources must not be loaded");
+}
 void visibleSlotPathsIncludeOnlyOwnedCardsOnTheCurrentPage() {
     const stui::core::TattooSlots slots{
         .actorFormId = 0x14,
@@ -1711,7 +1740,8 @@ void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
         const std::function<void(std::uint32_t, stui::native::BrowserCameraPointerInput)>&,
         const std::function<void()>&,
         stui::runtime::MenuSideSetting*,
-        const std::function<std::optional<stui::native::BrowserCameraPan>()>&) =
+        const std::function<std::optional<stui::native::BrowserCameraPan>()>&,
+        stui::runtime::ThumbnailBackgroundSetting*) =
         &stui::native::OfficialMenuFrameworkAdapter::renderFoundation;
     (void)render;
 }
@@ -1808,6 +1838,24 @@ int main() {
         std::cout << "PASS Current Slot color swatch uses owned tattoo color\n";
         currentSlotColorSwatchSkipsEmptyAndExternalSlots();
         std::cout << "PASS Current Slot color swatch skips empty and external slots\n";
+        const auto measure = [](std::string_view value) {
+            return static_cast<float>(value.size());
+        };
+        expect(stui::native::fitCatalogCardName("Short", 5, measure) == "Short",
+            "fitting names should remain unchanged");
+        expect(stui::native::fitCatalogCardName("Long name", 6, measure) == "Lon...",
+            "long names should reserve space for ellipsis");
+        expect(stui::native::fitCatalogCardName("Long", 2, measure).empty(),
+            "narrow cards must not overflow even with ellipsis");
+        const auto proportionalMeasure = [](std::string_view value) {
+            float width = 0.0F;
+            for (const auto character : value) width += character == 'W' ? 4.0F : 1.0F;
+            return width;
+        };
+        expect(stui::native::fitCatalogCardName("WWiii", 8, proportionalMeasure) == "W...",
+            "name fitting must use measured glyph widths rather than character count");
+        expect(stui::native::fitCatalogCardName("\xE0\xB8\x81\xE0\xB8\x82xyz", 7, measure) ==
+                "\xE0\xB8\x81...", "truncation must preserve UTF-8 boundaries");
         catalogTooltipIncludesInUseSlotDetails();
         std::cout << "PASS catalog tooltip includes In Use Slot details\n";
         pageInputKeepsPendingEditsUntilEnterOrFocusLoss();
@@ -1825,6 +1873,8 @@ int main() {
         std::cout << "PASS slot pagination clamps to six-card pages\n";
         slotAreaLabelsMatchSlaveTatsAreaNames();
         std::cout << "PASS slot area labels match SlaveTats areas\n";
+        slotThumbnailLookupSeparatesKinds();
+        visibleSlotResourcesIncludeReadOnlyExternalImages();
         visibleSlotPathsIncludeOnlyOwnedCardsOnTheCurrentPage();
         std::cout << "PASS visible slot paths include only owned cards\n";
         pickerAndPreviewHelpersExposeExactTargetIntent();

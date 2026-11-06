@@ -14,6 +14,7 @@ public:
     // False means the port already released an invalidated camera session.
     [[nodiscard]] virtual bool control(const BrowserCameraMotion& motion) = 0;
     virtual void restore() = 0;
+    virtual void discard() { restore(); }
     virtual void clearRememberedViews() {}
 };
 
@@ -27,6 +28,7 @@ public:
     void move(float orbitX, float orbitY, float zoom);
     void control(const BrowserCameraMotion& motion);
     void close();
+    void invalidate();
     void clearRememberedViews();
     [[nodiscard]] bool active() const noexcept;
 

@@ -9,6 +9,8 @@
 #include "core/TattooModels.h"
 #include "core/ITattooRuntime.h"
 #include "runtime/MenuSideSetting.h"
+#include "runtime/ThumbnailCacheSetting.h"
+#include "runtime/ThumbnailBackgroundSetting.h"
 
 #include <array>
 #include <cstddef>
@@ -25,6 +27,10 @@ class HotkeyBinding;
 }
 
 namespace stui::native {
+
+[[nodiscard]] std::string fitCatalogCardName(
+    std::string_view name, float width,
+    const std::function<float(std::string_view)>& measure);
 
 struct LoadoutAreaSummary {
     std::size_t add{};
@@ -208,6 +214,10 @@ struct SlotReadOnlyIndicator {
     std::size_t requestedPage,
     std::size_t pageSize) noexcept;
 [[nodiscard]] std::string_view slotAreaLabel(core::TattooArea area) noexcept;
+[[nodiscard]] std::optional<std::size_t> findSlotThumbnailViewIndex(
+    const core::TattooSlot& slot, const std::vector<NativeThumbnailView>& views);
+[[nodiscard]] std::vector<core::TextureResource> collectVisibleSlotResources(
+    const core::TattooSlots& slots, std::size_t pageIndex, std::size_t pageSize);
 [[nodiscard]] std::vector<std::string> collectVisibleSlotTexturePaths(
     const core::TattooSlots& slots,
     std::size_t pageIndex,
@@ -600,7 +610,9 @@ public:
         runtime::MenuSide side = runtime::MenuSide::left) noexcept;
     [[nodiscard]] static bool renderLauncher(
         runtime::HotkeyBinding& hotkey, runtime::MenuSideSetting& menuSide,
-        NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog);
+        runtime::ThumbnailCacheSetting& cacheSetting,
+        NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog,
+        const std::function<bool()>& clearSavedCameraViews = {});
     static void renderFoundation(
         NativeSlotWorkflowModel& workflow,
         NativeSlotWorkflowRuntime& slotRuntime,
@@ -610,7 +622,8 @@ public:
         const std::function<void(std::uint32_t, BrowserCameraPointerInput)>& cameraIntent,
         const std::function<void()>& close,
         runtime::MenuSideSetting* panSettings = nullptr,
-        const std::function<std::optional<BrowserCameraPan>()>& currentPan = {});
+        const std::function<std::optional<BrowserCameraPan>()>& currentPan = {},
+        runtime::ThumbnailBackgroundSetting* backgroundSetting = nullptr);
 
 private:
     MenuFrameworkBindings bindings_;

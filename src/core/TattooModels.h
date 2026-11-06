@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/TextureResource.h"
+
 #include <cstdint>
 #include <expected>
 #include <optional>
@@ -49,6 +51,7 @@ struct TattooSlot {
     std::int32_t index{-1};
     SlotOccupancy occupancy{SlotOccupancy::empty};
     std::optional<TattooEntry> tattoo;
+    std::optional<TextureResource> externalThumbnail;
 };
 
 struct TattooSlots {

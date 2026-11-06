@@ -244,10 +244,12 @@ On the first Player browser opening in a game session, use the configured
 initial Center composition (the current side-aware Whole body framing until a future setting
 exists). On later openings, restore the last browser orbit, pan/focus, and zoom
 for that menu side so repeated tattoo comparisons do not require re-framing.
-Keep separate Left and Right in-memory views; reset them when a save is loaded,
-a new game starts, or the game process exits. Closing the browser must still
-restore the captured game camera. Do not persist a raw camera pointer or world-space position, and
-do not extend this behavior to NPC camera control in the Player-first slice.
+Keep separate Left and Right views. The user-approved 2026-10-31 follow-up now
+persists bounded translation-relative view preferences across game restarts and
+save loads, superseding the original session-only requirement. Lifecycle reset
+still discards live ownership and queued gestures without deleting preferences.
+Closing the browser still restores the captured game camera. No raw pointer,
+world-space position, or NPC camera state is persisted.
 The camera spec defines the capture point and invalidation; SmoothCam handoff
 was included in the user's final in-game pass. This session recall needs no new setting;
 user-adjustable initial framing is now in scope after the user's 2026-10-17
@@ -263,7 +265,14 @@ no session view is remembered; later openings recall that side's last view.
 published; Beta 2 release preparation remains. The
 focused [integration plan](docs/superpowers/plans/active/2026-10-18-vnext5-integration-beta2.md)
 tracks branch review, a pull request, hosted CI, separate merge and tag approval,
-and a smoke test of the hosted artifact. This delivery adds no new UI setting.
+and a smoke test of the hosted artifact. The user-approved 2026-10-31 follow-up adds a bounded Thumbnail disk cache limit
+(128/256/512/1024 MiB, default 256), Reset to default, and scheduled pruning; GPU
+budgets stay unchanged. See the [design](docs/superpowers/specs/2026-10-31-thumbnail-disk-cache-limit-design.md)
+and [active plan](docs/superpowers/plans/active/2026-10-31-thumbnail-disk-cache-limit.md).
+The same approved follow-up persists Thumbnail BG and separate Left/Right Player
+Browser views, with Reset saved Player views to restore initial-framing behavior.
+See the [design](docs/superpowers/specs/2026-10-31-browser-preference-persistence-design.md)
+and [active plan](docs/superpowers/plans/active/2026-10-31-browser-preference-persistence.md).
 
 ---
 
@@ -314,3 +323,11 @@ Do not let these distract from the active milestone without an explicit roadmap 
 - arbitrary tattoo-pack authoring inside the runtime UI;
 - unrelated RaceMenu overlay management;
 - broad refactors that do not unlock the active milestone.
+
+## Approved follow-up — Thumbnail clarity (2026-11-02)
+
+In progress on the UI improvements worktree, independently of localization PR #23.
+Preserve the 192-pixel maximum and cache budgets while cropping visible source
+content before reduction. The user promoted this follow-up while localization
+acceptance continues in a separate chat. See
+`docs/superpowers/plans/active/2026-11-02-thumbnail-clarity.md`.

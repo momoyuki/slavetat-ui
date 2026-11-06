@@ -60,6 +60,11 @@ std::optional<CatalogPreviewVisualSnapshot> SkeeNodePropertyAccess::capture(
     };
 }
 
+std::optional<std::string> SkeeNodePropertyAccess::captureDiffuse(const CatalogPreviewVisualTarget& target) const {
+    if (!m_bindings.getString) return std::nullopt;
+    return m_bindings.getString(target, kTexture, kDiffuseTexture);
+}
+
 bool SkeeNodePropertyAccess::write(
     const CatalogPreviewVisualTarget& target,
     const CatalogPreviewVisualSnapshot& value) const {

@@ -163,6 +163,28 @@ void NativeThumbnailController::synchronize(
     }
 }
 
+void NativeThumbnailController::synchronizeResources(NativeThumbnailEpoch epoch,
+    std::span<const core::TextureResource> resources) {
+    std::vector<std::string> keys;
+    std::unordered_map<std::string, core::TextureResource> identities;
+    keys.reserve(resources.size());
+    for (const auto& resource : resources) {
+        const auto key = canonicalizeTexturePath(
+            std::string(resource.kind() == core::TextureResourceKind::external ? ":external:" : ":catalog:") + resource.path());
+        if (!identities.contains(key)) keys.push_back(key);
+        identities.insert_or_assign(key, resource);
+    }
+    synchronize(epoch, keys, {});
+    std::scoped_lock lock(m_mutex);
+    if (m_epoch != epoch || m_views.size() != keys.size() ||
+        !std::ranges::equal(m_views, keys, {}, &NativeThumbnailView::texturePath)) return;
+    m_resources = std::move(identities);
+    for (auto& view : m_views) {
+        const auto found = m_resources.find(view.texturePath);
+        view.resource = found == m_resources.end() ? std::nullopt : std::optional(found->second);
+    }
+}
+
 std::optional<NativeThumbnailRequest> NativeThumbnailController::takeNextRequest() {
     std::scoped_lock lock(m_mutex);
     if (m_inFlight || m_queuedPaths.empty()) {
@@ -173,6 +195,9 @@ std::optional<NativeThumbnailRequest> NativeThumbnailController::takeNextRequest
         .generation = m_generation,
         .texturePath = std::move(m_queuedPaths.front()),
     };
+    if (const auto found = m_resources.find(request.texturePath); found != m_resources.end()) {
+        request.resource = found->second;
+    }
     m_queuedPaths.erase(m_queuedPaths.begin());
     m_inFlight = request;
 
@@ -268,6 +293,7 @@ void NativeThumbnailController::clear() {
     m_pendingEpoch.reset();
     m_pendingPaths.clear();
     m_views.clear();
+    m_resources.clear();
     m_queuedPaths.clear();
     m_negativeFailures.clear();
     m_deviceUnavailablePaths.clear();

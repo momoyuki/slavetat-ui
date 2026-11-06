@@ -173,6 +173,23 @@ void gameResetDropsQueuedMotionAndClearsRecall() {
 
 int main() {
     try {
+        {
+            FakePort port;
+            std::vector<std::function<void()>> tasks;
+            stui::native::BrowserCameraCoordinator coordinator(port,
+                [&tasks](std::function<void()> task) { tasks.push_back(std::move(task)); });
+            coordinator.setOpen(true);
+            coordinator.setTarget(0x14);
+            expect(coordinator.clearSavedViews([&] {
+                // Force delayed old opening to run during the synchronous clear.
+                tasks.back()();
+                expect(port.moved == 0, "clear must invalidate queued opening before persistence");
+                return true;
+            }), "clear must return the actual successful persistence result");
+            expect(port.moved == 0, "cleared queued camera cannot begin or later save");
+            expect(!coordinator.clearSavedViews([] { return false; }),
+                "failed persistence must be reported to launcher");
+        }
         staleOpeningCannotFocusWrongActor();
         periodicValidationRestoresUnloadedNpc();
         staleTargetAfterCloseCannotReopenOldNpc();

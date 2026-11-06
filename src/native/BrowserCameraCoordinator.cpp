@@ -82,6 +82,11 @@ void BrowserCameraCoordinator::refresh() {
     scheduleIfNeeded();
 }
 
+bool BrowserCameraCoordinator::clearSavedViews(const std::function<bool()>& clear) {
+    // Invalidate queued acquisition before persistence advances its generation.
+    resetGameSession();
+    return clear && clear();
+}
 void BrowserCameraCoordinator::resetGameSession() {
     {
         const std::scoped_lock lock(m_mutex);
@@ -126,8 +131,7 @@ void BrowserCameraCoordinator::drain() {
             resetRequested = std::exchange(m_resetRequested, false);
         }
         if (resetRequested) {
-            m_session.close();
-            m_session.clearRememberedViews();
+            m_session.invalidate();
         }
         if (!open || target == 0) {
             m_session.close();

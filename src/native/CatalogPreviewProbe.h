@@ -1,7 +1,10 @@
 #pragma once
 #include "core/TattooModels.h"
+#include <algorithm>
+#include <cctype>
 #include <optional>
 #include <string>
+#include <vector>
 namespace stui::native {
 enum class CatalogPreviewMaterialSupport {
     missingGeometry, unsupportedShader, tintConversionRequired,
@@ -29,6 +32,24 @@ inline std::optional<std::string> catalogPreviewNodeName(core::TattooArea area,i
     default: return std::nullopt;
     }
     return std::string(prefix)+" [Ovl"+std::to_string(slot)+"]";
+}
+struct ExternalProbeTarget { std::uint32_t actorFormId; std::string nodeName; std::int32_t slotIndex; };
+inline std::vector<ExternalProbeTarget> externalProbeTargets(const core::TattooSlots& slots) {
+    std::vector<ExternalProbeTarget> targets;
+    if (slots.actorFormId == 0) return targets;
+    for (const auto& slot : slots.slots) {
+        if (slot.occupancy != core::SlotOccupancy::external) continue;
+        const auto name = catalogPreviewNodeName(slots.area, slot.index);
+        if (name) targets.push_back({slots.actorFormId, *name, slot.index});
+    }
+    return targets;
+}
+enum class ExternalProbeComparison { unavailable, match, mismatch };
+inline ExternalProbeComparison compareExternalPaths(const std::optional<std::string>& property, const std::optional<std::string>& material) {
+    if (!property || !material || property->empty() || material->empty()) return ExternalProbeComparison::unavailable;
+    const auto canonical = [](unsigned char c) { return c == '\\' ? '/' : static_cast<char>(std::tolower(c)); };
+    return property->size() == material->size() && std::equal(property->begin(), property->end(), material->begin(), [&](char a, char b) { return canonical(a) == canonical(b); })
+        ? ExternalProbeComparison::match : ExternalProbeComparison::mismatch;
 }
 // Scheduled game-thread diagnostics only. Does not call SKEE property setters/getters.
 void logCatalogPreviewNodeCapabilities(const core::TattooSlots& slots);

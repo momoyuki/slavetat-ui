@@ -13,6 +13,9 @@
 namespace stui::textures {
 namespace {
 
+// DDS reserved header words identify our already-framed cache representation.
+constexpr std::array<std::uint8_t, 8> kFramedThumbnailTag{'S', 'T', 'U', 'I', 'T', 'H', '6', 0};
+
 D3D11Texture::UvBounds finishVisibleBounds(
     std::size_t left, std::size_t top, std::size_t right, std::size_t bottom,
     std::size_t width, std::size_t height) noexcept {
@@ -58,11 +61,18 @@ bool makeBc3Thumbnail(const DirectX::Image& source, DirectX::ScratchImage& thumb
     if (!source.pixels || source.rowPitch < blocksWide * 16 ||
         source.slicePitch / source.rowPitch < blocksHigh) return false;
 
-    const auto longestSide = std::max(source.width, source.height);
-    const auto width = std::max<std::size_t>(1,
-        source.width * maxThumbnailSize / longestSide);
-    const auto height = std::max<std::size_t>(1,
-        source.height * maxThumbnailSize / longestSide);
+    const auto crop = visibleBc3AlphaBounds(
+        {source.pixels, source.slicePitch}, source.width, source.height, source.rowPitch);
+    const auto cropLeft = static_cast<std::size_t>(crop.left * source.width);
+    const auto cropTop = static_cast<std::size_t>(crop.top * source.height);
+    const auto cropWidth = std::max<std::size_t>(1,
+        static_cast<std::size_t>(crop.right * source.width) - cropLeft);
+    const auto cropHeight = std::max<std::size_t>(1,
+        static_cast<std::size_t>(crop.bottom * source.height) - cropTop);
+    const auto longestSide = std::max(cropWidth, cropHeight);
+    const auto targetSize = std::min(maxThumbnailSize, longestSide);
+    const auto width = std::max<std::size_t>(1, cropWidth * targetSize / longestSide);
+    const auto height = std::max<std::size_t>(1, cropHeight * targetSize / longestSide);
     const auto outputFormat = source.format == DXGI_FORMAT_BC3_UNORM_SRGB
         ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
     if (FAILED(thumbnail.Initialize2D(outputFormat, width, height, 1, 1))) return false;
@@ -72,7 +82,6 @@ bool makeBc3Thumbnail(const DirectX::Image& source, DirectX::ScratchImage& thumb
         std::uint8_t maximumAlpha{};
     };
     std::vector<Accumulator> accumulated(width * height);
-    std::size_t left = source.width, top = source.height, right = 0, bottom = 0;
     const auto expand565 = [](std::uint16_t color) {
         return std::array<std::uint8_t, 3>{
             static_cast<std::uint8_t>(((color >> 11) & 31) * 255 / 31),
@@ -123,13 +132,12 @@ bool makeBc3Thumbnail(const DirectX::Image& source, DirectX::ScratchImage& thumb
                     if (opacity <= 8) continue;
                     const auto sourceX = blockX * 4 + x;
                     const auto sourceY = blockY * 4 + y;
-                    left = std::min(left, sourceX);
-                    top = std::min(top, sourceY);
-                    right = std::max(right, sourceX + 1);
-                    bottom = std::max(bottom, sourceY + 1);
+                    if (sourceX < cropLeft || sourceY < cropTop ||
+                        sourceX >= cropLeft + cropWidth ||
+                        sourceY >= cropTop + cropHeight) continue;
                     const auto& color = colors[(colorIndices >> (pixel * 2)) & 3];
-                    const auto outputX = sourceX * width / source.width;
-                    const auto outputY = sourceY * height / source.height;
+                    const auto outputX = (sourceX - cropLeft) * width / cropWidth;
+                    const auto outputY = (sourceY - cropTop) * height / cropHeight;
                     auto& result = accumulated[outputY * width + outputX];
                     result.red += color[0] * opacity;
                     result.green += color[1] * opacity;
@@ -154,8 +162,7 @@ bool makeBc3Thumbnail(const DirectX::Image& source, DirectX::ScratchImage& thumb
             pixel[3] = value.maximumAlpha;
         }
     }
-    visibleBounds = finishVisibleBounds(left, top, right, bottom,
-        source.width, source.height);
+    visibleBounds = {};
     return true;
 }
 
@@ -170,15 +177,8 @@ bool makeBc7Thumbnail(const DirectX::ScratchImage& source,
         first->height == 0 || first->width > maxSourcePixels / first->height)
         return false;
 
-    std::size_t mip = 0;
-    for (std::size_t next = 1; next < source.GetMetadata().mipLevels; ++next) {
-        const auto* candidate = source.GetImage(next, 0, 0);
-        if (!candidate ||
-            std::max(candidate->width, candidate->height) < maxThumbnailSize) break;
-        mip = next;
-    }
-    const auto* selected = source.GetImage(mip, 0, 0);
-    if (!selected) return false;
+    // Determine the crop from the original level; small motifs disappear in mips.
+    const auto* selected = first;
     const auto outputFormat = selected->format == DXGI_FORMAT_BC7_UNORM_SRGB
         ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
     DirectX::ScratchImage decompressed;
@@ -186,24 +186,37 @@ bool makeBc7Thumbnail(const DirectX::ScratchImage& source,
         return false;
     const auto* rgba = decompressed.GetImage(0, 0, 0);
     if (!rgba) return false;
-    if (std::max(rgba->width, rgba->height) > maxThumbnailSize) {
-        const auto scale = static_cast<double>(maxThumbnailSize) /
-            static_cast<double>(std::max(rgba->width, rgba->height));
-        const auto width = std::max<std::size_t>(1, rgba->width * scale);
-        const auto height = std::max<std::size_t>(1, rgba->height * scale);
-        if (FAILED(DirectX::Resize(*rgba, width, height,
-                DirectX::TEX_FILTER_TRIANGLE |
-                    DirectX::TEX_FILTER_SEPARATE_ALPHA |
-                    DirectX::TEX_FILTER_FORCE_NON_WIC,
-                thumbnail))) return false;
+    const auto crop = visibleAlphaBounds({rgba->pixels, rgba->slicePitch},
+        rgba->width, rgba->height, rgba->rowPitch);
+    const auto left = static_cast<std::size_t>(crop.left * rgba->width);
+    const auto top = static_cast<std::size_t>(crop.top * rgba->height);
+    const auto cropWidth = std::max<std::size_t>(1,
+        static_cast<std::size_t>(crop.right * rgba->width) - left);
+    const auto cropHeight = std::max<std::size_t>(1,
+        static_cast<std::size_t>(crop.bottom * rgba->height) - top);
+    DirectX::ScratchImage cropped;
+    if (FAILED(cropped.Initialize2D(outputFormat, cropWidth, cropHeight, 1, 1)))
+        return false;
+    auto* cropImage = cropped.GetImage(0, 0, 0);
+    if (!cropImage) return false;
+    for (std::size_t y = 0; y < cropHeight; ++y)
+        std::memcpy(cropImage->pixels + y * cropImage->rowPitch,
+            rgba->pixels + (top + y) * rgba->rowPitch + left * 4, cropWidth * 4);
+    const auto longestSide = std::max(cropWidth, cropHeight);
+    if (longestSide > maxThumbnailSize) {
+        const auto width = std::max<std::size_t>(1, cropWidth * maxThumbnailSize / longestSide);
+        const auto height = std::max<std::size_t>(1, cropHeight * maxThumbnailSize / longestSide);
+        DirectX::ScratchImage premultiplied, resized;
+        if (FAILED(DirectX::PremultiplyAlpha(*cropImage, DirectX::TEX_PMALPHA_DEFAULT,
+                premultiplied)) || FAILED(DirectX::Resize(*premultiplied.GetImage(0, 0, 0),
+                width, height, DirectX::TEX_FILTER_TRIANGLE |
+                    DirectX::TEX_FILTER_FORCE_NON_WIC, resized)) ||
+            FAILED(DirectX::PremultiplyAlpha(*resized.GetImage(0, 0, 0),
+                DirectX::TEX_PMALPHA_REVERSE, thumbnail))) return false;
     } else {
-        thumbnail = std::move(decompressed);
+        thumbnail = std::move(cropped);
     }
-    const auto* output = thumbnail.GetImage(0, 0, 0);
-    if (!output) return false;
-    visibleBounds = visibleAlphaBounds(
-        {output->pixels, output->slicePitch}, output->width,
-        output->height, output->rowPitch);
+    visibleBounds = {};
     return true;
 }
 
@@ -228,7 +241,10 @@ std::optional<std::vector<std::uint8_t>> makeCachedThumbnailDds(
             thumbnail.GetImageCount(), thumbnail.GetMetadata(),
             DirectX::DDS_FLAGS_NONE, blob))) return std::nullopt;
     const auto* begin = static_cast<const std::uint8_t*>(blob.GetBufferPointer());
-    return std::vector<std::uint8_t>(begin, begin + blob.GetBufferSize());
+    std::vector<std::uint8_t> result(begin, begin + blob.GetBufferSize());
+    if (result.size() < 40) return std::nullopt;
+    std::copy(kFramedThumbnailTag.begin(), kFramedThumbnailTag.end(), result.begin() + 32);
+    return result;
 }
 
 D3D11Texture::UvBounds visibleAlphaBounds(
@@ -357,7 +373,12 @@ D3D11TextureResult uploadDdsTexture(
     }
     if (reduced) texture.visibleBounds = reducedBounds;
     constexpr std::size_t maxAlphaAnalysisPixels = 4096 * 4096;
-    if (!reduced && firstImage && firstImage->height > 0 &&
+    const bool preframed = ddsBytes.size() >= 40 &&
+        std::equal(kFramedThumbnailTag.begin(), kFramedThumbnailTag.end(), ddsBytes.begin() + 32) &&
+        metadata.width <= 192 && metadata.height <= 192 &&
+        (metadata.format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+            metadata.format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
+    if (!reduced && !preframed && firstImage && firstImage->height > 0 &&
         firstImage->width <= maxAlphaAnalysisPixels / firstImage->height) {
         if (firstImage->format == DXGI_FORMAT_BC3_UNORM ||
             firstImage->format == DXGI_FORMAT_BC3_UNORM_SRGB) {

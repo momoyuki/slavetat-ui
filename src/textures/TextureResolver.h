@@ -1,11 +1,15 @@
 #pragma once
 
+#include "core/TextureResource.h"
+
 #include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace stui::textures {
@@ -15,6 +19,9 @@ enum class TextureResolveError {
     notFound,
     readFailed,
 };
+
+using core::TextureResource;
+using core::TextureResourceKind;
 
 enum class TextureSource {
     loose,
@@ -39,11 +46,20 @@ class TextureResolver {
 public:
     explicit TextureResolver(std::filesystem::path looseRoot);
 
+    [[nodiscard]] static std::optional<TextureResource> matchingExternal(
+        std::string_view property, std::string_view material);
+    [[nodiscard]] static std::expected<TextureResource, TextureResolveError> resource(
+        TextureResourceKind kind, std::string_view path);
     [[nodiscard]] static std::expected<std::string, TextureResolveError> normalize(
         std::string_view texturePath);
+    [[nodiscard]] static std::expected<std::string, TextureResolveError> normalizeExternal(
+        std::string_view texturePath);
+    [[nodiscard]] TextureResolveResult resolve(
+        const TextureResource& resource, const TextureArchiveReader& archiveReader) const;
     [[nodiscard]] TextureResolveResult resolve(
         std::string_view texturePath,
         const TextureArchiveReader& archiveReader) const;
+    [[nodiscard]] TextureResolveResult resolveExternal(std::string_view texturePath, const TextureArchiveReader& archiveReader) const;
     [[nodiscard]] TextureResolveResult resolveLoose(std::string_view texturePath) const;
     [[nodiscard]] TextureResolveResult resolveArchive(
         std::string_view texturePath,

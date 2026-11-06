@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -330,6 +331,7 @@ public:
     [[nodiscard]] SlotWorkflowScreen screen() const noexcept;
     [[nodiscard]] core::TattooArea selectedArea() const noexcept;
     [[nodiscard]] const core::TattooSlots* slots() const noexcept;
+    [[nodiscard]] std::shared_ptr<const void> slotThumbnailEpoch() const noexcept;
     [[nodiscard]] std::size_t slotPageIndex() const noexcept;
     [[nodiscard]] std::size_t slotPageCount() const noexcept;
     [[nodiscard]] std::optional<std::int32_t> targetSlot() const noexcept;
@@ -378,6 +380,7 @@ public:
 private:
     struct AreaState {
         std::optional<core::TattooSlots> slots;
+        std::shared_ptr<const void> thumbnailEpoch;
         std::size_t pageIndex{};
     };
 

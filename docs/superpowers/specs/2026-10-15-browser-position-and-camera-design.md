@@ -174,7 +174,13 @@ saved Initial Pan applies when that side has no recalled view. Current Pan
 is unavailable without ownership of a Player browser camera. No raw world
 position or native camera pointer is persisted.
 
-## Player camera recall within one game session — 2026-10-17
+## Player camera recall within one game session — 2026-10-17 (superseded)
+
+The persistence and invalidation rules in this historical section are superseded
+by `2026-10-31-browser-preference-persistence-design.md`: saved bounded Player
+views survive restarts/load/newgame; live sessions are invalidated without capture.
+Reset saved Player views explicitly clears both sides. Normal camera restoration
+and Player-only ownership requirements remain binding.
 
 On the first Player browser opening after a new game or save load, use the
 existing side-aware Whole body composition. After a successfully owned browser

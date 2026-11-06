@@ -1,4 +1,5 @@
 #include "native/NativeThumbnailController.h"
+#include "textures/TextureResolver.h"
 
 #include "repository/TattooCatalogLoader.h"
 
@@ -73,6 +74,22 @@ const NativeThumbnailCacheLookup noCacheHit = [](std::string_view) {
     return std::shared_ptr<stui::textures::D3D11Texture>{};
 };
 
+void typedResourcesDiscardStaleActorCompletion() {
+    using namespace stui::textures;
+    NativeThumbnailController controller;
+    const auto image = TextureResolver::resource(TextureResourceKind::external, "textures/other/mark.dds");
+    expect(image.has_value(), "expected valid image");
+    const std::vector<stui::core::TextureResource> resources{*image};
+    controller.synchronizeResources(std::make_shared<int>(1), resources);
+    const auto old = controller.takeNextRequest();
+    expect(old && old->resource == image, "request must carry typed resource");
+    controller.synchronizeResources(std::make_shared<int>(2), resources);
+    controller.complete(*old, readyTexture());
+    const auto views = controller.views();
+    expect(views.size() == 1 && views[0].status != NativeThumbnailStatus::ready, "previous actor completion must not be shown");
+    const auto current = controller.takeNextRequest();
+    expect(current && current->resource == image, "current actor request must be queued");
+}
 void acceptsPresentationNeutralVisiblePaths() {
     NativeThumbnailController controller;
     const NativeThumbnailEpoch epoch = std::make_shared<int>(1);
@@ -489,6 +506,7 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("typed resources discard stale actor completion", typedResourcesDiscardStaleActorCompletion);
     failures += run("accepts presentation-neutral visible paths", acceptsPresentationNeutralVisiblePaths);
     failures += run("accepts multiple visible gallery rows", acceptsMultipleVisibleGalleryRows);
     failures += run("hides stale completion after page transition", hidesStaleCompletionAfterPageTransition);

@@ -1,9 +1,12 @@
 #include "runtime/SkyrimCatalogPreviewBindings.h"
+#include "textures/TextureResolver.h"
 
 #include "native/CatalogPreviewProbe.h"
 #include "runtime/SkeeNodePropertyAccess.h"
 
 #include <RE/Skyrim.h>
+#include <SKSE/SKSE.h>
+#include <Windows.h>
 
 #include <optional>
 #include <string>
@@ -152,4 +155,64 @@ CatalogPreviewVisualBindings makeSkyrimCatalogPreviewBindings(
     };
 }
 
+// Called only by the scheduled Current Slots query. No scene pointers escape.
+void collectExternalTextures(core::TattooSlots& slots, skee::OverrideInterface* interface) {
+    for (auto& slot : slots.slots) slot.externalThumbnail.reset();
+    if (REL::Module::IsVR()) return;
+    auto* actor = RE::TESForm::LookupByID<RE::Actor>(slots.actorFormId);
+    if (!actor || !actor->Is3DLoaded()) return;
+    auto* root = actor->Get3D();
+    if (!root) return;
+    for (const auto& target : native::externalProbeTargets(slots)) {
+        std::optional<std::string> property, registered, materialPath;
+        auto* object = root->GetObjectByName(RE::BSFixedString(target.nodeName.c_str()));
+        auto* geometry = object ? object->AsGeometry() : nullptr;
+        auto* shader = geometry ? geometry->lightingShaderProp_cast() : nullptr;
+        auto* base = shader ? shader->material : nullptr;
+        const bool lighting = base && base->GetType() == RE::BSShaderMaterial::Type::kLighting;
+        bool busy = false;
+        if (lighting) {
+            auto* material = static_cast<RE::BSLightingShaderMaterialBase*>(base);
+            // Engine OnLoadTextureSet uses a 0/1 interlocked lock at this member.
+            // Try once: never block the game thread waiting for a texture load.
+            auto* lock = reinterpret_cast<volatile LONG*>(&material->textureSetLock);
+            if (InterlockedCompareExchange(lock, 1, 0) == 0) {
+                try {
+                    const auto textures = material->GetTextureSet();
+                    const char* path = textures ? textures->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse) : nullptr;
+                    if (path && *path) materialPath = std::string(path);
+                } catch (...) {
+                    InterlockedExchange(lock, 0);
+                    throw;
+                }
+                InterlockedExchange(lock, 0);
+            } else busy = true;
+        }
+        if (interface && geometry && !busy) {
+            StringGetter value;
+            if (interface->GetNodeProperty(actor, false, target.nodeName.c_str(), 9, 0, value)) property = value.result;
+            auto* npc = actor->GetActorBase();
+            if (npc) {
+                StringGetter overrideValue;
+                if (interface->GetNodeOverride(actor, npc->GetSex() == RE::SEXES::kFemale,
+                        target.nodeName.c_str(), 9, 0, overrideValue)) registered = overrideValue.result;
+            }
+        }
+        if (property && materialPath) {
+            auto resource = textures::TextureResolver::matchingExternal(*property, *materialPath);
+            if (resource) {
+                for (auto& slot : slots.slots) {
+                    if (slot.index == target.slotIndex && slot.occupancy == core::SlotOccupancy::external) {
+                        slot.externalThumbnail = std::move(*resource);
+                        break;
+                    }
+                }
+            }
+        }
+        SKSE::log::info("[ExternalTextureProbe] actor={:08X} node='{}' geometry={} lighting={} busy={} property='{}' override='{}' material='{}' comparison={} (case/separator comparison; source image only)",
+            target.actorFormId, target.nodeName, geometry != nullptr, lighting, busy,
+            property.value_or("<unavailable>"), registered.value_or("<unavailable>"),
+            materialPath.value_or("<unavailable>"), static_cast<int>(native::compareExternalPaths(property, materialPath)));
+    }
+}
 }  // namespace stui::runtime

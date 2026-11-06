@@ -41,6 +41,12 @@ void BrowserCameraSession::close() {
     m_targetFormId = 0;
 }
 
+void BrowserCameraSession::invalidate() {
+    if (m_active) m_port.discard();
+    m_active=false;
+    m_targetFormId=0;
+    m_port.clearRememberedViews();
+}
 void BrowserCameraSession::clearRememberedViews() {
     m_port.clearRememberedViews();
 }

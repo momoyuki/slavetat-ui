@@ -120,3 +120,10 @@ If multiple thumbnail surfaces already share a rendering helper, prefer threadin
 This is a small standalone QoL change within vNext.4. It does not change the
 acceptance criteria for controlled material texture selection. Keep the diff
 isolated and independently testable.
+
+## Approved persistence — 2026-10-31
+
+The optional persistence follow-up is now approved and implemented through the
+existing shared PluginConfigFile. See  `2026-10-31-browser-preference-persistence-design.md`.
+Black/white survives restarts; failed saves retain the displayed previous mode
+and show an error. No texture-cache invalidation or tattoo mutation is involved.
