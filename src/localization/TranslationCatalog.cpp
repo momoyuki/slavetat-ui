@@ -3,10 +3,13 @@
 #include <cctype>
 #include <fstream>
 #include <vector>
+#include <algorithm>
+#include <mutex>
 
 namespace stui::localization {
 namespace {
-std::atomic<Language> g_language{Language::english};
+std::string g_language{"en"};
+std::mutex g_languageMutex;
 constexpr std::array<const char*, 4> kCodes{"en", "zh-CN", "ko", "ja"};
 
 // Keep the complete printf/format token sequence, including widths and escaped
@@ -90,11 +93,27 @@ std::optional<Language> parseLanguage(std::string_view code) noexcept {
 }
 bool TranslationCatalog::load(const std::filesystem::path& directory) {
     bool valid = true;
-    for (std::size_t i = 0; i < kCodes.size(); ++i) {
-        auto& dictionary = m_dictionaries[i];
-        dictionary.clear();
-        std::ifstream input(directory / (std::string(kCodes[i]) + ".tsv"), std::ios::binary);
+    m_dictionaries.clear();
+    m_languages = {{"en", "English"}};
+    std::error_code error;
+    std::vector<std::filesystem::path> files;
+    for (std::filesystem::directory_iterator it(directory, error), end; !error && it != end; it.increment(error)) {
+        if (it->is_regular_file(error) && it->path().extension() == ".tsv") files.push_back(it->path());
+    }
+    if (error) valid = false;
+    std::ranges::sort(files);
+    for (const auto& file : files) {
+        const auto code = file.stem().string();
+        const auto isLetter = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); };
+        if (code.empty() || code.size() > 32 || !isLetter(code.front()) ||
+            !std::ranges::all_of(code, [&](char c) { return isLetter(c) || (c >= '0' && c <= '9') || c == '-' || c == '_'; })) { valid = false; continue; }
+        const auto size = std::filesystem::file_size(file, error);
+        if (error || size > 512 * 1024) { valid = false; error.clear(); continue; }
+        std::ifstream input(file, std::ios::binary);
         if (!input) { valid = false; continue; }
+        auto& dictionary = m_dictionaries[code];
+        std::string name = code;
+        if (const auto known = parseLanguage(code)) name = languageName(*known);
         std::string line;
         std::size_t bytes = 0;
         while (std::getline(input, line)) {
@@ -102,6 +121,13 @@ bool TranslationCatalog::load(const std::filesystem::path& directory) {
             if (bytes > 512 * 1024 || line.size() > 8192) { valid = false; break; }
             if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3);
             if (!line.empty() && line.back() == '\r') line.pop_back();
+            constexpr std::string_view namePrefix = "# language-name: ";
+            if (line.starts_with(namePrefix)) {
+                auto value = decode(std::string_view(line).substr(namePrefix.size()));
+                if (value && !value->empty() && value->size() <= 128 && value->find_first_of("\n\t") == std::string::npos && value->find("##") == std::string::npos) name = std::move(*value);
+                else valid = false;
+                continue;
+            }
             if (line.empty() || line.starts_with('#')) continue;
             const auto separator = line.find('\t');
             if (separator == std::string::npos || line.find('\t', separator + 1) != std::string::npos) { valid = false; continue; }
@@ -115,29 +141,43 @@ bool TranslationCatalog::load(const std::filesystem::path& directory) {
             if (!dictionary.emplace(std::move(*source), std::move(*translation)).second) valid = false;
         }
         if (input.bad()) valid = false;
+        if (code != "en") m_languages.push_back({code, std::move(name)});
     }
     return valid;
 }
-const char* TranslationCatalog::text(Language language, const char* source) const noexcept {
-    if (!source) return "";
-    const auto index = static_cast<std::size_t>(language);
-    if (index == 0 || index >= m_dictionaries.size()) return source;
-    const auto& dictionary = m_dictionaries[index];
-    const auto found = dictionary.find(source);
-    return found == dictionary.end() ? source : found->second.c_str();
+bool TranslationCatalog::contains(std::string_view code) const noexcept {
+    return code == "en" || m_dictionaries.contains(code);
 }
-std::string TranslationCatalog::widget(Language language, std::string_view source) const {
+const char* TranslationCatalog::text(std::string_view code, const char* source) const noexcept {
+    if (!source) return "";
+    if (code == "en") return source;
+    const auto language = m_dictionaries.find(code);
+    if (language == m_dictionaries.end()) return source;
+    const auto found = language->second.find(source);
+    return found == language->second.end() ? source : found->second.c_str();
+}
+std::string TranslationCatalog::widget(std::string_view code, std::string_view source) const {
     if (source.starts_with("##")) return std::string(source);
     const auto end = source.find("##");
     const auto visible = std::string(source.substr(0, end));
     // Use the original source label as ID for every locale, including English.
     const auto explicitId = source.find("###");
     const auto id = explicitId == std::string_view::npos ? source : source.substr(explicitId + 3);
-    return std::string(text(language, visible.c_str())) + "###" + std::string(id);
+    return std::string(text(code, visible.c_str())) + "###" + std::string(id);
 }
 TranslationCatalog& catalog() noexcept { static TranslationCatalog instance; return instance; }
-void selectLanguage(Language language) noexcept { g_language.store(language, std::memory_order_relaxed); }
-Language activeLanguage() noexcept { return g_language.load(std::memory_order_relaxed); }
-const char* tr(const char* source) noexcept { return catalog().text(activeLanguage(), source); }
-std::string widgetLabel(std::string_view source) { return catalog().widget(activeLanguage(), source); }
+void selectLanguage(std::string_view code) {
+    const std::scoped_lock lock(g_languageMutex);
+    g_language = catalog().contains(code) ? code : "en";
+}
+void selectLanguage(Language language) { selectLanguage(languageCode(language)); }
+std::string activeLanguage() { const std::scoped_lock lock(g_languageMutex); return g_language; }
+const char* tr(const char* source) noexcept {
+    const std::scoped_lock lock(g_languageMutex);
+    return catalog().text(g_language, source);
+}
+std::string widgetLabel(std::string_view source) {
+    const std::scoped_lock lock(g_languageMutex);
+    return catalog().widget(g_language, source);
+}
 }  // namespace stui::localization

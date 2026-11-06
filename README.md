@@ -145,8 +145,7 @@ remains **SlaveTatsUI > Tattoo Browser** in every language.
 and Japanese glyph ranges you need and select a font containing those glyphs.
 A translation cannot supply glyphs missing from a font. Follow the framework's
 font setup/reload instructions; SlaveTats UI does not overwrite its global
-settings or rebuild its shared font atlas. Language choices are deliberately
-shown in ASCII English so you can switch back even if a font is missing.
+settings or rebuild its shared font atlas. The built-in language names use ASCII English so you can switch back even if a font is missing.
 
 The release includes these files under the game's `Data` directory:
 
@@ -174,6 +173,25 @@ Language affects presentation only. Actor names, tattoo/pack names, domains,
 paths and user-named presets/loadouts keep their original contents. Runtime
 and dependency error details/logs may remain in English. Korean and Japanese
 wording is an initial translation and welcomes native-speaker review.
+
+### Add another language without rebuilding
+
+1. Copy `en.tsv` into the same translations directory and rename it with a locale
+   code, for example `fr.tsv`, `de.tsv`, `it.tsv`, `pl.tsv`, `ru.tsv` or `es.tsv`.
+2. Set the first line to `# language-name: French` (or the desired display name).
+   Translate the right-hand column only; leave English keys and placeholders intact.
+3. Restart Skyrim. The new language appears automatically in **Language**, and its
+   filename code is used for persistence. Incomplete translations fall back per key.
+
+No C++ changes, DLL build or central language registry are required. A translation
+mod can ship only `Data/SKSE/Plugins/SlaveTatsUI/translations/fr.tsv`, for example.
+Contributors can submit new or corrected TSV files in `resources/translations/`;
+release packaging discovers additional catalogs automatically. Filenames must start
+with an ASCII letter, contain only ASCII letters/digits/`-`/`_`, and have at most
+32 characters before `.tsv`. The English recovery option always remains available.
+French/German/Italian/Polish/Russian/Spanish are examples of supported additions;
+translations for those languages are not included yet. Enable their glyph ranges
+and choose an appropriate font in the framework when needed.
 
 ## Compatibility
 

@@ -71,7 +71,7 @@ function New-PackageFixture {
     '{"hotkey":67}' | Set-Content -LiteralPath (Join-Path $root 'SlaveTatsUI.json') -Encoding utf8
     $translations = Join-Path $root 'resources/translations'
     New-Item -ItemType Directory -Path $translations -Force | Out-Null
-    foreach ($language in @('en', 'zh-CN', 'ko', 'ja')) {
+    foreach ($language in @('en', 'zh-CN', 'ko', 'ja', 'fr')) {
         "Save`tSave" | Set-Content -LiteralPath (Join-Path $translations "$language.tsv") -Encoding utf8
     }
     return $root
@@ -122,6 +122,7 @@ try {
         'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI.dll',
         'SlaveTatsUI/THIRD_PARTY_NOTICES.md',
         'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/en.tsv',
+        'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/fr.tsv',
         'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/zh-CN.tsv',
         'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/ko.tsv',
         'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/ja.tsv'

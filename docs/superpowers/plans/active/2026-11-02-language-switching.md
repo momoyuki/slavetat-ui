@@ -67,3 +67,15 @@ Files: scripts/release/Package-Release.ps1, tests/release/PackageReleaseTests.ps
 - Passed: adapter syntax check and git diff --check. A pre-existing missing-return warning exists in the vendored SKSEMenuFramework.h ImFormatString wrapper.
 - Pending: actual MSVC Debug/Release DLL builds, Windows CTest/release PowerShell suite, CJK glyph/layout and in-game acceptance. The user will test on Windows.
 - Delivery: draft PR requested now; do not wait for hosted CI or merge/release.
+
+## Follow-up: community language packs
+
+User approved automatic language discovery. Enumerate safe `*.tsv` filenames,
+read optional `# language-name: ...` metadata, persist filename locale codes and
+populate the selector from the catalog. Keep English available without a file.
+Package additional catalogs automatically. Existing built-in enum helpers remain
+only for compatibility/tests; they do not limit discovery or selection. Added
+French discovery, per-key fallback, stable widget ID and persistence checks;
+release fixture includes a fifth catalog. No additional translations are claimed.
+
+Follow-up verification: discovery/parser tests and locale persistence (including externally added French) passed with GCC; adapter syntax check passed with temporary platform declaration shims. Windows/PowerShell/game checks remain pending; do not wait for CI.

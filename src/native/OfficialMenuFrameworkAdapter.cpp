@@ -2931,13 +2931,17 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     if (language) {
         localization::selectLanguage(language->language());
         static bool languageSaveFailed = false;
-        if (ui::BeginCombo("Language", localization::languageName(language->language()))) {
-            for (const auto candidate : {localization::Language::english, localization::Language::chinese,
-                     localization::Language::korean, localization::Language::japanese}) {
-                const bool selected = language->language() == candidate;
-                if (ImGuiMCP::Selectable(localization::languageName(candidate), selected))
-                    languageSaveFailed = !language->select(candidate);
+        const char* selectedLanguageName = language->language().c_str();
+        for (const auto& option : localization::catalog().languages())
+            if (option.code == language->language()) selectedLanguageName = option.name.c_str();
+        if (ui::BeginCombo("Language", selectedLanguageName)) {
+            for (const auto& candidate : localization::catalog().languages()) {
+                const bool selected = language->language() == candidate.code;
+                ImGuiMCP::PushID(candidate.code.c_str());
+                if (ImGuiMCP::Selectable(candidate.name.c_str(), selected))
+                    languageSaveFailed = !language->select(candidate.code);
                 if (selected) ImGuiMCP::SetItemDefaultFocus();
+                ImGuiMCP::PopID();
             }
             ImGuiMCP::EndCombo();
         }

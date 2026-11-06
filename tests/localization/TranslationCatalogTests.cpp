@@ -10,6 +10,7 @@ int main(int argc, char** argv) {
     const auto dir = std::filesystem::temp_directory_path() / "stui-translation-tests";
     std::filesystem::create_directories(dir);
     try {
+        std::ofstream(dir / "fr.tsv", std::ios::binary) << "# language-name: French\nSave\tEnregistrer\n";
         TranslationCatalog catalog;
         expect(std::string(catalog.text(Language::japanese, "Save")) == "Save", "missing file falls back");
         std::ofstream(dir / "ja.tsv", std::ios::binary)
@@ -20,6 +21,10 @@ int main(int argc, char** argv) {
                "Bad {}\t不正 {\nPositional {}\t不正 {0}\n"
                "BadRowWithoutTab\n";
         expect(!catalog.load(dir), "partial/missing dictionaries reported");
+        expect(catalog.contains("fr"), "new locale discovered without code changes");
+        expect(std::string(catalog.text("fr", "Save")) == "Enregistrer", "external French translation loaded");
+        expect(catalog.widget("fr", "Save##one") == "Enregistrer###Save##one", "external locale keeps widget ID");
+        expect(catalog.languages().front().code == "en", "English recovery option remains first");
         expect(std::string(catalog.text(Language::japanese, "Save")) == "保存", "Japanese UTF-8 loaded");
         expect(std::string(catalog.text(Language::japanese, "Unknown")) == "Unknown", "missing key falls back");
         expect(std::string(catalog.text(Language::japanese, "Unsafe %s")) == "Unsafe %s", "printf types protected");
