@@ -131,6 +131,50 @@ hotkey.
 The setting is saved immediately to `SlaveTatsUI.json` beside the plugin log.
 Existing named or raw DIK scancode values remain supported.
 
+## UI Language
+
+Open the **SlaveTatsUI > Tattoo Browser** launcher and choose **Language**.
+English (`en`), Simplified Chinese (`zh-CN`), Korean (`ko`) and Japanese (`ja`)
+are included. The choice is saved immediately in the existing `SlaveTatsUI.json`
+configuration beside the log and takes effect on the next launcher frame.
+Other configuration fields are preserved. A failed save keeps the previous
+language and displays an error. The registered Menu Framework / FLICK entry
+remains **SlaveTatsUI > Tattoo Browser** in every language.
+
+**Fonts:** In SKSE Menu Framework's own settings, enable the Chinese, Korean
+and Japanese glyph ranges you need and select a font containing those glyphs.
+A translation cannot supply glyphs missing from a font. Follow the framework's
+font setup/reload instructions; SlaveTats UI does not overwrite its global
+settings or rebuild its shared font atlas. Language choices are deliberately
+shown in ASCII English so you can switch back even if a font is missing.
+
+The release includes these files under the game's `Data` directory:
+
+```text
+SKSE/Plugins/SlaveTatsUI/translations/en.tsv
+SKSE/Plugins/SlaveTatsUI/translations/zh-CN.tsv
+SKSE/Plugins/SlaveTatsUI/translations/ko.tsv
+SKSE/Plugins/SlaveTatsUI/translations/ja.tsv
+```
+
+Missing files, missing keys and rejected entries use the original English text.
+An unknown configured language also falls back to English. The catalogs load
+once when the plugin starts; restart Skyrim after editing them. `en.tsv` is the
+English source/reference catalog; English fallback is built into the code.
+
+Catalogs are UTF-8, one **English source text**, a literal tab, and one
+**translation** per line. Lines beginning with `#` are comments. Preserve spaces,
+all printf placeholders (`%s`, `%d`, `%zu`, `%.1f`, etc.) and all C++ format
+fields (`{}`, `{:.0f}`, etc.) in their original order. Use `\n` for a newline,
+`\t` for a tab and `\\` for a literal backslash. Empty translations, invalid
+UTF-8, duplicate keys, changed placeholders and `##` widget-ID delimiters are
+rejected and reported in the startup log; valid rows remain usable.
+
+Language affects presentation only. Actor names, tattoo/pack names, domains,
+paths and user-named presets/loadouts keep their original contents. Runtime
+and dependency error details/logs may remain in English. Korean and Japanese
+wording is an initial translation and welcomes native-speaker review.
+
 ## Compatibility
 
 - Skyrim SE 1.5.97 and AE 1.6.x are supported when the DLL is built against a

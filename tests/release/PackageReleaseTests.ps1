@@ -69,6 +69,11 @@ function New-PackageFixture {
     'debug symbols' | Set-Content -LiteralPath (Join-Path $dllDirectory 'SlaveTatsUI.pdb') -Encoding utf8
     'runtime log' | Set-Content -LiteralPath (Join-Path $root 'SlaveTatsUI.log') -Encoding utf8
     '{"hotkey":67}' | Set-Content -LiteralPath (Join-Path $root 'SlaveTatsUI.json') -Encoding utf8
+    $translations = Join-Path $root 'resources/translations'
+    New-Item -ItemType Directory -Path $translations -Force | Out-Null
+    foreach ($language in @('en', 'zh-CN', 'ko', 'ja')) {
+        "Save`tSave" | Set-Content -LiteralPath (Join-Path $translations "$language.tsv") -Encoding utf8
+    }
     return $root
 }
 
@@ -115,7 +120,11 @@ try {
         'SlaveTatsUI/LICENSE',
         'SlaveTatsUI/README.md',
         'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI.dll',
-        'SlaveTatsUI/THIRD_PARTY_NOTICES.md'
+        'SlaveTatsUI/THIRD_PARTY_NOTICES.md',
+        'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/en.tsv',
+        'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/zh-CN.tsv',
+        'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/ko.tsv',
+        'SlaveTatsUI/SKSE/Plugins/SlaveTatsUI/translations/ja.tsv'
     ) | Sort-Object
     Assert-SequenceEqual -Expected $expectedEntries -Actual $actualEntries -Because 'the ZIP contains only the installable files'
 
@@ -137,7 +146,11 @@ try {
         'build/release/SlaveTatsUI.dll',
         'LICENSE',
         'THIRD_PARTY_NOTICES.md',
-        'README.md'
+        'README.md',
+        'resources/translations/en.tsv',
+        'resources/translations/zh-CN.tsv',
+        'resources/translations/ko.tsv',
+        'resources/translations/ja.tsv'
     )) {
         $safeName = $missingPath.Replace('/', '-').Replace('.', '-')
         $missingFixture = New-PackageFixture -Parent $temporaryRoot -Name "missing-$safeName"

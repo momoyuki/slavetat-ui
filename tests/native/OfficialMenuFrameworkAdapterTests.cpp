@@ -1,4 +1,5 @@
 #include "textures/TextureResolver.h"
+#include "localization/TranslationCatalog.h"
 #include "native/OfficialMenuFrameworkAdapter.h"
 #include "native/NativeCatalogBrowserModel.h"
 #include "native/NativeThumbnailController.h"
@@ -1748,6 +1749,26 @@ void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
 
 }  // namespace
 
+void localizedPresentationPreservesRuntimeIdentifiers() {
+    using namespace stui;
+    expect(localization::catalog().load(SLAVETATSUI_TRANSLATIONS_DIR), "expected valid shipped translations");
+    localization::selectLanguage(localization::Language::japanese);
+    const native::ActorTarget actor{.kind = native::ActorTargetKind::player, .formId = 0x14, .displayName = "Save"};
+    expect(native::formatSlotTargetLabel(&actor, core::TattooArea::body, 2) == "Save / 体 / スロット 2",
+        "expected localized template with actor name preserved");
+    expect(native::slotAreaLabel(core::TattooArea::body) == "BODY", "expected canonical area unchanged");
+    expect(native::domainPresentationLabel("default") == "default", "expected canonical domain unchanged");
+    const auto options = native::buildCatalogBrowserDomainOptions({"Save", "custom"});
+    expect(options[1] == "Save" && options[2] == "custom", "expected domain values unchanged");
+    localization::selectLanguage(localization::Language::korean);
+    expect(std::string(localization::tr("Save")) == "저장", "expected live switch to Korean");
+    localization::selectLanguage(localization::Language::chinese);
+    expect(std::string(localization::tr("Save")) != "Save", "expected live switch to Chinese");
+    localization::selectLanguage(localization::Language::english);
+    expect(native::formatSlotTargetLabel(&actor, core::TattooArea::body, 2) == "Save / BODY / Slot 2",
+        "expected switch back to original English presentation");
+}
+
 int main() {
     try {
         loadoutPresentationDistinguishesOutcomesAndAnchorsFooter();
@@ -1890,6 +1911,7 @@ int main() {
         pickerVisiblePathsFollowOnlyTheSixRenderedCards();
         std::cout << "PASS Picker visible paths follow six rendered cards\n";
         nullSnapshotModelHasSafeEmptyPageWithoutImGui();
+        localizedPresentationPreservesRuntimeIdentifiers();
         std::cout << "PASS null snapshot model has safe empty page without ImGui\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL " << error.what() << '\n';

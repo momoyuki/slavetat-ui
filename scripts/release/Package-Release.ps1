@@ -19,6 +19,13 @@ $requiredInputs = @(
     @{ Source = 'README.md'; Destination = 'README.md' }
 )
 
+foreach ($language in @('en', 'zh-CN', 'ko', 'ja')) {
+    $requiredInputs += @{
+        Source = "resources/translations/$language.tsv"
+        Destination = "SKSE/Plugins/SlaveTatsUI/translations/$language.tsv"
+    }
+}
+
 foreach ($input in $requiredInputs) {
     $sourcePath = [System.IO.Path]::GetFullPath((Join-Path $workingDirectory $input.Source))
     if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
