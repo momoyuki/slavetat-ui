@@ -93,3 +93,16 @@ Clicking a catalog card shows an uncommitted tattoo on the Actor; Hover changes 
 - https://x.com/SGR01898939/status/2110638649805271047
 - `docs/superpowers/specs/2026-10-14-flick-ui-design.md`
 - `docs/superpowers/specs/2026-09-20-native-live-actor-preview-design.md`
+
+## Thumbnail clarity follow-up (2026-11-02)
+
+Supersedes full-canvas reduction and reduced-mip BC7 selection above. For bounded
+BC3/BC7 sources, determine padded source-visible bounds before resampling. Apply
+the existing source-relative eightfold crop limit. Crop first; reduce only when
+the crop exceeds192. BC3 retains alpha-weighted color and maximum coverage; BC7
+filters premultiplied color before returning to straight alpha. GPU bounds are
+full UVs for generated thumbnails. Cache v6 marks preframed DDS in reserved header
+words (`STUITH6` plus zero terminator), so disk reload never crops again. Original
+DDS files are unchanged. Memory/cache budgets remain unchanged. BC7 full-level
+CPU decode is temporary and capped at16M pixels; this trades first-build work for
+retained motif detail. In-game quality/performance acceptance remains pending.

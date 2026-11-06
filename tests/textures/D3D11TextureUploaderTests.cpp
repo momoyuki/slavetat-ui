@@ -44,6 +44,51 @@ int main() {
         return 1;
     }
 
+    // A narrow motif must keep source detail before the full canvas is reduced.
+    for (const auto format : {DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC7_UNORM}) {
+        DirectX::ScratchImage detail;
+        if (FAILED(detail.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, 512, 512, 1, 1)))
+            return 1;
+        auto* image = detail.GetImage(0, 0, 0);
+        std::memset(image->pixels, 0, image->slicePitch);
+        for (std::size_t y = 224; y < 288; ++y) {
+            for (std::size_t x = 224; x < 288; ++x) {
+                auto* pixel = image->pixels + y * image->rowPitch + x * 4;
+                pixel[0] = ((x - 224) / 2) % 2 == 0 ? 255 : 0;
+                pixel[2] = 255 - pixel[0];
+                pixel[3] = 255;
+            }
+        }
+        DirectX::ScratchImage packed;
+        DirectX::Blob encoded;
+        if (FAILED(DirectX::Compress(*image, format, DirectX::TEX_COMPRESS_BC7_QUICK,
+                0.5F, packed)) || FAILED(DirectX::SaveToDDSMemory(packed.GetImages(),
+                packed.GetImageCount(), packed.GetMetadata(), DirectX::DDS_FLAGS_NONE,
+                encoded))) return 1;
+        const auto result = stui::textures::makeCachedThumbnailDds({
+            static_cast<const std::uint8_t*>(encoded.GetBufferPointer()),
+            encoded.GetBufferSize()});
+        DirectX::ScratchImage output;
+        if (!result || FAILED(DirectX::LoadFromDDSMemory(result->data(), result->size(),
+                DirectX::DDS_FLAGS_NONE, nullptr, output))) return 1;
+        const auto* preview = output.GetImage(0, 0, 0);
+        std::size_t transitions = 0;
+        bool previousRed = false;
+        for (std::size_t x = 0; x < preview->width; ++x) {
+            const auto* pixel = preview->pixels + (preview->height / 2) *
+                preview->rowPitch + x * 4;
+            if (pixel[3] <= 8) continue;
+            const bool red = pixel[0] > pixel[2];
+            if (red != previousRed) ++transitions;
+            previousRed = red;
+        }
+        if (transitions < 30) {
+            std::cerr << "FAIL crop-before-resize must preserve 32 motif stripes: "
+                << transitions << " format " << format << "\n";
+            return 1;
+        }
+    }
+
     Microsoft::WRL::ComPtr<ID3D11Device> device;
     D3D_FEATURE_LEVEL featureLevel{};
     const HRESULT deviceResult = D3D11CreateDevice(
@@ -187,16 +232,22 @@ int main() {
     const auto smallPreview = stui::textures::uploadDdsTexture(device.Get(),
         {static_cast<const std::uint8_t*>(largeDds.GetBufferPointer()),
             largeDds.GetBufferSize()});
-    const auto expectedLargeBounds = stui::textures::visibleBc3AlphaBounds(
-        {largeImage->pixels, largeImage->slicePitch},
-        largeImage->width, largeImage->height, largeImage->rowPitch);
-    if (!smallPreview || smallPreview->width != 192 || smallPreview->height != 192 ||
-        !smallPreview->shaderResourceView ||
-        smallPreview->visibleBounds.left != expectedLargeBounds.left ||
-        smallPreview->visibleBounds.top != expectedLargeBounds.top ||
-        smallPreview->visibleBounds.right != expectedLargeBounds.right ||
-        smallPreview->visibleBounds.bottom != expectedLargeBounds.bottom) {
-        std::cerr << "FAIL large BC3 should upload a cropped 192px preview\n";
+    if (!smallPreview || smallPreview->width != 128 || smallPreview->height != 128 ||
+        !smallPreview->shaderResourceView || smallPreview->visibleBounds.left != 0.0F ||
+        smallPreview->visibleBounds.right != 1.0F) {
+        std::cerr << "FAIL large BC3 should upload its padded source crop\n";
+        return 1;
+    }
+    const auto cachedCrop = stui::textures::makeCachedThumbnailDds({
+        static_cast<const std::uint8_t*>(largeDds.GetBufferPointer()), largeDds.GetBufferSize()});
+    const auto reloadedCrop = cachedCrop ? stui::textures::uploadDdsTexture(device.Get(),
+        *cachedCrop) : stui::textures::D3D11TextureResult(
+            std::unexpected(stui::textures::D3D11TextureError::invalidData));
+    if (!reloadedCrop || reloadedCrop->width != smallPreview->width ||
+        reloadedCrop->height != smallPreview->height ||
+        reloadedCrop->visibleBounds.left != 0.0F ||
+        reloadedCrop->visibleBounds.right != 1.0F) {
+        std::cerr << "FAIL disk roundtrip must not crop the thumbnail a second time\n";
         return 1;
     }
     Microsoft::WRL::ComPtr<ID3D11Resource> previewResource;
@@ -208,7 +259,7 @@ int main() {
     }
     D3D11_TEXTURE2D_DESC previewDesc{};
     previewTexture->GetDesc(&previewDesc);
-    if (previewDesc.Width != 192 || previewDesc.Height != 192 ||
+    if (previewDesc.Width != 128 || previewDesc.Height != 128 ||
         previewDesc.Format != DXGI_FORMAT_R8G8B8A8_UNORM) {
         std::cerr << "FAIL GPU should retain only the small RGBA preview\n";
         return 1;
@@ -232,7 +283,7 @@ int main() {
         return 1;
     }
     const auto* markedPixel = static_cast<const std::uint8_t*>(mapped.pData) +
-        96 * mapped.RowPitch + 96 * 4;
+        64 * mapped.RowPitch + 64 * 4;
     const auto* emptyPixel = static_cast<const std::uint8_t*>(mapped.pData);
     const bool correctPixels = markedPixel[0] > 240 && markedPixel[1] < 8 &&
         markedPixel[2] < 8 && markedPixel[3] == 255 && emptyPixel[3] == 0;

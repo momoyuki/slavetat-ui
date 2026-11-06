@@ -323,3 +323,11 @@ Do not let these distract from the active milestone without an explicit roadmap 
 - arbitrary tattoo-pack authoring inside the runtime UI;
 - unrelated RaceMenu overlay management;
 - broad refactors that do not unlock the active milestone.
+
+## Approved follow-up — Thumbnail clarity (2026-11-02)
+
+In progress on the UI improvements worktree, independently of localization PR #23.
+Preserve the 192-pixel maximum and cache budgets while cropping visible source
+content before reduction. The user promoted this follow-up while localization
+acceptance continues in a separate chat. See
+`docs/superpowers/plans/active/2026-11-02-thumbnail-clarity.md`.
