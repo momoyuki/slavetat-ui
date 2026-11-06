@@ -41,6 +41,10 @@ void NativeThumbnailRuntime::synchronize(
         });
 }
 
+void NativeThumbnailRuntime::synchronizeResources(NativeThumbnailEpoch epoch, std::span<const core::TextureResource> resources) {
+    m_controller.synchronizeResources(std::move(epoch), resources);
+}
+
 void NativeThumbnailRuntime::pump() {
     using namespace std::chrono_literals;
 
@@ -83,12 +87,12 @@ void NativeThumbnailRuntime::pump() {
         NativeThumbnailLoadResult result =
             std::unexpected(NativeThumbnailFailure::broken);
         try {
-            result = m_source->load(
-                capturedRequest.texturePath,
-                [this, capturedRequest] {
-                    return m_controller.isCurrent(capturedRequest);
-                },
-                m_now());
+            const auto current = [this, capturedRequest] {
+                return m_controller.isCurrent(capturedRequest);
+            };
+            result = capturedRequest.resource
+                ? m_source->load(*capturedRequest.resource, current, m_now())
+                : m_source->load(capturedRequest.texturePath, current, m_now());
         } catch (...) {
         }
         complete(std::move(result));

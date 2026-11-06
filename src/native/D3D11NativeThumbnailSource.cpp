@@ -33,6 +33,7 @@ D3D11NativeThumbnailSource::D3D11NativeThumbnailSource(
     : m_available(device != nullptr),
       m_resolver(looseRoot),
       m_manager(device, capacity, idleTtl, 16 * 1024 * 1024),
+      m_revisionCache({}, looseRoot),
       m_diskCache(diskCacheDirectory.empty() ? nullptr
           : std::make_unique<textures::ThumbnailDiskCache>(
                 std::move(diskCacheDirectory), looseRoot)),
@@ -142,6 +143,41 @@ NativeThumbnailLoadResult D3D11NativeThumbnailSource::load(
         if (m_failureObserver) {
             m_failureObserver(texturePath, NativeThumbnailFailureStage::exception);
         }
+        return std::unexpected(NativeThumbnailFailure::broken);
+    }
+}
+
+NativeThumbnailLoadResult D3D11NativeThumbnailSource::load(const core::TextureResource& resource,
+    const NativeThumbnailCancellationCheck& isCurrent, textures::TextureCacheTimePoint now) {
+    if (!available()) return std::unexpected(NativeThumbnailFailure::deviceUnavailable);
+    if (isCurrent && !isCurrent()) return std::unexpected(NativeThumbnailFailure::cancelled);
+    const auto revision = m_revisionCache.revision(resource);
+    if (!revision) return std::unexpected(NativeThumbnailFailure::broken);
+    {
+        std::scoped_lock lock(m_mutex);
+        if (auto cached = m_manager.find(resource, *revision, now)) return cached;
+        if (m_diskCache) {
+            if (auto bytes = m_diskCache->load(resource)) {
+                if (isCurrent && !isCurrent()) return std::unexpected(NativeThumbnailFailure::cancelled);
+                if (m_revisionCache.revision(resource) != revision) return std::unexpected(NativeThumbnailFailure::cancelled);
+                if (auto cached = m_manager.getOrLoad(resource, *revision, *bytes, now)) return *cached;
+            }
+        }
+    }
+    try {
+        const auto resolved = m_resolver.resolve(resource, m_archiveReader);
+        if (!resolved) return std::unexpected(mapResolveError(resolved.error()));
+        if (isCurrent && !isCurrent()) return std::unexpected(NativeThumbnailFailure::cancelled);
+        auto thumbnail = m_diskCache ? textures::makeCachedThumbnailDds(resolved->bytes) : std::nullopt;
+        std::scoped_lock lock(m_mutex);
+        if (isCurrent && !isCurrent()) return std::unexpected(NativeThumbnailFailure::cancelled);
+        if (m_revisionCache.revision(resource) != revision) return std::unexpected(NativeThumbnailFailure::cancelled);
+        const auto bytes = thumbnail ? std::span<const std::uint8_t>(*thumbnail) : std::span<const std::uint8_t>(resolved->bytes);
+        auto loaded = m_manager.getOrLoad(resource, *revision, bytes, now);
+        if (!loaded) return std::unexpected(NativeThumbnailFailure::broken);
+        if (thumbnail && m_diskCache) m_diskCache->store(resource, *thumbnail, *revision);
+        return std::move(*loaded);
+    } catch (...) {
         return std::unexpected(NativeThumbnailFailure::broken);
     }
 }

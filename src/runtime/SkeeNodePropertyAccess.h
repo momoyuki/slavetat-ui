@@ -31,6 +31,7 @@ public:
 
     [[nodiscard]] std::optional<CatalogPreviewVisualSnapshot> capture(
         const CatalogPreviewVisualTarget& target) const;
+    [[nodiscard]] std::optional<std::string> captureDiffuse(const CatalogPreviewVisualTarget& target) const;
     [[nodiscard]] bool write(
         const CatalogPreviewVisualTarget& target,
         const CatalogPreviewVisualSnapshot& value) const;

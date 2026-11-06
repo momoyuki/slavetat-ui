@@ -127,6 +127,16 @@ void rejectsNonFiniteMaterialScalars() {
         "rejected paint must preserve the original material");
 }
 
+void readsDiffuseWithoutOtherProperties() {
+    FakeProperties fake;
+    fake.values[{9, 0}] = std::string("textures/example.dds");
+    SkeeNodePropertyAccess access(fake.bindings());
+    const CatalogPreviewVisualTarget target{1, 2, 3, 4, "Body [Ovl3]"};
+    expect(access.captureDiffuse(target) == std::optional<std::string>("textures/example.dds"),
+        "diffuse lookup must not require unrelated material properties");
+    fake.values.erase({9, 0});
+    expect(!access.captureDiffuse(target), "missing diffuse must remain unavailable");
+}
 void stopsWritingAfterFirstFailure() {
     FakeProperties fake;
     auto bindings = fake.bindings();
@@ -146,6 +156,7 @@ void stopsWritingAfterFirstFailure() {
 }  // namespace
 
 int main() {
+    readsDiffuseWithoutOtherProperties();
     writesThenCapturesAllTypedProperties();
     rejectsIncompleteTypedSnapshot();
     rejectsNonFiniteMaterialScalars();

@@ -37,6 +37,23 @@ void reusesUploadForEquivalentTexturePath() {
     expect(uploadCount == 1, "expected one GPU upload");
 }
 
+void separatesResourceKindsAndSourceRevisions() {
+    using namespace stui::textures;
+    TextureManager<int> manager(4);
+    const auto catalog = TextureResolver::resource(TextureResourceKind::catalog, "mark.dds");
+    const auto external = TextureResolver::resource(TextureResourceKind::external, "textures/actors/character/slavetats/mark.dds");
+    expect(catalog && external, "identities must validate");
+    const std::vector<std::uint8_t> bytes{1};
+    int uploads = 0;
+    const auto upload = [&](std::span<const std::uint8_t>) { return std::make_shared<int>(++uploads); };
+    const auto first = manager.getOrLoad(*catalog, 1, bytes, upload);
+    const auto second = manager.getOrLoad(*external, 1, bytes, upload);
+    expect(first && second && *first != *second, "kinds must not share GPU entries");
+    expect(manager.find(*external, 1) == *second, "same resource revision must hit");
+    expect(!manager.find(*external, 2), "changed source revision must miss");
+    expect(manager.getOrLoad(*external, 2, bytes, upload).has_value() && uploads == 3,
+        "changed resource must be uploaded again");
+}
 void rejectsUnsafePathBeforeUpload() {
     stui::textures::TextureManager<int> manager(2);
     const std::vector<std::uint8_t> ddsBytes{1};
@@ -116,6 +133,7 @@ void expiresAndClearsManagedTextures() {
 int main() {
     try {
         reusesUploadForEquivalentTexturePath();
+        separatesResourceKindsAndSourceRevisions();
         rejectsUnsafePathBeforeUpload();
         retriesFailedUpload();
         findsEquivalentNormalizedPathWithoutSecondUpload();

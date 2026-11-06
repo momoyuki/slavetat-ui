@@ -1,4 +1,5 @@
 #include "native/NativeThumbnailRuntime.h"
+#include "textures/TextureResolver.h"
 
 #include "repository/TattooCatalogLoader.h"
 
@@ -104,6 +105,12 @@ public:
         return readyTexture();
     }
 
+    NativeThumbnailLoadResult load(const stui::core::TextureResource& resource,
+        const NativeThumbnailCancellationCheck& current, TextureCacheTimePoint) override {
+        typedPaths.push_back(resource.path());
+        return current() ? NativeThumbnailLoadResult(readyTexture()) : std::unexpected(NativeThumbnailFailure::cancelled);
+    }
+    std::vector<std::string> typedPaths;
     void pruneExpired(TextureCacheTimePoint now) override {
         pruneTimes.push_back(now);
     }
@@ -469,6 +476,18 @@ void limitChangesAreScheduledExclusiveAndRetryable() {
     expect(!fixture.runtime->requestDiskCacheLimit(128), "pending clear blocks limit");
 }
 
+void schedulesTypedExternalResource() {
+    RuntimeFixture fixture;
+    const auto image = stui::textures::TextureResolver::resource(stui::core::TextureResourceKind::external, "textures/other/mark.dds");
+    expect(image.has_value(), "expected valid image");
+    const std::vector<stui::core::TextureResource> resources{*image};
+    fixture.runtime->synchronizeResources(std::make_shared<int>(1), resources);
+    fixture.runtime->pump();
+    expect(fixture.scheduled.size() == 1, "typed request must be scheduled");
+    fixture.scheduled.back()();
+    expect(fixture.source->typedPaths == std::vector<std::string>{image->path()}, "source must receive the typed identity");
+    expect(fixture.runtime->views().front().status == NativeThumbnailStatus::ready, "completion must publish the image");
+}
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -485,6 +504,7 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("schedules typed external resource", schedulesTypedExternalResource);
     failures += run("failed rollback reports actual budget", failedRollbackReportsActualAppliedBudget);
     failures += run("limit changes are scheduled exclusive and retryable", limitChangesAreScheduledExclusiveAndRetryable);
     failures += run("synchronizes presentation-neutral visible paths", synchronizesPresentationNeutralVisiblePaths);

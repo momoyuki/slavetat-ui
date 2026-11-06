@@ -51,6 +51,8 @@ public:
         std::string_view texturePath,
         const NativeThumbnailCancellationCheck& isCurrent,
         textures::TextureCacheTimePoint now) override;
+    [[nodiscard]] NativeThumbnailLoadResult load(const core::TextureResource& resource,
+        const NativeThumbnailCancellationCheck& isCurrent, textures::TextureCacheTimePoint now) override;
     void pruneExpired(textures::TextureCacheTimePoint now) override;
     void clear() override;
     [[nodiscard]] bool clearDiskCache() override;
@@ -63,6 +65,7 @@ private:
     bool m_available;
     textures::TextureResolver m_resolver;
     textures::D3D11TextureManager m_manager;
+    textures::ThumbnailDiskCache m_revisionCache;
     std::unique_ptr<textures::ThumbnailDiskCache> m_diskCache;
     textures::TextureArchiveReader m_archiveReader;
     NativeThumbnailFailureObserver m_failureObserver;

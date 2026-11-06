@@ -1,4 +1,5 @@
 #include "native/OfficialMenuFrameworkAdapter.h"
+#include "textures/TextureResolver.h"
 #include "runtime/HotkeyBinding.h"
 
 #include <RE/Skyrim.h>
@@ -373,6 +374,39 @@ std::string_view slotAreaLabel(core::TattooArea area) noexcept {
         return "FEET";
     }
     return "BODY";
+}
+
+std::optional<std::size_t> findSlotThumbnailViewIndex(const core::TattooSlot& slot,
+    const std::vector<NativeThumbnailView>& views) {
+    std::optional<core::TextureResource> identity;
+    if (slot.occupancy == core::SlotOccupancy::external) identity = slot.externalThumbnail;
+    else if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo) {
+        auto resource = textures::TextureResolver::resource(core::TextureResourceKind::catalog, slot.tattoo->texturePath);
+        if (resource) identity = std::move(*resource);
+    }
+    if (!identity) return std::nullopt;
+    for (std::size_t index = 0; index < views.size(); ++index) {
+        if (views[index].resource && *views[index].resource == *identity) return index;
+    }
+    if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo)
+        return findCatalogThumbnailViewIndex(slot.tattoo->texturePath, views);
+    return std::nullopt;
+}
+
+std::vector<core::TextureResource> collectVisibleSlotResources(const core::TattooSlots& slots,
+    std::size_t pageIndex, std::size_t pageSize) {
+    const auto page = calculateSlotPage(slots.slots.size(), pageIndex, pageSize);
+    std::vector<core::TextureResource> resources;
+    for (std::size_t index = page.begin; index < page.end; ++index) {
+        const auto& slot = slots.slots[index];
+        if (slot.occupancy == core::SlotOccupancy::external && slot.externalThumbnail) {
+            resources.push_back(*slot.externalThumbnail);
+        } else if (slot.occupancy == core::SlotOccupancy::slaveTats && slot.tattoo) {
+            auto resource = textures::TextureResolver::resource(core::TextureResourceKind::catalog, slot.tattoo->texturePath);
+            if (resource) resources.push_back(std::move(*resource));
+        }
+    }
+    return resources;
 }
 
 std::vector<std::string> collectVisibleSlotTexturePaths(
@@ -1380,17 +1414,16 @@ void renderSlotImage(
     if (slot.occupancy == core::SlotOccupancy::empty) {
         return;
     }
-    if (slot.occupancy == core::SlotOccupancy::external) {
+    if (slot.occupancy == core::SlotOccupancy::external && !slot.externalThumbnail) {
+        ImGuiMCP::TextUnformatted("Unavailable");
         return;
     }
-    if (!slot.tattoo || slot.tattoo->texturePath.empty()) {
+    if (slot.occupancy == core::SlotOccupancy::slaveTats && (!slot.tattoo || slot.tattoo->texturePath.empty())) {
         ImGuiMCP::TextUnformatted("No thumbnail");
         return;
     }
 
-    const auto thumbnailIndex = findCatalogThumbnailViewIndex(
-        slot.tattoo->texturePath,
-        thumbnailViews);
+    const auto thumbnailIndex = findSlotThumbnailViewIndex(slot, thumbnailViews);
     const NativeThumbnailView* thumbnail = thumbnailIndex
         ? &thumbnailViews[*thumbnailIndex]
         : nullptr;
@@ -1423,6 +1456,11 @@ void renderSlotImage(
             {bounds.left, bounds.top},
             {bounds.right, bounds.bottom},
             tint);
+        return;
+    }
+    if (slot.occupancy == core::SlotOccupancy::external) {
+        ImGuiMCP::TextUnformatted(!thumbnail || thumbnail->status == NativeThumbnailStatus::placeholder ||
+            thumbnail->status == NativeThumbnailStatus::loading ? "Loading" : "Unavailable");
         return;
     }
     if (thumbnail) {
@@ -1772,11 +1810,11 @@ void renderCurrentSlots(
 
             // Read the new area's snapshot only after processing tab selection.
             const auto* slots = workflow.slots();
-            const auto paths = slots
-                ? collectVisibleSlotTexturePaths(
+            const auto resources = slots
+                ? collectVisibleSlotResources(
                       *slots, workflow.slotPageIndex(), NativeSlotWorkflowModel::kPageSize)
-                : std::vector<std::string>{};
-            thumbnails.synchronize(slotThumbnailEpoch(workflow.selectedArea()), paths);
+                : std::vector<core::TextureResource>{};
+            thumbnails.synchronizeResources(workflow.slotThumbnailEpoch(), resources);
             thumbnails.pump();
             const auto thumbnailViews = thumbnails.views();
             page = slots
@@ -1891,7 +1929,7 @@ void renderCurrentSlots(
                     if (ImGuiMCP::IsItemHovered(ImGuiMCP::ImGuiHoveredFlags_AllowWhenDisabled)) {
                         if (slot.occupancy == core::SlotOccupancy::external) {
                             ImGuiMCP::SetTooltip(
-                                "Slot %d - Read Only: managed by another overlay mod", slot.index);
+                                "Slot %d - Read Only: managed by another overlay mod. Thumbnail shows the source image.", slot.index);
                         } else if (slot.tattoo) {
                             ImGuiMCP::SetTooltip("Slot %d - %s", slot.index, slot.tattoo->name.c_str());
                         } else {

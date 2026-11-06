@@ -345,6 +345,7 @@ if(BUILD_TESTING)
     add_test(NAME TattooLoadoutStoreTests COMMAND TattooLoadoutStoreTests)
 
     add_executable(NativeThumbnailRuntimeTests
+        src/textures/TextureResolver.cpp
         src/native/NativeThumbnailController.cpp
         src/native/NativeThumbnailRuntime.cpp
         src/repository/TattooRepository.cpp
@@ -367,6 +368,7 @@ if(BUILD_TESTING)
     add_test(NAME D3D11NativeThumbnailSourceTests COMMAND D3D11NativeThumbnailSourceTests)
 
     add_executable(NativeThumbnailControllerTests
+        src/textures/TextureResolver.cpp
         src/native/NativeThumbnailController.cpp
         src/repository/TattooRepository.cpp
         tests/native/NativeThumbnailControllerTests.cpp
@@ -383,6 +385,7 @@ if(BUILD_TESTING)
     add_test(NAME NativeCatalogBrowserModelTests COMMAND NativeCatalogBrowserModelTests)
 
     add_executable(NativeSlotWorkflowModelTests
+        src/textures/TextureResolver.cpp
         src/native/NativeSlotWorkflowModel.cpp
         src/native/NativeCatalogBrowserModel.cpp
         src/repository/TattooRepository.cpp
@@ -443,6 +446,7 @@ if(BUILD_TESTING)
     add_test(NAME FlickLauncherTests COMMAND FlickLauncherTests)
 
     add_executable(OfficialMenuFrameworkAdapterTests
+        src/textures/TextureResolver.cpp
         src/native/OfficialMenuFrameworkAdapter.cpp
         src/native/CatalogPreviewModel.cpp
         src/runtime/HotkeyBinding.cpp

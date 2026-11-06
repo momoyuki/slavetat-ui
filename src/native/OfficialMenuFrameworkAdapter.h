@@ -214,6 +214,10 @@ struct SlotReadOnlyIndicator {
     std::size_t requestedPage,
     std::size_t pageSize) noexcept;
 [[nodiscard]] std::string_view slotAreaLabel(core::TattooArea area) noexcept;
+[[nodiscard]] std::optional<std::size_t> findSlotThumbnailViewIndex(
+    const core::TattooSlot& slot, const std::vector<NativeThumbnailView>& views);
+[[nodiscard]] std::vector<core::TextureResource> collectVisibleSlotResources(
+    const core::TattooSlots& slots, std::size_t pageIndex, std::size_t pageSize);
 [[nodiscard]] std::vector<std::string> collectVisibleSlotTexturePaths(
     const core::TattooSlots& slots,
     std::size_t pageIndex,

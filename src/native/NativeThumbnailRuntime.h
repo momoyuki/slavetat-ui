@@ -2,6 +2,7 @@
 
 #include "native/NativeThumbnailController.h"
 #include "textures/TextureCache.h"
+#include "core/TextureResource.h"
 
 #include <functional>
 #include <memory>
@@ -29,6 +30,8 @@ public:
         std::string_view texturePath,
         const NativeThumbnailCancellationCheck& isCurrent,
         textures::TextureCacheTimePoint now) = 0;
+    virtual NativeThumbnailLoadResult load(const core::TextureResource&, const NativeThumbnailCancellationCheck&,
+        textures::TextureCacheTimePoint) { return std::unexpected(NativeThumbnailFailure::broken); }
     virtual void pruneExpired(textures::TextureCacheTimePoint now) = 0;
     virtual void clear() = 0;
     [[nodiscard]] virtual bool setDiskCacheLimit(std::uintmax_t) { return false; }
@@ -65,6 +68,7 @@ public:
     void synchronize(
         NativeThumbnailEpoch epoch,
         std::span<const std::string> texturePaths);
+    void synchronizeResources(NativeThumbnailEpoch epoch, std::span<const core::TextureResource> resources);
     void pump();
     [[nodiscard]] std::vector<NativeThumbnailView> views() const;
     void reset();

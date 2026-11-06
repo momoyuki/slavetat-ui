@@ -99,7 +99,10 @@ std::filesystem::path ThumbnailDiskCache::entryPath(std::string_view texturePath
 
 std::optional<std::vector<std::uint8_t>> ThumbnailDiskCache::load(
     std::string_view texturePath) const {
-    const auto path = entryPath(texturePath);
+    return loadPath(entryPath(texturePath));
+}
+
+std::optional<std::vector<std::uint8_t>> ThumbnailDiskCache::loadPath(const std::filesystem::path& path) const {
     if (path.empty()) return std::nullopt;
     std::error_code error;
     const auto size = std::filesystem::file_size(path, error);
@@ -115,8 +118,11 @@ std::optional<std::vector<std::uint8_t>> ThumbnailDiskCache::load(
 
 void ThumbnailDiskCache::store(std::string_view texturePath,
     std::span<const std::uint8_t> ddsBytes) {
+    storePath(entryPath(texturePath), ddsBytes);
+}
+
+void ThumbnailDiskCache::storePath(const std::filesystem::path& path, std::span<const std::uint8_t> ddsBytes) {
     if (ddsBytes.empty() || ddsBytes.size() > kMaxEntryBytes) return;
-    const auto path = entryPath(texturePath);
     if (path.empty()) return;
     std::error_code error;
     std::filesystem::create_directories(m_directory, error);
@@ -150,6 +156,50 @@ void ThumbnailDiskCache::store(std::string_view texturePath,
         m_estimatedBytes += ddsBytes.size();
         if (m_estimatedBytes > m_maxBytes) (void)prune(m_maxBytes);
     }
+}
+
+std::optional<std::uint64_t> ThumbnailDiskCache::revision(const TextureResource& resource) const {
+    const auto dataRoot = m_looseRoot.parent_path().parent_path().parent_path().parent_path();
+    std::error_code error;
+    const auto root = std::filesystem::weakly_canonical(dataRoot / "textures", error);
+    if (error) return {};
+    const auto candidate = std::filesystem::weakly_canonical(dataRoot / resource.path(), error);
+    if (error) return {};
+    const auto relative = std::filesystem::relative(candidate, root, error);
+    if (error || relative.is_absolute()) return {};
+    bool contained = true;
+    for (const auto& part : relative) if (part == "..") contained = false;
+    const bool loose = contained && std::filesystem::is_regular_file(candidate, error) && !error;
+    const auto stamp = loose ? fileStamp(candidate) : m_archiveStamp;
+    auto hash = appendHash(kHashBasis, "thumbnail-v7:");
+    hash = appendHash(hash, resource.kind() == TextureResourceKind::external ? "external:" : "catalog:");
+    hash = appendHash(hash, resource.path());
+    hash = appendHash(hash, loose ? ":loose:" : ":archive:");
+    hash = appendHash(hash, std::to_string(stamp));
+    return hash;
+}
+
+std::filesystem::path ThumbnailDiskCache::entryPath(const TextureResource& resource) const {
+    if (m_directory.empty()) return {};
+    const auto stamp = revision(resource);
+    if (!stamp) return {};
+    std::ostringstream name;
+    name << std::hex << std::setw(16) << std::setfill('0') << *stamp << ".dds";
+    return m_directory / name.str();
+}
+
+std::optional<std::vector<std::uint8_t>> ThumbnailDiskCache::load(const TextureResource& resource) const {
+    return loadPath(entryPath(resource));
+}
+void ThumbnailDiskCache::store(const TextureResource& resource, std::span<const std::uint8_t> bytes) {
+    storePath(entryPath(resource), bytes);
+}
+
+void ThumbnailDiskCache::store(const TextureResource&, std::span<const std::uint8_t> bytes, std::uint64_t revisionValue) {
+    if (m_directory.empty()) return;
+    std::ostringstream name;
+    name << std::hex << std::setw(16) << std::setfill('0') << revisionValue << ".dds";
+    storePath(m_directory / name.str(), bytes);
 }
 
 bool ThumbnailDiskCache::setMaxBytes(std::uintmax_t maxBytes) {

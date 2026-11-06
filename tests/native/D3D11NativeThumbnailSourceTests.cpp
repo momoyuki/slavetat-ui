@@ -330,6 +330,89 @@ void diskCacheInvalidatesLooseChangesAndPreservesOtherFilesOnClear() {
         "clear should leave unrelated files alone");
 }
 
+void diskCacheSeparatesExternalIdentityAndInvalidatesChanges() {
+    TemporaryDirectory directory;
+    const auto root = directory.path() / "textures" / "actors" / "character" / "slavetats";
+    directory.write(fs::path("textures") / "actors" / "character" / "slavetats" / "mark.dds", {1, 2});
+    stui::textures::ThumbnailDiskCache cache(directory.path() / "cache", root);
+    using stui::textures::TextureResourceKind;
+    const auto catalog = stui::textures::TextureResolver::resource(TextureResourceKind::catalog, "mark.dds");
+    const auto external = stui::textures::TextureResolver::resource(TextureResourceKind::external, "textures/actors/character/slavetats/mark.dds");
+    expect(catalog && external, "valid identities required");
+    cache.store(*catalog, std::vector<std::uint8_t>{3});
+    cache.store(*external, std::vector<std::uint8_t>{4});
+    expect(cache.load(*catalog) == std::vector<std::uint8_t>{3} && cache.load(*external) == std::vector<std::uint8_t>{4}, "resource kinds must not share a cache entry");
+    const auto oldRevision = cache.revision(*external);
+    expect(oldRevision.has_value(), "old source revision must exist");
+    const auto source = root / "mark.dds";
+    fs::last_write_time(source, fs::last_write_time(source) + 1h);
+    cache.store(*external, std::vector<std::uint8_t>{7}, *oldRevision);
+    expect(!cache.load(*external), "changed external file must invalidate its thumbnail");
+    fs::remove(source);
+    expect(!cache.load(*external), "missing loose file must not reuse the loose thumbnail");
+}
+void externalSourceInvalidatesGpuAndFallsBackToArchive() {
+    TemporaryDirectory directory;
+    const auto device = createDevice();
+    const auto dds = makeDds(64, 64);
+    const auto relative = fs::path("textures") / "other" / "mark.dds";
+    directory.write(relative, dds);
+    const auto root = directory.path() / "textures" / "actors" / "character" / "slavetats";
+    int archiveReads = 0;
+    D3D11NativeThumbnailSource source(root, device.Get(), 4, 2min, [&](std::string_view) {
+        ++archiveReads;
+        return TextureBytesResult(dds);
+    }, {}, directory.path() / "cache");
+    const auto identity = stui::textures::TextureResolver::resource(stui::core::TextureResourceKind::external, "textures/other/mark.dds");
+    expect(identity.has_value(), "valid identity");
+    const auto first = source.load(*identity, [] { return true; }, {});
+    expect(first && archiveReads == 0, "loose file should win");
+    const auto path = directory.path() / relative;
+    fs::last_write_time(path, fs::last_write_time(path) + 1h);
+    const auto second = source.load(*identity, [] { return true; }, {});
+    expect(second && *first != *second, "changed loose source must invalidate GPU entry");
+    fs::remove(path);
+    const auto third = source.load(*identity, [] { return true; }, {});
+    expect(third && archiveReads == 1, "missing loose source must fall back to archive");
+}
+
+void externalSourceFallsBackForEscapingSymlink() {
+    TemporaryDirectory directory;
+    TemporaryDirectory outside;
+    const auto device = createDevice();
+    const auto dds = makeDds(64, 64);
+    outside.write("mark.dds", dds);
+    fs::create_directories(directory.path() / "textures" / "other");
+    std::error_code error;
+    fs::create_symlink(outside.path() / "mark.dds", directory.path() / "textures" / "other" / "mark.dds", error);
+    if (error) { std::cout << "SKIP external source symlink unavailable: " << error.message() << '\n'; return; }
+    const auto root = directory.path() / "textures" / "actors" / "character" / "slavetats";
+    int archiveReads = 0;
+    D3D11NativeThumbnailSource source(root, device.Get(), 4, 2min, [&](std::string_view) {
+        ++archiveReads;
+        return TextureBytesResult(dds);
+    }, {}, directory.path() / "cache");
+    const auto identity = stui::textures::TextureResolver::resource(stui::core::TextureResourceKind::external, "textures/other/mark.dds");
+    expect(identity && source.load(*identity, [] { return true; }, {}) && archiveReads == 1,
+        "escaping symlink must use archive fallback");
+}
+void loadsExternalIdentityThroughNativeSource() {
+    TemporaryDirectory directory;
+    const auto device = createDevice();
+    const auto dds = makeDds(64, 64);
+    std::vector<std::string> reads;
+    const auto root = directory.path() / "textures" / "actors" / "character" / "slavetats";
+    D3D11NativeThumbnailSource source(root, device.Get(), 4, 2min, [&](std::string_view path) {
+        reads.emplace_back(path);
+        return TextureBytesResult(dds);
+    }, {}, directory.path() / "cache");
+    using stui::textures::TextureResourceKind;
+    const auto identity = stui::textures::TextureResolver::resource(TextureResourceKind::external, "textures/other/mark.dds");
+    expect(identity && source.load(*identity, [] { return true; }, {}).has_value(), "external resource must load");
+    expect(reads == std::vector<std::string>{"textures\\other\\mark.dds"}, "external request must use its Data path");
+    source.clear();
+    expect(source.load(*identity, [] { return true; }, {}).has_value() && reads.size() == 1, "disk cache must reuse external resource");
+}
 void prebuildWritesDiskWithoutUploadingGpuTexture() {
     TemporaryDirectory directory;
     const auto device = createDevice();
@@ -551,6 +634,10 @@ int main() {
     failures += run("small DDS also reuses disk cache", smallDdsAlsoUsesDiskCache);
     failures += run("disk cache validates source and clears only cache files",
         diskCacheInvalidatesLooseChangesAndPreservesOtherFilesOnClear);
+    failures += run("external disk identity and invalidation", diskCacheSeparatesExternalIdentityAndInvalidatesChanges);
+    failures += run("external source invalidates GPU and falls back", externalSourceInvalidatesGpuAndFallsBackToArchive);
+    failures += run("external source rejects symlink and falls back", externalSourceFallsBackForEscapingSymlink);
+    failures += run("external identity loads through native source", loadsExternalIdentityThroughNativeSource);
     failures += run("prebuild writes disk without GPU upload",
         prebuildWritesDiskWithoutUploadingGpuTexture);
     failures += run("prebuild repairs corrupt disk entry",

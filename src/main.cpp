@@ -44,6 +44,7 @@ namespace {
 
 repository::TattooCatalogStore g_tattooCatalogStore;
 runtime::ApplicationRuntime g_applicationRuntime;
+runtime::skee::OverrideInterface* g_externalProbeInterface{};
 native::NativeCatalogBrowserModel g_nativeCatalogBrowser(
     [] { return g_tattooCatalogStore.snapshot(); });
 native::NativeSlotWorkflowModel g_nativeSlotWorkflow(g_nativeCatalogBrowser);
@@ -59,7 +60,15 @@ native::NativeSlotWorkflowRuntime g_nativeSlotWorkflowRuntime(
     [] { return native::scanNearbyActors(); },
     [](std::uint32_t actorFormId, core::TattooArea area) {
         auto result = g_applicationRuntime.service().querySlots(actorFormId, area);
-        if (result) native::logCatalogPreviewNodeCapabilities(*result);
+        if (result) {
+            native::logCatalogPreviewNodeCapabilities(*result);
+            try {
+                runtime::collectExternalTextures(*result, g_externalProbeInterface);
+            } catch (...) {
+                for (auto& slot : result->slots) slot.externalThumbnail.reset();
+                logger::warn("SlaveTatsUI: external thumbnail metadata unavailable");
+            }
+        }
         return result;
     },
     [](const core::ApplyTattooRequest& request) {
@@ -300,6 +309,7 @@ static void onSKSEMessage(SKSE::MessagingInterface::Message* msg) {
                     : interface
                         ? stui::runtime::skee::OverrideCapability::version2Detected
                         : stui::runtime::skee::OverrideCapability::interfaceUnavailable;
+            g_externalProbeInterface = interface;
             if (interface) {
                 g_applicationRuntime.runtime().bindCatalogPreview(
                     stui::runtime::makeSkyrimCatalogPreviewBindings(interface));
