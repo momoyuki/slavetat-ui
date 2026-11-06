@@ -21,6 +21,8 @@ public:
     int restored{};
     int moved{};
     int remembered{};
+    int discarded{};
+    void discard() override { ++discarded; ++restored; }
     void rememberView(std::uint32_t, bool) override { ++remembered; }
 
     bool begin(std::uint32_t formId, bool menuOnRight) override {
@@ -123,6 +125,16 @@ void invalidatedPortCanAcquireOnNextGesture() {
 
 int main() {
     try {
+        {
+            FakeCamera port;
+            stui::native::BrowserCameraSession session(port);
+            session.setTarget(0x14); session.move(1,0,0);
+            session.invalidate();
+            expect(!session.active() && port.discarded == 1 && port.restored == 1,
+                "load/newgame must discard without normal-close capture");
+            session.close();
+            expect(port.restored == 1, "invalidation cannot restore twice");
+        }
         idlePlayerViewLeavesSmoothCamInControlUntilGesture();
         targetSwitchAndUnloadNeverFallbackToPlayer();
         refusedControlNeverMovesCamera();

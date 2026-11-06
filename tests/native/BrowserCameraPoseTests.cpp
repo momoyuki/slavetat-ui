@@ -238,6 +238,13 @@ void sessionRecallKeepsSidesSeparateAndClearsOnGameReset() {
 }
 int main() {
     try {
+        {
+            using namespace stui::native;
+            expect(!captureBrowserCameraRelativePose({{5000, 0, 80}, 0, 0},
+                {0, 0, 80}, {0, 0, 0}), "saved camera offsets must be bounded");
+            expect(!restoreBrowserCameraRelativePose({{0, -100, 80}, {0, 0, 80}, 0, 2},
+                {0, 0, 0}), "saved pitch must reject out-of-range values");
+        }
         currentPanCanBecomeOpeningPan();
         stateHandoffAndGestures();
         controlsRestoreAfterViewReplacement();

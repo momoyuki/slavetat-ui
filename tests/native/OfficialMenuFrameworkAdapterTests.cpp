@@ -1711,7 +1711,8 @@ void nullSnapshotModelHasSafeEmptyPageWithoutImGui() {
         const std::function<void(std::uint32_t, stui::native::BrowserCameraPointerInput)>&,
         const std::function<void()>&,
         stui::runtime::MenuSideSetting*,
-        const std::function<std::optional<stui::native::BrowserCameraPan>()>&) =
+        const std::function<std::optional<stui::native::BrowserCameraPan>()>&,
+        stui::runtime::ThumbnailBackgroundSetting*) =
         &stui::native::OfficialMenuFrameworkAdapter::renderFoundation;
     (void)render;
 }

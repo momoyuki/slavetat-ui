@@ -29,6 +29,7 @@ struct BrowserCameraRelativePose {
     CameraVector cameraOffset{}, pivotOffset{};
     float yaw{}, pitch{};
 };
+[[nodiscard]] bool validBrowserCameraRelativePose(const BrowserCameraRelativePose& pose) noexcept;
 struct BrowserCameraRecalledView {
     BrowserCameraView view;
     CameraVector pivot{};

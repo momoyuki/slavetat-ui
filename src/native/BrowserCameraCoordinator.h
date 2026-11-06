@@ -23,6 +23,7 @@ public:
     void control(const BrowserCameraMotion& motion);
     void refresh();
     void resetGameSession();
+    [[nodiscard]] bool clearSavedViews(const std::function<bool()>& clear);
 
 private:
     void scheduleIfNeeded();

@@ -22,6 +22,8 @@
 #include "runtime/HotkeyBinding.h"
 #include "runtime/MenuSideSetting.h"
 #include "runtime/ThumbnailCacheSetting.h"
+#include "runtime/ThumbnailBackgroundSetting.h"
+#include "native/BrowserCameraPreferenceStore.h"
 #include "runtime/PluginConfigFile.h"
 #include "runtime/FavoriteStore.h"
 #include "runtime/RecentTattooStore.h"
@@ -209,6 +211,8 @@ native::FlickLauncher* g_flickLauncher{};
 std::unique_ptr<runtime::HotkeyBinding> g_hotkeyBinding;
 std::unique_ptr<runtime::MenuSideSetting> g_menuSideSetting;
 std::unique_ptr<runtime::ThumbnailCacheSetting> g_thumbnailCacheSetting;
+std::unique_ptr<runtime::ThumbnailBackgroundSetting> g_thumbnailBackgroundSetting;
+std::shared_ptr<native::BrowserCameraPreferenceStore> g_browserCameraPreferences;
 SKSEMenuFramework::Model::InputEvent* g_hotkeyInputEvent{};
 SKSEMenuFramework::Model::Event* g_menuLifecycleEvent{};
 
@@ -515,6 +519,13 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
     if (!g_thumbnailCacheSetting->load()) {
         logger::warn("SlaveTatsUI: invalid/unavailable thumbnail disk cache setting; using 256 MiB");
     }
+    g_thumbnailBackgroundSetting = std::make_unique<runtime::ThumbnailBackgroundSetting>(g_pluginConfig);
+    if (!g_thumbnailBackgroundSetting->load())
+        logger::warn("SlaveTatsUI: invalid/unavailable thumbnail background; using black");
+    g_browserCameraPreferences = std::make_shared<native::BrowserCameraPreferenceStore>(g_pluginConfig);
+    if (!g_browserCameraPreferences->load())
+        logger::warn("SlaveTatsUI: invalid/unavailable saved Player views; using initial framing for invalid sides");
+    g_browserCameraPort.setPreferenceStore(g_browserCameraPreferences);
     g_menuSideSetting = std::make_unique<runtime::MenuSideSetting>(g_pluginConfig);
     if (!g_menuSideSetting->load()) {
         logger::warn("SlaveTatsUI: failed to load browser position; defaulting to left");
@@ -556,11 +567,18 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
             },
             [&menu] { menu.close(); },
             g_menuSideSetting.get(),
-            [] { return g_browserCameraPort.currentPan(); });
+            [] { return g_browserCameraPort.currentPan(); },
+            g_thumbnailBackgroundSetting.get());
     }, [] {
         return native::OfficialMenuFrameworkAdapter::renderLauncher(
             *g_hotkeyBinding, *g_menuSideSetting, *g_thumbnailCacheSetting, *g_nativeThumbnailRuntime,
-            g_nativeCatalogBrowser);
+            g_nativeCatalogBrowser, [] {
+                const bool cleared = g_browserCameraCoordinator.clearSavedViews([] {
+                    return g_browserCameraPreferences->clear();
+                });
+                if (!cleared) logger::warn("SlaveTatsUI: failed to clear saved Player browser views");
+                return cleared;
+            });
     });
     nativeMenu.setOpenGuard([] {
         auto* ui = RE::UI::GetSingleton();

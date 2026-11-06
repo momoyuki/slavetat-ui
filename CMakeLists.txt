@@ -146,6 +146,7 @@ set(sources
     src/main.cpp
     src/native/NativeMenu.cpp
     src/native/BrowserCameraSession.cpp
+    src/native/BrowserCameraPreferenceStore.cpp
     src/native/BrowserCameraPose.cpp
     src/native/BrowserCameraCoordinator.cpp
     src/native/SkyrimBrowserCameraPort.cpp
@@ -166,6 +167,7 @@ set(sources
     src/runtime/OverlaySlotConfiguration.cpp
     src/runtime/ApplicationRuntime.cpp
     src/runtime/HotkeyBinding.cpp
+    src/runtime/ThumbnailBackgroundSetting.cpp
     src/runtime/ThumbnailCacheSetting.cpp
     src/runtime/MenuSideSetting.cpp
     src/runtime/PluginConfigFile.cpp
@@ -220,6 +222,21 @@ target_link_libraries(${PROJECT_NAME}
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
 if(BUILD_TESTING)
+    add_executable(BrowserCameraPreferenceStoreTests
+        tests/native/BrowserCameraPreferenceStoreTests.cpp
+        src/native/BrowserCameraPreferenceStore.cpp
+        src/native/BrowserCameraPose.cpp
+        src/runtime/PluginConfigFile.cpp)
+    target_include_directories(BrowserCameraPreferenceStoreTests PRIVATE src)
+    target_link_libraries(BrowserCameraPreferenceStoreTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME BrowserCameraPreferenceStoreTests COMMAND BrowserCameraPreferenceStoreTests)
+    add_executable(ThumbnailBackgroundSettingTests
+        tests/runtime/ThumbnailBackgroundSettingTests.cpp
+        src/runtime/ThumbnailBackgroundSetting.cpp
+        src/runtime/PluginConfigFile.cpp)
+    target_include_directories(ThumbnailBackgroundSettingTests PRIVATE src)
+    target_link_libraries(ThumbnailBackgroundSettingTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME ThumbnailBackgroundSettingTests COMMAND ThumbnailBackgroundSettingTests)
     add_executable(BrowserCameraPoseTests
         src/native/BrowserCameraPose.cpp
         tests/native/BrowserCameraPoseTests.cpp
@@ -429,6 +446,7 @@ if(BUILD_TESTING)
         src/native/OfficialMenuFrameworkAdapter.cpp
         src/native/CatalogPreviewModel.cpp
         src/runtime/HotkeyBinding.cpp
+        src/runtime/ThumbnailBackgroundSetting.cpp
         src/runtime/ThumbnailCacheSetting.cpp
         src/runtime/MenuSideSetting.cpp
         src/runtime/PluginConfigFile.cpp

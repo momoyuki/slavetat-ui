@@ -78,6 +78,19 @@ std::optional<BrowserCameraView> browserCameraViewFromForward(
     return BrowserCameraView{position, std::atan2(forward[0],forward[1]),
         -std::asin(std::clamp(forward[2]/length,-1.0F,1.0F))};
 }
+bool validBrowserCameraRelativePose(const BrowserCameraRelativePose& pose) noexcept {
+    if (!finiteVector(pose.cameraOffset) || !finiteVector(pose.pivotOffset) ||
+        !std::isfinite(pose.yaw) || std::abs(pose.yaw)>3.141592654F ||
+        !std::isfinite(pose.pitch) || std::abs(pose.pitch)>1.570796327F) return false;
+    CameraVector difference;
+    for (int i=0; i<3; ++i) {
+        if (std::abs(pose.cameraOffset[i])>4096 || std::abs(pose.pivotOffset[i])>4096)
+            return false;
+        difference[i]=pose.cameraOffset[i]-pose.pivotOffset[i];
+    }
+    const auto distance=vectorLength(difference);
+    return distance>=1 && distance<=4096;
+}
 std::optional<BrowserCameraRelativePose> captureBrowserCameraRelativePose(
     const BrowserCameraView& view, const CameraVector& pivot,
     const CameraVector& actorPosition) noexcept {
@@ -91,15 +104,13 @@ std::optional<BrowserCameraRelativePose> captureBrowserCameraRelativePose(
     }
     if (!finiteVector(pose.cameraOffset) || !finiteVector(pose.pivotOffset))
         return std::nullopt;
-    pose.yaw = view.yaw;
+    pose.yaw = std::remainder(view.yaw, 6.283185307F);
     pose.pitch = view.pitch;
-    return pose;
+    return validBrowserCameraRelativePose(pose) ? std::optional{pose} : std::nullopt;
 }
 std::optional<BrowserCameraRecalledView> restoreBrowserCameraRelativePose(
     const BrowserCameraRelativePose& pose, const CameraVector& actorPosition) noexcept {
-    if (!finiteVector(pose.cameraOffset) || !finiteVector(pose.pivotOffset) ||
-        !finiteVector(actorPosition) || !std::isfinite(pose.yaw) ||
-        !std::isfinite(pose.pitch)) return std::nullopt;
+    if (!validBrowserCameraRelativePose(pose) || !finiteVector(actorPosition)) return std::nullopt;
     BrowserCameraRecalledView result;
     for (int i = 0; i < 3; ++i) {
         result.view.position[i] = actorPosition[i] + pose.cameraOffset[i];

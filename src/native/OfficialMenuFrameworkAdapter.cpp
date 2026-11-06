@@ -2879,7 +2879,8 @@ std::string_view launcherModVersionLabel() noexcept {
 bool OfficialMenuFrameworkAdapter::renderLauncher(
     runtime::HotkeyBinding& hotkey, runtime::MenuSideSetting& menuSide,
     runtime::ThumbnailCacheSetting& cacheSetting,
-    NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog) {
+    NativeThumbnailRuntime& thumbnails, NativeCatalogBrowserModel& catalog,
+    const std::function<bool()>& clearSavedCameraViews) {
     ImGuiMCP::TextUnformatted("Open SlaveTatsUI when you are ready to browse tattoos.");
     ImGuiMCP::TextUnformatted(launcherModVersionLabel().data());
     const auto hotkeyLabel = hotkey.label();
@@ -2943,6 +2944,16 @@ bool OfficialMenuFrameworkAdapter::renderLauncher(
     }
     if (cameraPanSaveFailed) {
         ImGuiMCP::TextUnformatted("Could not save the initial camera Pan.");
+    }
+    if (clearSavedCameraViews) {
+        static std::optional<bool> savedCameraViewsCleared;
+        if (ImGuiMCP::Button("Reset saved Player views"))
+            savedCameraViewsCleared = clearSavedCameraViews();
+        if (savedCameraViewsCleared.has_value()) {
+            ImGuiMCP::TextUnformatted(*savedCameraViewsCleared
+                ? "Saved Player views cleared. Initial framing applies next opening."
+                : "Unable to clear saved Player views.");
+        }
     }
     auto limitState = thumbnails.diskCacheLimitState();
     const auto requestLimit = [&thumbnails, &cacheSetting](std::uint32_t limit) {
@@ -3029,9 +3040,14 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     const std::function<void(std::uint32_t, BrowserCameraPointerInput)>& cameraIntent,
     const std::function<void()>& close,
     runtime::MenuSideSetting* panSettings,
-    const std::function<std::optional<BrowserCameraPan>()>& currentPan) {
+    const std::function<std::optional<BrowserCameraPan>()>& currentPan,
+    runtime::ThumbnailBackgroundSetting* backgroundSetting) {
     g_renderMenuSide = side;
-    static ThumbnailBackgroundMode backgroundMode = ThumbnailBackgroundMode::black;
+    static ThumbnailBackgroundMode sessionBackgroundMode = ThumbnailBackgroundMode::black;
+    auto backgroundMode = backgroundSetting
+        ? (backgroundSetting->white() ? ThumbnailBackgroundMode::white : ThumbnailBackgroundMode::black)
+        : sessionBackgroundMode;
+    static bool backgroundSaveFailed = false;
     slotRuntime.pump();
     if (dispatchMenuCloseRequest(workflow, close)) {
         return;
@@ -3204,10 +3220,19 @@ void OfficialMenuFrameworkAdapter::renderFoundation(
     if (ImGuiMCP::Button(backgroundMode == ThumbnailBackgroundMode::black
                 ? "Thumbnail BG: Black"
                 : "Thumbnail BG: White")) {
-        backgroundMode = toggledThumbnailBackgroundMode(backgroundMode);
+        const auto nextMode = toggledThumbnailBackgroundMode(backgroundMode);
+        backgroundSaveFailed = backgroundSetting &&
+            !backgroundSetting->select(nextMode == ThumbnailBackgroundMode::white);
+        if (!backgroundSaveFailed) {
+            backgroundMode = nextMode;
+            if (!backgroundSetting) sessionBackgroundMode = nextMode;
+        }
     }
     ImGuiMCP::SameLine();
     ImGuiMCP::Text("%zu tattoos", model.scrollPage().matchedEntries);
+
+    if (backgroundSaveFailed)
+        ImGuiMCP::TextUnformatted("Could not save the thumbnail background.");
 
     constexpr std::size_t searchCapacity = 256;
     std::array<char, searchCapacity> searchBuffer{};
