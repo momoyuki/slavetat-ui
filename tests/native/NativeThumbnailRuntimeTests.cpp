@@ -1,4 +1,5 @@
 #include "native/NativeThumbnailRuntime.h"
+#include "textures/TextureResolver.h"
 
 #include "repository/TattooCatalogLoader.h"
 
@@ -104,6 +105,12 @@ public:
         return readyTexture();
     }
 
+    NativeThumbnailLoadResult load(const stui::core::TextureResource& resource,
+        const NativeThumbnailCancellationCheck& current, TextureCacheTimePoint) override {
+        typedPaths.push_back(resource.path());
+        return current() ? NativeThumbnailLoadResult(readyTexture()) : std::unexpected(NativeThumbnailFailure::cancelled);
+    }
+    std::vector<std::string> typedPaths;
     void pruneExpired(TextureCacheTimePoint now) override {
         pruneTimes.push_back(now);
     }
@@ -113,12 +120,34 @@ public:
         cached.clear();
     }
 
+    bool clearDiskCache() override {
+        ++diskClearCount;
+        if (throwOnDiskClear) throw std::runtime_error("disk clear failure");
+        return diskClearSucceeds;
+    }
+
+    bool prepareDiskCache(std::string_view path) override {
+        preparedPaths.emplace_back(path);
+        return true;
+    }
+    std::uintmax_t diskCacheBytes() const override { return 65536; }
+
     bool available() const noexcept override {
         return isAvailable;
     }
 
+    bool setDiskCacheLimit(std::uintmax_t bytes) override {
+        limitRequests.push_back(bytes);
+        if (throwOnLimit) throw std::runtime_error("limit failure");
+        return limitSucceeds;
+    }
+    bool limitSucceeds{true};
+    bool throwOnLimit{};
+    std::vector<std::uintmax_t> limitRequests;
     bool isAvailable{true};
     bool throwOnLoad{};
+    bool throwOnDiskClear{};
+    bool diskClearSucceeds{true};
     std::unordered_map<std::string, std::shared_ptr<D3D11Texture>> cached;
     std::vector<std::string> findPaths;
     std::vector<TextureCacheTimePoint> findTimes;
@@ -127,6 +156,8 @@ public:
     std::vector<bool> cancellationResults;
     std::vector<TextureCacheTimePoint> pruneTimes;
     std::size_t clearCount{};
+    std::size_t diskClearCount{};
+    std::vector<std::string> preparedPaths;
 };
 
 struct RuntimeFixture {
@@ -162,10 +193,10 @@ void synchronizesPresentationNeutralVisiblePaths() {
     fixture.runtime->synchronize(epoch, paths);
 
     const auto views = fixture.runtime->views();
-    expect(views.size() == 6 && views.front().texturePath == "slot/a.dds" &&
-            views.back().texturePath == "slot/f.dds",
-        "expected generic runtime synchronization limited to six visible paths");
-    expect(fixture.source->findPaths.size() == 6,
+    expect(views.size() == paths.size() && views.front().texturePath == "slot/a.dds" &&
+            views.back().texturePath == "slot/ignored.dds",
+        "expected generic runtime synchronization to cover multiple visible gallery rows");
+    expect(fixture.source->findPaths.size() == paths.size(),
         "expected generic runtime to share the existing texture source");
 }
 
@@ -224,11 +255,16 @@ void resetClearsControllerAndSource() {
     RuntimeFixture fixture;
     const auto page = pageOfSix("reset-");
     fixture.runtime->synchronize(snapshot(page), page);
+    fixture.runtime->pump();
+    expect(fixture.source->pruneTimes.size() == 1, "expected initial expiry prune");
 
     fixture.runtime->reset();
 
     expect(fixture.source->clearCount == 1, "expected reset to clear texture source");
     expect(fixture.runtime->views().empty(), "expected reset to clear thumbnail views");
+    fixture.runtime->pump();
+    expect(fixture.source->pruneTimes.size() == 2,
+        "expected expiry prune after reset without waiting one second");
 }
 
 void leavesPlaceholdersWhenSourceIsUnavailable() {
@@ -310,6 +346,148 @@ void sourceFailureInTaskCompletesRequestAndAllowsQueueProgress() {
         "expected queue to advance after source failure");
 }
 
+void buildsDiskCacheOneEntryPerPump() {
+    RuntimeFixture fixture;
+    fixture.runtime->startDiskCacheBuild({"a.dds", "a.dds", "A.DDS",
+        "b\\part.dds", "B/part.dds"});
+    expect(fixture.runtime->diskCacheBuildStatus().total == 2,
+        "build should deduplicate texture paths");
+    fixture.runtime->pumpDiskCacheBuild();
+    fixture.runtime->pumpDiskCacheBuild();
+    expect(fixture.scheduled.size() == 1,
+        "only one cache build task should be in flight");
+    fixture.scheduled.front()();
+    fixture.runtime->pumpDiskCacheBuild();
+    expect(fixture.scheduled.size() == 2,
+        "second entry should schedule after first completes");
+    fixture.scheduled.back()();
+    const auto status = fixture.runtime->diskCacheBuildStatus();
+    expect(status.completed == 2 && !status.active && status.failed == 0,
+        "build should report completed progress");
+    expect(fixture.source->preparedPaths ==
+            std::vector<std::string>{"a.dds", "b\\part.dds"},
+        "build should process each unique path once");
+    expect(fixture.runtime->diskCacheBytes() == 65536,
+        "runtime should expose disk usage");
+}
+
+void clearDiskCacheRunsAfterRenderCallback() {
+    RuntimeFixture fixture;
+    expect(fixture.runtime->requestDiskCacheClear(),
+        "clear request should be accepted");
+    expect(fixture.scheduled.size() == 1 && fixture.source->clearCount == 0 &&
+        fixture.source->diskClearCount == 0,
+        "request must schedule work without clearing in the render callback");
+    expect(fixture.runtime->diskCacheClearState() ==
+            stui::native::ThumbnailCacheClearState::pending,
+        "launcher should observe pending clear work");
+    expect(!fixture.runtime->requestDiskCacheClear() && fixture.scheduled.size() == 1,
+        "a pending clear must not be queued twice");
+    fixture.runtime->startDiskCacheBuild({"a.dds"});
+    expect(!fixture.runtime->diskCacheBuildStatus().active,
+        "a cache build must not start while clearing");
+    fixture.scheduled.front()();
+    expect(fixture.source->clearCount == 1 && fixture.source->diskClearCount == 1 &&
+        fixture.runtime->diskCacheClearState() ==
+            stui::native::ThumbnailCacheClearState::succeeded,
+        "scheduled task should clear memory and disk and publish success");
+}
+
+void clearDiskCacheReportsSchedulerAndSourceFailures() {
+    RuntimeFixture fixture;
+    fixture.schedulerThrows = true;
+    expect(!fixture.runtime->requestDiskCacheClear() &&
+        fixture.runtime->diskCacheClearState() ==
+            stui::native::ThumbnailCacheClearState::failed &&
+        fixture.source->diskClearCount == 0,
+        "scheduler rejection should fail without touching the disk");
+    fixture.source->throwOnDiskClear = true;
+    expect(fixture.runtime->requestDiskCacheClear() && fixture.scheduled.size() == 1,
+        "failed request should be retryable");
+    fixture.scheduled.front()();
+    expect(fixture.runtime->diskCacheClearState() ==
+            stui::native::ThumbnailCacheClearState::failed &&
+        fixture.source->diskClearCount == 1,
+        "source exception should report failure without escaping the task");
+}
+
+void failedRollbackReportsActualAppliedBudget() {
+    RuntimeFixture fixture;
+    expect(fixture.runtime->requestDiskCacheLimit(128, [&](auto) {
+        fixture.source->limitSucceeds = false;
+        return false;
+    }), "rollback failure fixture should schedule");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitState() == stui::native::ThumbnailCacheClearState::failed &&
+        fixture.runtime->diskCacheLimitMiB() == 128,
+        "failed rollback must report actual source budget even though persistence failed");
+}
+
+void limitChangesAreScheduledExclusiveAndRetryable() {
+    RuntimeFixture fixture;
+    using State = stui::native::ThumbnailCacheClearState;
+    unsigned saved = 0;
+    expect(fixture.runtime->requestDiskCacheLimit(128, [&](auto value) {
+        saved = value; return true;
+    }), "limit request should be accepted");
+    expect(fixture.scheduled.size() == 1 && fixture.source->limitRequests.empty() && saved == 0 &&
+        fixture.runtime->diskCacheLimitMiB() == 256 && fixture.runtime->diskCacheLimitState() == State::pending,
+        "render intent must not write config or delete cache files");
+    expect(!fixture.runtime->requestDiskCacheClear() && !fixture.runtime->requestDiskCacheLimit(512),
+        "pending limit must block clear and duplicate limits");
+    fixture.runtime->startDiskCacheBuild({"a.dds"});
+    expect(!fixture.runtime->diskCacheBuildStatus().active, "pending limit blocks build");
+    fixture.scheduled.back()();
+    expect(saved == 128 && fixture.runtime->diskCacheLimitMiB() == 128 &&
+        fixture.source->limitRequests.back() == 128ULL * 1024 * 1024 &&
+        fixture.runtime->diskCacheLimitState() == State::succeeded,
+        "scheduled limit must publish applied value after source and save succeed");
+    expect(fixture.runtime->requestDiskCacheLimit(512, [](auto) { return false; }),
+        "save failure fixture should schedule");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitMiB() == 128 &&
+        fixture.runtime->diskCacheLimitState() == State::failed &&
+        fixture.source->limitRequests.back() == 128ULL * 1024 * 1024,
+        "save failure must restore previous source budget and report failure");
+    fixture.source->limitSucceeds = false;
+    saved = 0;
+    expect(fixture.runtime->requestDiskCacheLimit(512, [&](auto value) { saved = value; return true; }),
+        "source failure fixture should schedule");
+    fixture.scheduled.back()();
+    expect(saved == 0 && fixture.runtime->diskCacheLimitState() == State::failed,
+        "source failure must not persist desired value");
+    fixture.source->limitSucceeds = true;
+    fixture.source->throwOnLimit = true;
+    expect(fixture.runtime->requestDiskCacheLimit(512), "source exception fixture should schedule");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitState() == State::failed, "source exception releases guard");
+    fixture.source->throwOnLimit = false;
+    fixture.schedulerThrows = true;
+    expect(!fixture.runtime->requestDiskCacheLimit(512) &&
+        fixture.runtime->diskCacheLimitState() == State::failed, "scheduler exception reports failure");
+    expect(fixture.runtime->requestDiskCacheLimit(512), "failed operation should allow retry");
+    fixture.scheduled.back()();
+    expect(fixture.runtime->diskCacheLimitMiB() == 512, "startup/no-save operation applies loaded budget");
+    expect(!fixture.runtime->requestDiskCacheLimit(257), "invalid limit must not schedule");
+    fixture.runtime->startDiskCacheBuild({"a.dds"});
+    expect(!fixture.runtime->requestDiskCacheLimit(128), "active build blocks limit");
+    fixture.runtime->reset();
+    expect(fixture.runtime->requestDiskCacheClear(), "clear fixture should schedule");
+    expect(!fixture.runtime->requestDiskCacheLimit(128), "pending clear blocks limit");
+}
+
+void schedulesTypedExternalResource() {
+    RuntimeFixture fixture;
+    const auto image = stui::textures::TextureResolver::resource(stui::core::TextureResourceKind::external, "textures/other/mark.dds");
+    expect(image.has_value(), "expected valid image");
+    const std::vector<stui::core::TextureResource> resources{*image};
+    fixture.runtime->synchronizeResources(std::make_shared<int>(1), resources);
+    fixture.runtime->pump();
+    expect(fixture.scheduled.size() == 1, "typed request must be scheduled");
+    fixture.scheduled.back()();
+    expect(fixture.source->typedPaths == std::vector<std::string>{image->path()}, "source must receive the typed identity");
+    expect(fixture.runtime->views().front().status == NativeThumbnailStatus::ready, "completion must publish the image");
+}
 template <class Test>
 int run(std::string_view name, Test&& test) {
     try {
@@ -326,6 +504,9 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("schedules typed external resource", schedulesTypedExternalResource);
+    failures += run("failed rollback reports actual budget", failedRollbackReportsActualAppliedBudget);
+    failures += run("limit changes are scheduled exclusive and retryable", limitChangesAreScheduledExclusiveAndRetryable);
     failures += run("synchronizes presentation-neutral visible paths", synchronizesPresentationNeutralVisiblePaths);
     failures += run("schedules only one request at a time", schedulesOnlyOneRequestAtATime);
     failures += run("does not schedule cache hits", doesNotScheduleCacheHits);
@@ -339,5 +520,9 @@ int main() {
     failures += run(
         "source failure in task completes request and allows queue progress",
         sourceFailureInTaskCompletesRequestAndAllowsQueueProgress);
+    failures += run("builds disk cache one entry per pump", buildsDiskCacheOneEntryPerPump);
+    failures += run("clear disk cache runs after render callback", clearDiskCacheRunsAfterRenderCallback);
+    failures += run("clear disk cache reports scheduler and source failures",
+        clearDiskCacheReportsSchedulerAndSourceFailures);
     return failures == 0 ? 0 : 1;
 }

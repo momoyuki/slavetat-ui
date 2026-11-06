@@ -7,7 +7,8 @@
 namespace stui::native {
 namespace {
 
-constexpr std::size_t kMaximumVisiblePaths = 6;
+constexpr std::size_t kMaximumVisiblePaths = 96;
+constexpr std::size_t kMaximumLegacyPagePaths = 6;
 
 bool sameRequest(
     const NativeThumbnailRequest& left,
@@ -36,9 +37,9 @@ void NativeThumbnailController::synchronize(
     std::span<const repository::TattooDefinition> entries,
     const NativeThumbnailCacheLookup& lookup) {
     std::vector<std::string> texturePaths;
-    texturePaths.reserve(kMaximumVisiblePaths);
+    texturePaths.reserve(kMaximumLegacyPagePaths);
     for (const auto& entry : entries) {
-        if (texturePaths.size() == kMaximumVisiblePaths) {
+        if (texturePaths.size() == kMaximumLegacyPagePaths) {
             break;
         }
         const auto texturePath = canonicalizeTexturePath(entry.texturePath);
@@ -119,13 +120,15 @@ void NativeThumbnailController::synchronize(
     m_pendingEpoch.reset();
     m_pendingPaths.clear();
 
-    if (m_epoch != epoch) {
+    const bool sameEpoch = m_epoch == epoch;
+    if (!sameEpoch) {
         m_epoch = std::move(epoch);
         m_negativeFailures.clear();
         m_deviceUnavailablePaths.clear();
     }
 
     ++m_generation;
+    auto previousViews = std::move(m_views);
     m_views.clear();
     m_views.reserve(texturePaths.size());
     m_queuedPaths.clear();
@@ -140,6 +143,16 @@ void NativeThumbnailController::synchronize(
         } else if (cachedTextures[index]) {
             view.status = NativeThumbnailStatus::ready;
             view.texture = std::move(cachedTextures[index]);
+        } else if (sameEpoch) {
+            const auto previous = std::ranges::find(previousViews, texturePath,
+                &NativeThumbnailView::texturePath);
+            if (previous != previousViews.end() &&
+                previous->status == NativeThumbnailStatus::ready && previous->texture) {
+                view.status = NativeThumbnailStatus::ready;
+                view.texture = previous->texture;
+            } else {
+                shouldQueue = true;
+            }
         } else {
             shouldQueue = true;
         }
@@ -147,6 +160,28 @@ void NativeThumbnailController::synchronize(
         if (shouldQueue) {
             queueIfEligibleLocked(texturePath);
         }
+    }
+}
+
+void NativeThumbnailController::synchronizeResources(NativeThumbnailEpoch epoch,
+    std::span<const core::TextureResource> resources) {
+    std::vector<std::string> keys;
+    std::unordered_map<std::string, core::TextureResource> identities;
+    keys.reserve(resources.size());
+    for (const auto& resource : resources) {
+        const auto key = canonicalizeTexturePath(
+            std::string(resource.kind() == core::TextureResourceKind::external ? ":external:" : ":catalog:") + resource.path());
+        if (!identities.contains(key)) keys.push_back(key);
+        identities.insert_or_assign(key, resource);
+    }
+    synchronize(epoch, keys, {});
+    std::scoped_lock lock(m_mutex);
+    if (m_epoch != epoch || m_views.size() != keys.size() ||
+        !std::ranges::equal(m_views, keys, {}, &NativeThumbnailView::texturePath)) return;
+    m_resources = std::move(identities);
+    for (auto& view : m_views) {
+        const auto found = m_resources.find(view.texturePath);
+        view.resource = found == m_resources.end() ? std::nullopt : std::optional(found->second);
     }
 }
 
@@ -160,6 +195,9 @@ std::optional<NativeThumbnailRequest> NativeThumbnailController::takeNextRequest
         .generation = m_generation,
         .texturePath = std::move(m_queuedPaths.front()),
     };
+    if (const auto found = m_resources.find(request.texturePath); found != m_resources.end()) {
+        request.resource = found->second;
+    }
     m_queuedPaths.erase(m_queuedPaths.begin());
     m_inFlight = request;
 
@@ -255,6 +293,7 @@ void NativeThumbnailController::clear() {
     m_pendingEpoch.reset();
     m_pendingPaths.clear();
     m_views.clear();
+    m_resources.clear();
     m_queuedPaths.clear();
     m_negativeFailures.clear();
     m_deviceUnavailablePaths.clear();

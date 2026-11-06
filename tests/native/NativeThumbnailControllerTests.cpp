@@ -1,4 +1,5 @@
 #include "native/NativeThumbnailController.h"
+#include "textures/TextureResolver.h"
 
 #include "repository/TattooCatalogLoader.h"
 
@@ -73,6 +74,22 @@ const NativeThumbnailCacheLookup noCacheHit = [](std::string_view) {
     return std::shared_ptr<stui::textures::D3D11Texture>{};
 };
 
+void typedResourcesDiscardStaleActorCompletion() {
+    using namespace stui::textures;
+    NativeThumbnailController controller;
+    const auto image = TextureResolver::resource(TextureResourceKind::external, "textures/other/mark.dds");
+    expect(image.has_value(), "expected valid image");
+    const std::vector<stui::core::TextureResource> resources{*image};
+    controller.synchronizeResources(std::make_shared<int>(1), resources);
+    const auto old = controller.takeNextRequest();
+    expect(old && old->resource == image, "request must carry typed resource");
+    controller.synchronizeResources(std::make_shared<int>(2), resources);
+    controller.complete(*old, readyTexture());
+    const auto views = controller.views();
+    expect(views.size() == 1 && views[0].status != NativeThumbnailStatus::ready, "previous actor completion must not be shown");
+    const auto current = controller.takeNextRequest();
+    expect(current && current->resource == image, "current actor request must be queued");
+}
 void acceptsPresentationNeutralVisiblePaths() {
     NativeThumbnailController controller;
     const NativeThumbnailEpoch epoch = std::make_shared<int>(1);
@@ -84,6 +101,25 @@ void acceptsPresentationNeutralVisiblePaths() {
     expect(views.size() == 2 && views[0].texturePath == "slot/a.dds" &&
             views[1].texturePath == "slot/b.dds",
         "expected slot texture paths accepted without repository entries");
+}
+
+void acceptsMultipleVisibleGalleryRows() {
+    NativeThumbnailController controller;
+    const NativeThumbnailEpoch epoch = std::make_shared<int>(1);
+    std::vector<std::string> paths;
+    for (std::size_t index = 0; index < 18; ++index) {
+        paths.push_back("gallery/" + std::to_string(index) + ".dds");
+    }
+    controller.synchronize(epoch, paths, noCacheHit);
+    expect(controller.views().size() == 18,
+        "expected gallery thumbnail window to include multiple rows");
+
+    for (std::size_t index = 18; index < 100; ++index) {
+        paths.push_back("gallery/" + std::to_string(index) + ".dds");
+    }
+    controller.synchronize(epoch, paths, noCacheHit);
+    expect(controller.views().size() == 96,
+        "expected gallery thumbnail work to remain bounded");
 }
 
 void hidesStaleCompletionAfterPageTransition() {
@@ -148,6 +184,30 @@ void usesCacheHitWithoutQueuingRequest() {
     const auto request = controller.takeNextRequest();
     expect(request && request->texturePath == "cached-1.dds",
         "expected cache hit path omitted from request queue");
+}
+
+void retainsOverlappingVisibleTextureWhenGpuCacheMisses() {
+    NativeThumbnailController controller;
+    const NativeThumbnailEpoch epoch = std::make_shared<int>(1);
+    const std::vector<std::string> firstPaths{"gallery/a.dds", "gallery/b.dds"};
+    controller.synchronize(epoch, firstPaths, noCacheHit);
+    const auto first = controller.takeNextRequest();
+    expect(first && first->texturePath == firstPaths[0], "expected first image request");
+    controller.complete(*first, readyTexture());
+    const auto second = controller.takeNextRequest();
+    expect(second && second->texturePath == firstPaths[1], "expected second image request");
+    const auto retained = readyTexture();
+    controller.complete(*second, retained);
+
+    const std::vector<std::string> shiftedPaths{"gallery/b.dds", "gallery/c.dds"};
+    controller.synchronize(epoch, shiftedPaths, noCacheHit);
+    const auto views = controller.views();
+    expect(views.size() == 2 && views[0].status == NativeThumbnailStatus::ready &&
+            views[0].texture == retained,
+        "a visible image must survive a small scroll even after GPU cache eviction");
+    const auto next = controller.takeNextRequest();
+    expect(next && next->texturePath == shiftedPaths[1],
+        "only the newly visible image should load");
 }
 
 void retainsMissingAndBrokenForSnapshotRevisits() {
@@ -446,11 +506,15 @@ int run(std::string_view name, Test&& test) {
 
 int main() {
     int failures = 0;
+    failures += run("typed resources discard stale actor completion", typedResourcesDiscardStaleActorCompletion);
     failures += run("accepts presentation-neutral visible paths", acceptsPresentationNeutralVisiblePaths);
+    failures += run("accepts multiple visible gallery rows", acceptsMultipleVisibleGalleryRows);
     failures += run("hides stale completion after page transition", hidesStaleCompletionAfterPageTransition);
     failures += run("limits views to six unique paths in source order", limitsViewsToSixUniquePathsInSourceOrder);
     failures += run("keeps in-flight request current for same page", keepsInFlightRequestCurrentForSamePage);
     failures += run("uses cache hit without queuing request", usesCacheHitWithoutQueuingRequest);
+    failures += run("retains overlapping visible texture when GPU cache misses",
+        retainsOverlappingVisibleTextureWhenGpuCacheMisses);
     failures += run("retains missing and broken for snapshot revisits", retainsMissingAndBrokenForSnapshotRevisits);
     failures += run("retries device unavailable only when asked", retriesDeviceUnavailableOnlyWhenAsked);
     failures += run("resets negative cache for snapshot identity replacement", resetsNegativeCacheForSnapshotIdentityReplacement);

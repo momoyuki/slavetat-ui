@@ -1,0 +1,34 @@
+#pragma once
+
+#include "native/BrowserCameraSession.h"
+
+#include <memory>
+
+namespace stui::native {
+
+class BrowserCameraPreferenceStore;
+class SkyrimBrowserCameraPort final : public BrowserCameraPort {
+public:
+    SkyrimBrowserCameraPort();
+    ~SkyrimBrowserCameraPort() override;
+
+    SkyrimBrowserCameraPort(const SkyrimBrowserCameraPort&) = delete;
+    SkyrimBrowserCameraPort& operator=(const SkyrimBrowserCameraPort&) = delete;
+
+    void setSmoothCamInterface(void* interfaceInstance, int version) noexcept;
+    void setPreferenceStore(std::shared_ptr<BrowserCameraPreferenceStore> store);
+    void discard() override;
+    void rememberView(std::uint32_t formId, bool menuOnRight) override;
+    [[nodiscard]] bool begin(std::uint32_t formId, bool menuOnRight) override;
+    [[nodiscard]] bool isTargetLoaded(std::uint32_t formId) override;
+    [[nodiscard]] bool control(const BrowserCameraMotion& motion) override;
+    void restore() override;
+    void clearRememberedViews() override;
+    [[nodiscard]] std::optional<BrowserCameraPan> currentPan() const noexcept;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+
+}  // namespace stui::native

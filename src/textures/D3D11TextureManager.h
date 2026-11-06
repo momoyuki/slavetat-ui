@@ -20,7 +20,8 @@ public:
     D3D11TextureManager(
         ID3D11Device* device,
         std::size_t capacity,
-        TextureCacheDuration idleTtl = TextureCacheDuration::max());
+        TextureCacheDuration idleTtl = TextureCacheDuration::max(),
+        std::size_t maxBytes = 64 * 1024 * 1024);
 
     D3D11TextureManager(const D3D11TextureManager&) = delete;
     D3D11TextureManager& operator=(const D3D11TextureManager&) = delete;
@@ -34,6 +35,10 @@ public:
 
     [[nodiscard]] std::shared_ptr<D3D11Texture> find(
         std::string_view texturePath,
+        TextureCacheTimePoint now = TextureCacheClock::now());
+    [[nodiscard]] D3D11ManagedTextureResult getOrLoad(const TextureResource& resource, std::uint64_t revision,
+        std::span<const std::uint8_t> ddsBytes, TextureCacheTimePoint now = TextureCacheClock::now());
+    [[nodiscard]] std::shared_ptr<D3D11Texture> find(const TextureResource& resource, std::uint64_t revision,
         TextureCacheTimePoint now = TextureCacheClock::now());
     void pruneExpired(TextureCacheTimePoint now = TextureCacheClock::now());
     void clear() noexcept;

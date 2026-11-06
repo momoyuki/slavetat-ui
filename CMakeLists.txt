@@ -37,8 +37,50 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(GNUInstallDirs)
 include(CTest)
 
+if(BUILD_TESTING)
+    add_executable(CatalogPreviewCommitTests tests/native/CatalogPreviewCommitTests.cpp src/native/CatalogPreviewModel.cpp)
+    target_include_directories(CatalogPreviewCommitTests PRIVATE src)
+    add_test(NAME CatalogPreviewCommitTests COMMAND CatalogPreviewCommitTests)
+    add_executable(CatalogPreviewProbeTests tests/native/CatalogPreviewProbeTests.cpp)
+    target_include_directories(CatalogPreviewProbeTests PRIVATE src)
+    add_test(NAME CatalogPreviewProbeTests COMMAND CatalogPreviewProbeTests)
+    add_executable(CatalogPreviewVisualSessionTests
+        tests/runtime/CatalogPreviewVisualSessionTests.cpp
+        src/runtime/CatalogPreviewVisualSession.cpp
+        src/textures/TextureResolver.cpp)
+    target_include_directories(CatalogPreviewVisualSessionTests PRIVATE src)
+    add_test(NAME CatalogPreviewVisualSessionTests COMMAND CatalogPreviewVisualSessionTests)
+    add_executable(SkeeNodePropertyAccessTests
+        tests/runtime/SkeeNodePropertyAccessTests.cpp
+        src/runtime/SkeeNodePropertyAccess.cpp)
+    target_include_directories(SkeeNodePropertyAccessTests PRIVATE src)
+    add_test(NAME SkeeNodePropertyAccessTests COMMAND SkeeNodePropertyAccessTests)
+    add_executable(CatalogPreviewServiceTests
+        tests/core/CatalogPreviewServiceTests.cpp
+        src/core/SlaveTatsService.cpp)
+    target_include_directories(CatalogPreviewServiceTests PRIVATE src)
+    add_test(NAME CatalogPreviewServiceTests COMMAND CatalogPreviewServiceTests)
+    add_executable(CatalogPreviewRuntimeSessionTests
+        tests/runtime/CatalogPreviewRuntimeSessionTests.cpp
+        src/runtime/CatalogPreviewRuntimeSession.cpp
+        src/runtime/CatalogPreviewVisualSession.cpp
+        src/textures/TextureResolver.cpp)
+    target_include_directories(CatalogPreviewRuntimeSessionTests PRIVATE src)
+    add_test(NAME CatalogPreviewRuntimeSessionTests COMMAND CatalogPreviewRuntimeSessionTests)
+    add_executable(SkeeCapabilityProbeTests tests/runtime/SkeeCapabilityProbeTests.cpp)
+    target_include_directories(SkeeCapabilityProbeTests PRIVATE src)
+    add_test(NAME SkeeCapabilityProbeTests COMMAND SkeeCapabilityProbeTests)
+    add_executable(CatalogPreviewModelTests tests/native/CatalogPreviewModelTests.cpp src/native/CatalogPreviewModel.cpp)
+    target_include_directories(CatalogPreviewModelTests PRIVATE src)
+    add_test(NAME CatalogPreviewModelTests COMMAND CatalogPreviewModelTests)
+    add_executable(PrepareTattooApplyTests tests/runtime/PrepareTattooApplyTests.cpp)
+    target_include_directories(PrepareTattooApplyTests PRIVATE src)
+    add_test(NAME PrepareTattooApplyTests COMMAND PrepareTattooApplyTests)
+endif()
+
 set(headers
     include/SKSEMenuFramework.h
+    include/SmoothCamAPI.h
     include/FLICK/FUCK_API.h
     include/FLICK/imgui/imgui.h
     include/FLICK/imgui/imconfig.h
@@ -49,6 +91,11 @@ set(headers
     src/pch.h
     src/native/MenuFrameworkPort.h
     src/native/NativeMenu.h
+    src/native/BrowserCameraSession.h
+    src/native/BrowserCameraPose.h
+    src/native/BrowserCameraCoordinator.h
+    src/native/SkyrimBrowserCameraPort.h
+    src/native/CameraControlLease.h
     src/native/FlickLauncher.h
     src/native/OfficialFlickPort.h
     src/native/OfficialMenuFrameworkAdapter.h
@@ -68,6 +115,8 @@ set(headers
     src/runtime/SlaveTatsAlpha.h
     src/runtime/ApplicationRuntime.h
     src/runtime/HotkeyBinding.h
+    src/runtime/ThumbnailCacheSetting.h
+    src/runtime/MenuSideSetting.h
     src/runtime/PluginConfigFile.h
     src/runtime/FavoriteStore.h
     src/runtime/RecentTattooStore.h
@@ -92,8 +141,16 @@ set(headers
 )
 
 set(sources
+    src/native/CatalogPreviewProbe.cpp
+    src/native/CatalogPreviewModel.cpp
     src/main.cpp
     src/native/NativeMenu.cpp
+    src/native/BrowserCameraSession.cpp
+    src/native/BrowserCameraPreferenceStore.cpp
+    src/native/BrowserCameraPose.cpp
+    src/native/BrowserCameraCoordinator.cpp
+    src/native/SkyrimBrowserCameraPort.cpp
+    src/native/CameraControlLease.cpp
     src/native/FlickLauncher.cpp
     src/native/OfficialFlickPort.cpp
     src/native/OfficialMenuFrameworkAdapter.cpp
@@ -110,6 +167,9 @@ set(sources
     src/runtime/OverlaySlotConfiguration.cpp
     src/runtime/ApplicationRuntime.cpp
     src/runtime/HotkeyBinding.cpp
+    src/runtime/ThumbnailBackgroundSetting.cpp
+    src/runtime/ThumbnailCacheSetting.cpp
+    src/runtime/MenuSideSetting.cpp
     src/runtime/PluginConfigFile.cpp
     src/runtime/FavoriteStore.cpp
     src/runtime/RecentTattooStore.cpp
@@ -118,10 +178,15 @@ set(sources
     src/runtime/TattooLoadoutOrchestration.cpp
     src/runtime/UpdateTattooAppearanceOrchestration.cpp
     src/runtime/SlaveTatsRuntime.cpp
+    src/runtime/CatalogPreviewVisualSession.cpp
+    src/runtime/CatalogPreviewRuntimeSession.cpp
+    src/runtime/SkeeNodePropertyAccess.cpp
+    src/runtime/SkyrimCatalogPreviewBindings.cpp
     src/repository/TattooCatalogLoader.cpp
     src/repository/TattooCatalogStore.cpp
     src/textures/D3D11TextureManager.cpp
     src/textures/D3D11TextureUploader.cpp
+    src/textures/ThumbnailDiskCache.cpp
     src/textures/DdsDecoder.cpp
     src/repository/TattooRepository.cpp
     src/repository/TattooSourceParser.cpp
@@ -157,6 +222,68 @@ target_link_libraries(${PROJECT_NAME}
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
 if(BUILD_TESTING)
+    add_executable(BrowserCameraPreferenceStoreTests
+        tests/native/BrowserCameraPreferenceStoreTests.cpp
+        src/native/BrowserCameraPreferenceStore.cpp
+        src/native/BrowserCameraPose.cpp
+        src/runtime/PluginConfigFile.cpp)
+    target_include_directories(BrowserCameraPreferenceStoreTests PRIVATE src)
+    target_link_libraries(BrowserCameraPreferenceStoreTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME BrowserCameraPreferenceStoreTests COMMAND BrowserCameraPreferenceStoreTests)
+    add_executable(ThumbnailBackgroundSettingTests
+        tests/runtime/ThumbnailBackgroundSettingTests.cpp
+        src/runtime/ThumbnailBackgroundSetting.cpp
+        src/runtime/PluginConfigFile.cpp)
+    target_include_directories(ThumbnailBackgroundSettingTests PRIVATE src)
+    target_link_libraries(ThumbnailBackgroundSettingTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME ThumbnailBackgroundSettingTests COMMAND ThumbnailBackgroundSettingTests)
+    add_executable(BrowserCameraPoseTests
+        src/native/BrowserCameraPose.cpp
+        tests/native/BrowserCameraPoseTests.cpp
+    )
+    target_include_directories(BrowserCameraPoseTests PRIVATE src)
+    add_test(NAME BrowserCameraPoseTests COMMAND BrowserCameraPoseTests)
+
+    add_executable(CameraControlLeaseTests
+        src/native/CameraControlLease.cpp
+        tests/native/CameraControlLeaseTests.cpp
+    )
+    target_include_directories(CameraControlLeaseTests PRIVATE src)
+    add_test(NAME CameraControlLeaseTests COMMAND CameraControlLeaseTests)
+
+    add_executable(BrowserCameraCoordinatorTests
+        src/native/BrowserCameraSession.cpp
+        src/native/BrowserCameraCoordinator.cpp
+        tests/native/BrowserCameraCoordinatorTests.cpp
+    )
+    target_include_directories(BrowserCameraCoordinatorTests PRIVATE src)
+    add_test(NAME BrowserCameraCoordinatorTests COMMAND BrowserCameraCoordinatorTests)
+
+    add_executable(BrowserCameraSessionTests
+        src/native/BrowserCameraSession.cpp
+        tests/native/BrowserCameraSessionTests.cpp
+    )
+    target_include_directories(BrowserCameraSessionTests PRIVATE src)
+    add_test(NAME BrowserCameraSessionTests COMMAND BrowserCameraSessionTests)
+
+    add_executable(ThumbnailCacheSettingTests
+        src/runtime/ThumbnailCacheSetting.cpp
+        src/runtime/PluginConfigFile.cpp
+        tests/runtime/ThumbnailCacheSettingTests.cpp
+    )
+    target_include_directories(ThumbnailCacheSettingTests PRIVATE src)
+    target_link_libraries(ThumbnailCacheSettingTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME ThumbnailCacheSettingTests COMMAND ThumbnailCacheSettingTests)
+
+    add_executable(MenuSideSettingTests
+        src/runtime/MenuSideSetting.cpp
+        src/runtime/PluginConfigFile.cpp
+        tests/runtime/MenuSideSettingTests.cpp
+    )
+    target_include_directories(MenuSideSettingTests PRIVATE src)
+    target_link_libraries(MenuSideSettingTests PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME MenuSideSettingTests COMMAND MenuSideSettingTests)
+
     add_executable(HotkeyBindingTests
         src/runtime/HotkeyBinding.cpp
         src/runtime/PluginConfigFile.cpp
@@ -218,6 +345,7 @@ if(BUILD_TESTING)
     add_test(NAME TattooLoadoutStoreTests COMMAND TattooLoadoutStoreTests)
 
     add_executable(NativeThumbnailRuntimeTests
+        src/textures/TextureResolver.cpp
         src/native/NativeThumbnailController.cpp
         src/native/NativeThumbnailRuntime.cpp
         src/repository/TattooRepository.cpp
@@ -229,6 +357,7 @@ if(BUILD_TESTING)
     add_executable(D3D11NativeThumbnailSourceTests
         src/native/D3D11NativeThumbnailSource.cpp
         src/textures/D3D11TextureManager.cpp
+        src/textures/ThumbnailDiskCache.cpp
         src/textures/D3D11TextureUploader.cpp
         src/textures/DdsDecoder.cpp
         src/textures/TextureResolver.cpp
@@ -239,6 +368,7 @@ if(BUILD_TESTING)
     add_test(NAME D3D11NativeThumbnailSourceTests COMMAND D3D11NativeThumbnailSourceTests)
 
     add_executable(NativeThumbnailControllerTests
+        src/textures/TextureResolver.cpp
         src/native/NativeThumbnailController.cpp
         src/repository/TattooRepository.cpp
         tests/native/NativeThumbnailControllerTests.cpp
@@ -255,6 +385,7 @@ if(BUILD_TESTING)
     add_test(NAME NativeCatalogBrowserModelTests COMMAND NativeCatalogBrowserModelTests)
 
     add_executable(NativeSlotWorkflowModelTests
+        src/textures/TextureResolver.cpp
         src/native/NativeSlotWorkflowModel.cpp
         src/native/NativeCatalogBrowserModel.cpp
         src/repository/TattooRepository.cpp
@@ -290,6 +421,7 @@ if(BUILD_TESTING)
 
     add_executable(NativeSlotWorkflowRuntimeTests
         src/native/NativeSlotWorkflowRuntime.cpp
+        src/native/CatalogPreviewModel.cpp
         src/native/NativeSlotWorkflowModel.cpp
         src/native/NativeCatalogBrowserModel.cpp
         src/repository/TattooRepository.cpp
@@ -314,8 +446,13 @@ if(BUILD_TESTING)
     add_test(NAME FlickLauncherTests COMMAND FlickLauncherTests)
 
     add_executable(OfficialMenuFrameworkAdapterTests
+        src/textures/TextureResolver.cpp
         src/native/OfficialMenuFrameworkAdapter.cpp
+        src/native/CatalogPreviewModel.cpp
         src/runtime/HotkeyBinding.cpp
+        src/runtime/ThumbnailBackgroundSetting.cpp
+        src/runtime/ThumbnailCacheSetting.cpp
+        src/runtime/MenuSideSetting.cpp
         src/runtime/PluginConfigFile.cpp
         src/native/NativeCatalogBrowserModel.cpp
         src/native/NativeSlotWorkflowModel.cpp
@@ -395,6 +532,9 @@ if(BUILD_TESTING)
 
     add_executable(SlaveTatsRuntimeAppearanceTests
         src/core/TattooLoadoutPlanner.cpp
+        src/runtime/CatalogPreviewRuntimeSession.cpp
+        src/runtime/CatalogPreviewVisualSession.cpp
+        src/textures/TextureResolver.cpp
         src/runtime/OverlaySlotConfiguration.cpp
         src/runtime/SlaveTatsRuntime.cpp
         src/runtime/TattooLoadoutOrchestration.cpp
@@ -410,6 +550,9 @@ if(BUILD_TESTING)
 
     add_executable(ApplicationRuntimeTests
         src/core/TattooLoadoutPlanner.cpp
+        src/runtime/CatalogPreviewRuntimeSession.cpp
+        src/runtime/CatalogPreviewVisualSession.cpp
+        src/textures/TextureResolver.cpp
         src/runtime/ApplicationRuntime.cpp
         src/runtime/OverlaySlotConfiguration.cpp
         src/runtime/SlaveTatsRuntime.cpp

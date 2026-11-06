@@ -96,3 +96,19 @@ these gates. User approved development, not a commit, push or new deployment.
 Verify whether GetNodeProperty reads the actual visible texture for external
 overlays, rather than only a registered override. Do not present an unverified
 path as the active visual; fall back to External when the read is unavailable.
+
+## Implementation and remaining acceptance (2026-11-06)
+
+The Current Slots snapshot now carries separately validated, optional External
+source-image identities. Matching SKEE property and material paths are required;
+missing or conflicting metadata leaves the slot External and unavailable.
+Visible slot requests use kind-scoped Data-relative identities, source revisions,
+and the existing bounded GPU and disk caches. Snapshot epochs discard stale
+completions. External actions remain read-only.
+
+On 2026-11-06, the user approved deployment and the installed DLL was verified
+with SHA-256 `595C451DAD65CC43FA30C02BA220F20944D650F1284638F6519E5C7F13DD8D16`.
+The user accepted Player in-game External thumbnail display; screenshots show
+Body slots 0, 1, and 16–22 across both pages. Earlier Player probe evidence covers
+nine Body nodes for actor 0x14. The user explicitly waived NPC verification; NPC
+behavior remains unverified in game, and its implementation remains unchanged.

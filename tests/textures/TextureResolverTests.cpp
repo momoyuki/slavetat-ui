@@ -69,6 +69,97 @@ void rejectsPathsOutsideTattooRoot() {
     }
 }
 
+void separatesTypedResourceIdentities() {
+    using stui::textures::TextureResourceKind;
+    const auto catalog = TextureResolver::resource(TextureResourceKind::catalog, "mark.dds");
+    const auto external = TextureResolver::resource(TextureResourceKind::external, "Textures/Actors/Character/SlaveTats/mark.DDS");
+    expect(catalog && external && catalog->path() == external->path() && *catalog != *external, "same Data path with different kinds must never collide");
+    const auto variant = TextureResolver::resource(TextureResourceKind::external, "textures\\actors\\character\\slavetats\\mark.dds");
+    expect(variant && *external == *variant, "external identity must normalize case and separators");
+    expect(!TextureResolver::resource(TextureResourceKind::external, "../mark.dds"), "unsafe external identity must be rejected");
+}
+
+void matchesOnlyValidatedExternalProperties() {
+    expect(TextureResolver::matchingExternal("Actors/Character/mark.DDS", "textures/actors/character/mark.dds").has_value(), "equivalent normalized paths must match");
+    expect(!TextureResolver::matchingExternal("textures/a.dds", "textures/b.dds"), "conflicting paths must be unavailable");
+    expect(!TextureResolver::matchingExternal("textures/../a.dds", "textures/../a.dds"), "matching malformed paths must be unavailable");
+    expect(!TextureResolver::matchingExternal("", "textures/a.dds"), "missing property must be unavailable");
+}
+void validatesExternalTextureResources() {
+    const auto relative = TextureResolver::normalizeExternal("Actors/Character/Overlays/example.dds");
+    expect(relative && *relative == "textures\\Actors\\Character\\Overlays\\example.dds", "expected texture-relative runtime path under Data/Textures");
+    const auto valid = TextureResolver::normalizeExternal("Textures/actors/example.DDS");
+    expect(valid && *valid == "textures\\actors\\example.DDS",
+        "expected normalized Data-relative texture resource");
+    for (const std::string_view path : std::initializer_list<std::string_view>{
+             "../textures/a.dds", "C:/textures/a.dds", "//server/textures/a.dds",
+             "meshes/a.dds", "textures/a.png", "textures/../a.dds",
+             std::string_view("textures/a.dds\0evil", 19)}) {
+        expect(TextureResolver::normalizeExternal(path) ==
+                std::unexpected(TextureResolveError::invalidPath),
+            "expected unsafe external texture rejected");
+    }
+}
+
+void resolvesTypedIdentityUsingItsResourceRoot() {
+    TemporaryDirectory directory;
+    TextureResolver resolver(directory.path() / "textures" / "actors" / "character" / "slavetats");
+    using stui::textures::TextureResourceKind;
+    const auto catalog = TextureResolver::resource(TextureResourceKind::catalog, "mark.dds");
+    const auto external = TextureResolver::resource(TextureResourceKind::external, "textures/other/mark.dds");
+    expect(catalog && external, "expected valid identities");
+    std::vector<std::string> requested;
+    const auto read = [&](std::string_view path) {
+        requested.emplace_back(path);
+        return stui::textures::TextureBytesResult(std::vector<std::uint8_t>{1});
+    };
+    expect(resolver.resolve(*catalog, read).has_value() && resolver.resolve(*external, read).has_value(), "both resources resolve");
+    expect(requested == std::vector<std::string>{"textures\\actors\\character\\slavetats\\mark.dds", "textures\\other\\mark.dds"}, "each kind must resolve its own Data path");
+}
+void externalArchiveUsesDataRelativePath() {
+    TemporaryDirectory directory;
+    TextureResolver resolver(directory.path());
+    std::string requested;
+    const auto result = resolver.resolveExternal("Actors/Character/mark.dds", [&](std::string_view path) {
+        requested = path;
+        return stui::textures::TextureBytesResult(std::vector<std::uint8_t>{3, 4});
+    });
+    expect(result && result->bytes == std::vector<std::uint8_t>({3, 4}), "external archive bytes should load");
+    expect(requested == "textures\\Actors\\Character\\mark.dds", "external archive must use Data-relative identity");
+}
+void externalLooseResourceTakesPrecedence() {
+    TemporaryDirectory directory;
+    directory.write(fs::path("textures") / "Actors" / "Character" / "mark.dds", {8, 9});
+    const auto tattooRoot = directory.path() / "textures" / "actors" / "character" / "slavetats";
+    TextureResolver resolver(tattooRoot);
+    bool called = false;
+    const auto result = resolver.resolveExternal("Actors/Character/mark.dds", [&](std::string_view) {
+        called = true;
+        return stui::textures::TextureBytesResult(std::vector<std::uint8_t>{1});
+    });
+    expect(result && result->source == TextureSource::loose && result->bytes == std::vector<std::uint8_t>({8, 9}),
+        "expected external loose file beneath Data/Textures");
+    expect(!called, "archive must not be consulted after loose hit");
+}
+void externalRedirectCannotEscapeTextureRoot() {
+    TemporaryDirectory directory;
+    TemporaryDirectory outside;
+    outside.write("outside.dds", {4, 2});
+    const auto textureRoot = directory.path() / "textures";
+    fs::create_directories(textureRoot / "Actors");
+    std::error_code error;
+    fs::create_symlink(outside.path() / "outside.dds", textureRoot / "Actors" / "escape.dds", error);
+    if (error) {
+        std::cout << "SKIP external symlink containment unavailable: " << error.message() << '\n';
+        return;
+    }
+    TextureResolver resolver(textureRoot / "actors" / "character" / "slavetats");
+    const auto result = resolver.resolveExternal("Actors/escape.dds", [](std::string_view) {
+        return stui::textures::TextureBytesResult(std::vector<std::uint8_t>{7});
+    });
+    expect(result && result->source == TextureSource::archive && result->bytes == std::vector<std::uint8_t>{7},
+        "redirect outside texture root must use resource reader rather than loose file");
+}
 void looseTextureTakesPrecedenceOverArchive() {
     TemporaryDirectory directory;
     directory.write(fs::path("Pack") / "mark.dds", {1, 2, 3, 4});
@@ -216,6 +307,13 @@ int main() {
     int failures = 0;
     failures += run("normalizes relative texture path", normalizesRelativeTattooTexturePath);
     failures += run("rejects paths outside tattoo root", rejectsPathsOutsideTattooRoot);
+    failures += run("separates typed resource identities", separatesTypedResourceIdentities);
+    failures += run("matches only validated external properties", matchesOnlyValidatedExternalProperties);
+    failures += run("validates external texture resources", validatesExternalTextureResources);
+    failures += run("external redirect cannot escape texture root", externalRedirectCannotEscapeTextureRoot);
+    failures += run("external loose file precedes archive", externalLooseResourceTakesPrecedence);
+    failures += run("resolves typed identities in their own roots", resolvesTypedIdentityUsingItsResourceRoot);
+    failures += run("external archive uses Data-relative path", externalArchiveUsesDataRelativePath);
     failures += run("loose texture precedes archive", looseTextureTakesPrecedenceOverArchive);
     failures += run(
         "archive fallback receives normalized resource path",

@@ -21,8 +21,11 @@ std::shared_ptr<ID3D11Device> retainDevice(ID3D11Device* device) {
 D3D11TextureManager::D3D11TextureManager(
     ID3D11Device* device,
     std::size_t capacity,
-    TextureCacheDuration idleTtl)
-    : m_device(retainDevice(device)), m_textures(capacity, idleTtl) {}
+    TextureCacheDuration idleTtl,
+    std::size_t maxBytes)
+    : m_device(retainDevice(device)),
+      m_textures(capacity, idleTtl, maxBytes,
+          [](const D3D11Texture& texture) { return texture.byteSize; }) {}
 
 D3D11ManagedTextureResult D3D11TextureManager::getOrLoad(
     std::string_view texturePath,
@@ -47,6 +50,17 @@ std::shared_ptr<D3D11Texture> D3D11TextureManager::find(
     return m_textures.find(texturePath, now);
 }
 
+D3D11ManagedTextureResult D3D11TextureManager::getOrLoad(const TextureResource& resource,
+    std::uint64_t revision, std::span<const std::uint8_t> bytes, TextureCacheTimePoint now) {
+    return m_textures.getOrLoad(resource, revision, bytes, [device = m_device.get()](auto input) {
+        auto uploaded = uploadDdsTexture(device, input);
+        return uploaded ? std::make_shared<D3D11Texture>(std::move(*uploaded)) : std::shared_ptr<D3D11Texture>{};
+    }, now);
+}
+std::shared_ptr<D3D11Texture> D3D11TextureManager::find(const TextureResource& resource,
+    std::uint64_t revision, TextureCacheTimePoint now) {
+    return m_textures.find(resource, revision, now);
+}
 void D3D11TextureManager::pruneExpired(TextureCacheTimePoint now) {
     m_textures.pruneExpired(now);
 }

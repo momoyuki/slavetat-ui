@@ -189,6 +189,110 @@ selection spec.
 
 ---
 
+## vNext.5 — Visual Tattoo Browser
+
+**Status:** Complete for the approved vNext.5 interaction on
+`codex/ui-improvements-stability`. The user reported no issues in the final
+in-game pass on 2026-10-18, including all three requested Preview, NPC, and
+camera test groups. On 2026-10-28 the user reported that RAM/VRAM testing
+passed; no numerical measurements were supplied. Revisit performance if
+needed during actual use.
+
+The 2026-10-16 UI refinement consolidates nearby NPCs and Followers into one
+Choose NPC picker beside Player, with an explicit 2048-unit discovery radius.
+
+The catalog preview now uses click-to-preview and selection, with
+Ink/Glow/Glossy draft controls and explicit Save/Undo semantics. The approved
+transaction and nonpersistent visual-backend contract is recorded in
+`docs/superpowers/specs/2026-10-16-catalog-hover-preview-design.md`; implementation
+was deployed and accepted in game. Hover shows only the card tooltip and outline;
+it does not change the Actor. The user confirmed a Preview save/load cycle and
+later reported that quicksave/autosave/co-save, NPC Preview with Undo/Cancel/In Use,
+and camera checks had no problems on 2026-10-18. Acceptance record:
+`docs/superpowers/plans/archive/2026-10-16-catalog-hover-preview.md`.
+
+**Design:** `docs/superpowers/specs/2026-10-15-scrollable-tattoo-grid-design.md`,
+`docs/superpowers/specs/2026-10-15-browser-position-and-camera-design.md`
+
+Improve the Browse screen for visual selection: a six-column gallery on a
+desktop-width panel, vertical scrolling, readable names, and bounded thumbnail
+work for visible rows. Narrow panels use fewer columns. This remains in the
+existing SKSE Menu Framework browser with the Actor visible beside it.
+The catalog gallery now fits each DDS's visible alpha region into its card,
+with padding and a zoom limit; source textures and applied tattoos are unchanged.
+The user accepted 192-pixel cached thumbnails after prebuilding and scrolling
+in game on 2026-10-18. The user reported RAM/VRAM testing passed on
+2026-10-28, without supplying numerical measurements.
+
+Clicking a tattoo shows an uncommitted preview on the exact Actor Target;
+Undo or Close restores the prior visual state. The actor-scoped transaction
+and save/co-save safety design are implemented and passed the user's final
+in-game checks. The browser position can be selected as Left or Right in the
+Menu Framework launcher. Camera compatibility is a separate slice: SmoothCam
+ownership and a game-thread turntable were implemented and validated together.
+The first camera QA pass is limited to Player; selecting an NPC restores normal
+camera control while the NPC tattoo workflow remains available.
+The Player camera now has one initial framing request aimed at the open control
+area opposite the configured browser side, retaining the captured angle and
+distance. The user confirmed the Left and Right menu positions in-game.
+The user confirmed camera close/restore and SmoothCam behavior in game on
+2026-10-18. The final pass also covered the first gesture on both menu sides
+with SmoothCam without a reported issue.
+
+**Camera follow-up (implemented and accepted in game):**
+On the first Player browser opening in a game session, use the configured
+initial Center composition (the current side-aware Whole body framing until a future setting
+exists). On later openings, restore the last browser orbit, pan/focus, and zoom
+for that menu side so repeated tattoo comparisons do not require re-framing.
+Keep separate Left and Right views. The user-approved 2026-10-31 follow-up now
+persists bounded translation-relative view preferences across game restarts and
+save loads, superseding the original session-only requirement. Lifecycle reset
+still discards live ownership and queued gestures without deleting preferences.
+Closing the browser still restores the captured game camera. No raw pointer,
+world-space position, or NPC camera state is persisted.
+The camera spec defines the capture point and invalidation; SmoothCam handoff
+was included in the user's final in-game pass. This session recall needs no new setting;
+user-adjustable initial framing is now in scope after the user's 2026-10-17
+screenshot feedback. The launcher stores bounded horizontal offsets separately
+for Left and Right. They affect the first automatic composition for a side when
+no session view is remembered; later openings recall that side's last view.
+
+---
+
+## Next delivery — v1.8.0 Beta 2
+
+**Status:** PR #21 merged and hosted CI passed. `v1.8.0-beta.1` is already
+published; Beta 2 release preparation remains. The
+focused [integration plan](docs/superpowers/plans/active/2026-10-18-vnext5-integration-beta2.md)
+tracks branch review, a pull request, hosted CI, separate merge and tag approval,
+and a smoke test of the hosted artifact. The user-approved 2026-10-31 follow-up adds a bounded Thumbnail disk cache limit
+(128/256/512/1024 MiB, default 256), Reset to default, and scheduled pruning; GPU
+budgets stay unchanged. See the [design](docs/superpowers/specs/2026-10-31-thumbnail-disk-cache-limit-design.md)
+and [active plan](docs/superpowers/plans/active/2026-10-31-thumbnail-disk-cache-limit.md).
+The same approved follow-up persists Thumbnail BG and separate Left/Right Player
+Browser views, with Reset saved Player views to restore initial-framing behavior.
+See the [design](docs/superpowers/specs/2026-10-31-browser-preference-persistence-design.md)
+and [active plan](docs/superpowers/plans/active/2026-10-31-browser-preference-persistence.md).
+
+---
+
+## Future UI settings to evaluate
+
+These are candidates, not committed milestones. Evaluate them against the
+accepted vNext.5 interaction; the [SlavetatsUIPzx settings comparison](docs/superpowers/research/2026-10-17-slavetatsuipzx-settings.md)
+records the reference behavior and source links.
+
+- **Click preview toggle:** Consider an off switch if users need to select catalog
+  cards without temporary visual changes. Validate Save, Undo, and save/co-save/reload
+  isolation first; a toggle must not conceal an unsafe preview implementation.
+- **Additional camera controls:** Consider saved offset, zoom, FOV, or rotation
+  defaults only if framing plus Center/Reset View proves insufficient. Avoid a
+  large settings panel without a demonstrated need.
+- **Pause-world toggle:** Evaluate separately because it changes menu and input
+  ownership, not just presentation.
+
+---
+
 # Known upstream/runtime concerns
 
 These are not necessarily SlaveTats UI features, but they can affect acceptance testing and debugging:
@@ -219,3 +323,11 @@ Do not let these distract from the active milestone without an explicit roadmap 
 - arbitrary tattoo-pack authoring inside the runtime UI;
 - unrelated RaceMenu overlay management;
 - broad refactors that do not unlock the active milestone.
+
+## Approved follow-up — Thumbnail clarity (2026-11-02)
+
+In progress on the UI improvements worktree, independently of localization PR #23.
+Preserve the 192-pixel maximum and cache budgets while cropping visible source
+content before reduction. The user promoted this follow-up while localization
+acceptance continues in a separate chat. See
+`docs/superpowers/plans/active/2026-11-02-thumbnail-clarity.md`.

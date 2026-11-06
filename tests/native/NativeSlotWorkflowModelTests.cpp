@@ -1,4 +1,5 @@
 #include "native/NativeSlotWorkflowModel.h"
+#include "textures/TextureResolver.h"
 
 #include <chrono>
 #include <exception>
@@ -134,6 +135,21 @@ AppearancePreset appearancePreset(std::string name = "Warm Glow") {
     };
 }
 
+void slotThumbnailEpochTracksAcceptedSnapshots() {
+    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
+    catalog.refresh();
+    NativeSlotWorkflowModel model(catalog);
+    expect(!model.slotThumbnailEpoch(), "no snapshot means no thumbnail epoch");
+    completeInitialQuery(model, slots(TattooArea::body, 1));
+    const auto first = model.slotThumbnailEpoch();
+    expect(first != nullptr, "accepted snapshot needs an epoch");
+    model.refreshSelectedArea();
+    const auto ticket = model.takeSlotQuery();
+    expect(ticket.has_value(), "refresh must schedule query");
+    model.completeSlotQuery(ticket->generation, slots(TattooArea::body, 1));
+    expect(model.slotThumbnailEpoch() && model.slotThumbnailEpoch() != first, "refresh must invalidate old thumbnail completion");
+}
 void startSchedulesOnePlayerBodyQuery() {
     TattooCatalogSnapshot snapshot = catalogWithEntries(1);
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
@@ -157,10 +173,12 @@ void cachesAreaResultsAndPreservesPerAreaPages() {
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
     catalog.refresh();
     NativeSlotWorkflowModel model(catalog);
-    completeInitialQuery(model, slots(TattooArea::body, 12));
+    expect(NativeSlotWorkflowModel::kPageSize == 12,
+        "expected twelve slots per four-column page");
+    completeInitialQuery(model, slots(TattooArea::body, 24));
 
     expect(model.slotPageCount() == 2 && model.slotPageIndex() == 0,
-        "expected two six-slot BODY pages");
+        "expected two twelve-slot BODY pages");
     model.nextSlotPage();
     expect(model.slotPageIndex() == 1, "expected BODY second page");
 
@@ -184,7 +202,7 @@ void clampsSlotPagination() {
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
     catalog.refresh();
     NativeSlotWorkflowModel model(catalog);
-    completeInitialQuery(model, slots(TattooArea::body, 13));
+    completeInitialQuery(model, slots(TattooArea::body, 25));
 
     model.previousSlotPage();
     expect(model.slotPageIndex() == 0, "expected previous clamped at first slot page");
@@ -203,6 +221,8 @@ void externalSlotsAreRejectedAndOwnedSlotsOpenActions() {
     NativeSlotWorkflowModel model(catalog);
     auto bodySlots = slots(TattooArea::body, 3);
     bodySlots.slots[0].occupancy = SlotOccupancy::external;
+    bodySlots.slots[0].externalThumbnail = *stui::textures::TextureResolver::resource(
+        stui::core::TextureResourceKind::external, "textures/other/mark.dds");
     bodySlots.slots[1].occupancy = SlotOccupancy::slaveTats;
     bodySlots.slots[1].tattoo = TattooEntry{
         .section = "Existing",
@@ -213,6 +233,13 @@ void externalSlotsAreRejectedAndOwnedSlotsOpenActions() {
     completeInitialQuery(model, std::move(bodySlots));
 
     expect(!model.selectSlot(0), "expected external slot selection rejected");
+    expect(!model.replaceSelectedSlot() && !model.requestRemove() && !model.confirmRemove() &&
+        !model.beginEditAppearance() && !model.toggleSlotLock(0) && !model.confirmApply(),
+        "external metadata must not enable any write action");
+    model.selectTattoo(tattoo("Preview", 0));
+    expect(!model.previewTattoo() && !model.takeApplyRequest() && !model.takeRemoveRequest() &&
+        !model.takeAppearanceRequest() && !model.takeLockRequest(),
+        "external metadata must not start preview or mutation work");
     expect(model.screen() == SlotWorkflowScreen::currentSlots,
         "expected external slot to remain on Current Slots");
     expect(model.selectSlot(1), "expected owned slot replace target accepted");
@@ -946,7 +973,12 @@ void queryFailureRemainsRetryable() {
 }
 
 void editAppearanceRequiresOwnedSlotWithHandleAndCopiesSnapshot() {
-    TattooCatalogSnapshot snapshot = catalogWithEntries(1);
+    auto matchingDefinition = tattoo("Existing", 0);
+    matchingDefinition.texturePath = "marks/existing.dds";
+    TattooCatalogSnapshot snapshot = std::make_shared<const TattooCatalog>(TattooCatalog{
+        .repository = stui::repository::TattooRepository({matchingDefinition}),
+        .sourceCount = 1,
+    });
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
     catalog.refresh();
     NativeSlotWorkflowModel model(catalog);
@@ -971,6 +1003,9 @@ void editAppearanceRequiresOwnedSlotWithHandleAndCopiesSnapshot() {
     const auto* session = model.editAppearance();
     expect(model.screen() == SlotWorkflowScreen::editAppearance && session,
         "expected Edit Appearance screen with a session");
+    expect(session->favoriteDefinition &&
+            session->favoriteDefinition->sourceId == matchingDefinition.sourceId,
+        "expected Edit Appearance to retain the resolved favorite catalog identity");
     expect(session->actorFormId == 0x14 && session->area == TattooArea::body &&
             session->slot == 1 && session->runtimeHandle == 73 &&
             session->texturePath == "marks/existing.dds" &&
@@ -1904,11 +1939,11 @@ void targetChangeClearsAllCachesPagesAndTransientState() {
     auto snapshot = catalogWithEntries(1);
     NativeCatalogBrowserModel catalog([&snapshot] { return snapshot; });
     NativeSlotWorkflowModel model(catalog);
-    completeInitialQuery(model, slots(TattooArea::body, 12));
+    completeInitialQuery(model, slots(TattooArea::body, 24));
     for (auto area : {TattooArea::body, TattooArea::face, TattooArea::hands, TattooArea::feet}) {
         model.selectArea(area);
         if (const auto query = model.takeSlotQuery()) {
-            model.completeSlotQuery(query->generation, slots(area, 12));
+            model.completeSlotQuery(query->generation, slots(area, 24));
         }
         model.nextSlotPage();
         expect(model.slotPageIndex() == 1, "expected populated old Actor page");
@@ -1956,7 +1991,11 @@ void obsoleteTargetAndQueryCompletionsCannotAffectNewTarget() {
     const auto newTarget = model.takeActorTargetRequest();
     model.completeActorTargetResolution(oldTarget->generation,
         ActorTarget{ActorTargetKind::crosshair, 0x9999, "Old Actor"});
-    model.completeSlotQuery(player->generation, slots(TattooArea::body, 3));
+    auto oldSlots = slots(TattooArea::body, 3);
+    oldSlots.slots[0].occupancy = SlotOccupancy::external;
+    oldSlots.slots[0].externalThumbnail = *stui::textures::TextureResolver::resource(
+        stui::core::TextureResourceKind::external, "textures/other/old.dds");
+    model.completeSlotQuery(player->generation, oldSlots);
     expect(!model.actorTarget() && !model.slots() && !model.error() &&
             model.isActorTargetResolutionInFlight() && !model.takeSlotQuery(),
         "expected obsolete success completions ignored");
@@ -1969,6 +2008,15 @@ void obsoleteTargetAndQueryCompletionsCannotAffectNewTarget() {
     const auto query = model.takeSlotQuery();
     expect(query && query->actorFormId == 0x1234 && !model.error(),
         "expected obsolete errors not to affect resolved NPC");
+    auto currentSlots = slots(TattooArea::body, 3);
+    currentSlots.actorFormId = 0x1234;
+    currentSlots.slots[0].occupancy = SlotOccupancy::external;
+    model.completeSlotQuery(query->generation, currentSlots);
+    const auto epoch = model.slotThumbnailEpoch();
+    model.completeSlotQuery(player->generation, oldSlots);
+    expect(model.slots() && model.slots()->actorFormId == 0x1234 &&
+        !model.slots()->slots[0].externalThumbnail && model.slotThumbnailEpoch() == epoch,
+        "stale Player metadata must not leak into the NPC snapshot");
 }
 
 void mismatchedActorSnapshotIsRejected() {
@@ -3039,6 +3087,7 @@ int main() {
     failures += run("mismatched Actor snapshot is rejected", mismatchedActorSnapshotIsRejected);
     failures += run("NPC mutation paths preserve Actor and block target changes", npcMutationPathsPreserveActorAndBlockTargetChanges);
     failures += run("area navigation cannot release outstanding mutation guard", areaNavigationCannotReleaseOutstandingMutationGuard);
+    failures += run("slot thumbnail epoch follows snapshots", slotThumbnailEpochTracksAcceptedSnapshots);
     failures += run("start schedules one Player BODY query", startSchedulesOnePlayerBodyQuery);
     failures += run("caches area results and preserves per-area pages", cachesAreaResultsAndPreservesPerAreaPages);
     failures += run("clamps slot pagination", clampsSlotPagination);
